@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import Depends
 
-from database import engine,Base,get_db
+from backend.app.database import engine,Base,get_db
 import models
 
 app = FastAPI()
