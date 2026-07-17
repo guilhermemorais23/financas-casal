@@ -1,0 +1,14 @@
+# === NodeJS (Frontend) ===
+node_modules/
+dist/
+.env
+
+# === Python (Backend) ===
+__pycache__/
+*.pyc
+.venv/
+env/
+
+# === Banco de Dados local (Não enviar dados pessoais/testes pro git) ===
+*.db
+*.sqlite3
