@@ -19,7 +19,7 @@ def obter_resumo_financeiro(
     ):
 
     mes_atual = mes or datetime.now().month
-    ano_atual = mes or datetime.now().year
+    ano_atual = ano or datetime.now().year
     
     total_entradas = db.query(func.sum(TransacaoModel.valor))\
     .filter(TransacaoModel.tipo =="entrada")\

@@ -28,9 +28,12 @@ def criar_transacao(transacao_input: TransacaoCreateSchema, db:Session = Depends
     return nova_transacao
 
 
-@router.get("/", response_model=List[TransacaoCreateSchema])
-def listar_transacoes(db:Session = Depends(get_db)):
-    transacoes = db.query(TransacaoModel).all()
+@router.get("/", response_model=List[TransacaoDisplaySchemas])
+def listar_transacoes(
+   limit: int=10,offset: int= 0,
+    db:Session = Depends(get_db)):
+
+    transacoes = db.query(TransacaoModel).limit(limit).offset(offset).all()
     return transacoes
 
 @router.delete("/{transacao_id}")
