@@ -1,0 +1,14 @@
+{
+  "name": "fincae",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "concurrently -n db,backend,frontend -c blue,green,magenta \"npm run db:up\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "db:up": "docker compose up",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -1,0 +1,358 @@
+:root {
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-soft: #eff4ff;
+  --color-text: #0f1115;
+  --color-text-muted: #6b7280;
+  --color-bg: #ffffff;
+  --color-bg-soft: #f5f6f8;
+  --color-border: #e5e7eb;
+  --color-danger-bg: #fef2f2;
+  --color-danger-text: #b91c1c;
+  --radius: 12px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  font-family: var(--font-sans);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--color-text);
+  background: var(--color-bg-soft);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Brand wordmark ------------------------------------------------------ */
+
+.brand {
+  font-weight: 800;
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.brand-dot {
+  color: var(--color-primary);
+}
+
+/* Centered auth / setup card layout ----------------------------------- */
+
+.page-center {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 2rem 1.5rem;
+}
+
+.card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 2.25rem;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 1px 2px rgba(15, 17, 21, 0.04), 0 8px 24px rgba(15, 17, 21, 0.04);
+}
+
+.card-subtitle {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Form elements --------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+input {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  width: 100%;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+/* Buttons ---------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.7rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity 0.15s, background-color 0.15s;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn + .btn {
+  margin-top: 0.6rem;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+}
+
+.btn-white {
+  background: #fff;
+  color: var(--color-primary);
+}
+
+.btn-white:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+}
+
+.btn-outline-light {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.btn-outline-light:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: none;
+  width: auto;
+  padding: 0.4rem 0;
+  font-weight: 500;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+/* Feedback ---------------------------------------------------------------- */
+
+.alert {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.footnote {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.footnote a,
+.link {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.footnote a:hover,
+.link:hover {
+  text-decoration: underline;
+}
+
+/* Onboarding screen (matches the "Bem-vindos ao PAR." mockup) ------------- */
+
+.onboarding-screen {
+  min-height: 100vh;
+  background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+}
+
+.onboarding-avatars {
+  display: flex;
+  margin-bottom: 2rem;
+}
+
+.onboarding-avatars .circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid var(--color-primary);
+}
+
+.onboarding-avatars .circle:first-child {
+  background: #ffffff;
+  margin-right: -18px;
+  z-index: 1;
+}
+
+.onboarding-avatars .circle:last-child {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.onboarding-screen h1 {
+  color: #fff;
+  font-size: 2rem;
+}
+
+.onboarding-subtitle {
+  opacity: 0.9;
+  margin-bottom: 2.5rem;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 320px;
+}
+
+/* Dashboard ----------------------------------------------------------------- */
+
+.app-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1.5rem;
+}
+
+.stat-card {
+  background: var(--color-text);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  width: 100%;
+  max-width: 420px;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card .label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.stat-card .value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-top: 0.35rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+}
+
+.invite-link-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.invite-link-row input {
+  flex: 1;
+}
+
+.invite-link-row .btn {
+  width: auto;
+  white-space: nowrap;
+}
+
+.loading-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+}
