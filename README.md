@@ -57,8 +57,17 @@ npm --prefix frontend run dev
 
 - Schema completo do banco (usuários, casais, convites, contas pessoais/conjunta, transações com split e saldo "quem deve quem", categorias, metas, orçamento, contas recorrentes).
 - Registro e login com JWT, rota protegida de exemplo (`GET /api/me`).
-- Telas de login/registro/dashboard no frontend, com contexto de autenticação e rota protegida.
+- Casal: criar casal, convidar parceiro(a) por link, aceitar convite (`/api/couples`).
+- Transações: criar (com split 50/50 opcional), listar (com filtro por mês), excluir, saldo "quem deve quem" e resumo mensal por categoria/pagador.
+- Metas (`/api/goals`): criar, listar, contribuir, remover.
+- Orçamento (`/api/budgets`): definir/consultar teto mensal do casal, com gasto já calculado.
+- Frontend completo com navegação lateral (Painel, Nova despesa, Metas, Relatórios, Conta):
+  - Painel com saldo da conta conjunta, gasto do mês por pessoa, progresso do orçamento e extrato recente.
+  - Nova despesa (formulário completo: conta, categoria, pagador, divisão, privacidade).
+  - Metas com barra de progresso e contribuições.
+  - Relatórios com quebra por categoria e extrato do mês (com exclusão).
+  - Conta com membros, contas (saldo), convite e definição de orçamento.
 
 ## O que falta (próxima etapa)
 
-CRUD de transações/metas/orçamento/contas recorrentes, fluxo de aceitar convite de parceiro(a), telas de extrato/relatórios, "marcar como pago" (settlement), refresh token, e mover o token para um cookie httpOnly antes de qualquer deploy real.
+Contas recorrentes (aluguel/assinaturas), "marcar como pago" (settlement) para além do saldo bruto, alertas inteligentes, refresh token, e mover o token para um cookie httpOnly antes de qualquer deploy real.

@@ -18,6 +18,7 @@ import {
   findPendingInviteByCoupleId,
   markInviteAccepted,
 } from "./invites.repository";
+import { getAccountBalances } from "../transactions/transactions.repository";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_COUPLE_MEMBERS = 2;
@@ -116,7 +117,7 @@ export async function acceptInvite(userId: string, token: string) {
 
 export async function getCoupleForUser(userId: string): Promise<{
   couple: CoupleRow;
-  accounts: AccountRow[];
+  accounts: (AccountRow & { balance: number })[];
   members: MemberRow[];
   pendingInviteToken: string | null;
 } | null> {
@@ -130,11 +131,25 @@ export async function getCoupleForUser(userId: string): Promise<{
     return null;
   }
 
-  const accounts = await findAccountsByCoupleId(couple.id);
-  const members = await findMembersByCoupleId(couple.id);
-  const pendingInvite = await findPendingInviteByCoupleId(couple.id);
+  const [accounts, members, pendingInvite, balanceRows] = await Promise.all([
+    findAccountsByCoupleId(couple.id),
+    findMembersByCoupleId(couple.id),
+    findPendingInviteByCoupleId(couple.id),
+    getAccountBalances(couple.id),
+  ]);
   const pendingInviteToken =
     pendingInvite && pendingInvite.inviter_id === userId ? pendingInvite.token : null;
 
-  return { couple, accounts, members, pendingInviteToken };
+  const balanceByAccountId = new Map(balanceRows.map((row) => [row.account_id, Number(row.balance)]));
+  // Personal accounts are independent money (see schema): only the joint
+  // account and the requester's own personal account are returned, so a
+  // partner's personal balance/name never reaches the other side.
+  const visibleAccounts = accounts
+    .filter((account) => account.type === "joint" || account.owner_user_id === userId)
+    .map((account) => ({
+      ...account,
+      balance: balanceByAccountId.get(account.id) ?? 0,
+    }));
+
+  return { couple, accounts: visibleAccounts, members, pendingInviteToken };
 }

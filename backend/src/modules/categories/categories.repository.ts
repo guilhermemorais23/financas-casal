@@ -23,3 +23,26 @@ export async function categoryIsVisibleTo(categoryId: string, coupleId: string):
   );
   return result.rows.length > 0;
 }
+
+export class DuplicateCategoryError extends Error {}
+
+export async function insertCategory(input: {
+  coupleId: string;
+  name: string;
+  emoji: string | null;
+}): Promise<CategoryRow> {
+  try {
+    const result = await query<CategoryRow>(
+      `INSERT INTO categories (couple_id, name, emoji, is_default)
+       VALUES ($1, $2, $3, false)
+       RETURNING *`,
+      [input.coupleId, input.name, input.emoji]
+    );
+    return result.rows[0];
+  } catch (err) {
+    if (err && typeof err === "object" && "code" in err && err.code === "23505") {
+      throw new DuplicateCategoryError();
+    }
+    throw err;
+  }
+}

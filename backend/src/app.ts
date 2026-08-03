@@ -2,8 +2,10 @@ import cors from "cors";
 import express from "express";
 import { meHandler } from "./modules/auth/auth.controller";
 import { authRouter } from "./modules/auth/auth.routes";
+import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
 import { couplesRouter } from "./modules/couples/couples.routes";
+import { goalsRouter } from "./modules/goals/goals.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
 import { asyncHandler } from "./middleware/asyncHandler";
 import { requireAuth } from "./middleware/auth";
@@ -20,6 +22,8 @@ export function createApp() {
   app.use("/api/couples", couplesRouter);
   app.use("/api/categories", categoriesRouter);
   app.use("/api/transactions", transactionsRouter);
+  app.use("/api/goals", goalsRouter);
+  app.use("/api/budgets", budgetsRouter);
 
   app.use(errorHandler);
 
