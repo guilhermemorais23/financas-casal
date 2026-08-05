@@ -23,6 +23,36 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "groupId", "order": "ASCENDING" },
+        { "fieldPath": "accountOwnerId", "order": "ASCENDING" },
+        { "fieldPath": "transactionType", "order": "ASCENDING" },
+        { "fieldPath": "occurredAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "groupId", "order": "ASCENDING" },
+        { "fieldPath": "accountId", "order": "ASCENDING" },
+        { "fieldPath": "occurredAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "groupId", "order": "ASCENDING" },
+        { "fieldPath": "accountType", "order": "ASCENDING" },
+        { "fieldPath": "accountId", "order": "ASCENDING" },
+        { "fieldPath": "occurredAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "groupId", "order": "ASCENDING" },
+        { "fieldPath": "accountOwnerId", "order": "ASCENDING" },
         { "fieldPath": "accountId", "order": "ASCENDING" },
         { "fieldPath": "occurredAt", "order": "DESCENDING" }
       ]
@@ -95,13 +125,6 @@
       "fields": [
         { "fieldPath": "groupId", "order": "ASCENDING" },
         { "fieldPath": "periodMonth", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "splits",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "groupId", "order": "ASCENDING" }
       ]
     }
   ]
