@@ -1,4 +1,6 @@
+import { findAccountsByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
+import { deleteTransaction, insertTransaction } from "../transactions/transactions.repository";
 import { splitEvenly } from "../../utils/money";
 import {
   deleteDebt,
@@ -101,18 +103,58 @@ async function requireManageableDebt(userId: string, debtId: string) {
   return debt;
 }
 
+// Keeps a debt's progress bar backed by the actual money ledger instead of a
+// disconnected checkbox: paying an installment logs a real expense (so it
+// shows up in the extrato/relatórios and hits the account balance), and
+// unmarking it removes that same expense again.
 export async function setInstallmentPaidForUser(
   userId: string,
   debtId: string,
   installmentId: string,
   isPaid: boolean
 ) {
-  await requireManageableDebt(userId, debtId);
+  const groupId = await requireGroupId(userId);
+  const debt = await requireManageableDebt(userId, debtId);
   const installment = await findInstallmentById(debtId, installmentId);
   if (!installment) {
     throw new InstallmentNotFoundError();
   }
-  return setInstallmentPaid(debtId, installmentId, isPaid);
+
+  if (isPaid && !installment.isPaid) {
+    const accounts = await findAccountsByGroupId(groupId);
+    const account = debt.ownerUserId
+      ? accounts.find((a) => a.type === "personal" && a.ownerUserId === debt.ownerUserId)
+      : accounts.find((a) => a.type === "joint");
+    if (!account) {
+      throw new DebtNotFoundError();
+    }
+
+    const transaction = await insertTransaction({
+      groupId,
+      accountId: account.id,
+      accountType: account.type,
+      accountOwnerId: account.ownerUserId,
+      categoryId: null,
+      payerId: userId,
+      createdBy: userId,
+      description: `${debt.name} — parcela ${installment.installmentNumber}/${debt.installmentsCount}`,
+      amount: Number(installment.amount),
+      transactionType: "expense",
+      occurredAt: new Date().toISOString().slice(0, 10),
+      isPrivate: false,
+      splitType: "none",
+    });
+    return setInstallmentPaid(debtId, installmentId, true, transaction.id);
+  }
+
+  if (!isPaid && installment.isPaid) {
+    if (installment.transactionId) {
+      await deleteTransaction(installment.transactionId);
+    }
+    return setInstallmentPaid(debtId, installmentId, false, null);
+  }
+
+  return installment;
 }
 
 export async function removeDebt(userId: string, debtId: string) {
