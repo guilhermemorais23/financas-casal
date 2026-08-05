@@ -115,9 +115,10 @@ export async function getBalanceHandler(req: Request, res: Response) {
 
 export async function getSummaryHandler(req: Request, res: Response) {
   const month = typeof req.query.month === "string" ? req.query.month : undefined;
+  const scope = req.query.scope === "visible" ? "visible" : "joint";
 
   try {
-    const summary = await getMonthlySummaryForUser(req.user!.id, month);
+    const summary = await getMonthlySummaryForUser(req.user!.id, month, scope);
     res.status(200).json(summary);
   } catch (err) {
     if (err instanceof NoGroupError) {

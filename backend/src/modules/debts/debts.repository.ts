@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
 import { fromCents, toCents } from "../../utils/money";
+import { deleteTransaction } from "../transactions/transactions.repository";
 
 export interface DebtRow {
   id: string;
@@ -20,6 +21,7 @@ export interface DebtInstallmentRow {
   amount: string;
   isPaid: boolean;
   paidAt: string | null;
+  transactionId: string | null;
 }
 
 const debtsCol = db.collection("debts");
@@ -47,6 +49,7 @@ function toInstallmentRow(debtId: string, doc: FirebaseFirestore.DocumentSnapsho
     amount: fromCents(data.amountCents),
     isPaid: data.isPaid ?? false,
     paidAt: data.paidAt ? data.paidAt.toDate().toISOString() : null,
+    transactionId: data.transactionId ?? null,
   };
 }
 
@@ -89,6 +92,7 @@ export async function insertInstallments(
       amountCents,
       isPaid: false,
       paidAt: null,
+      transactionId: null,
     });
   });
   await batch.commit();
@@ -133,18 +137,27 @@ export async function findInstallmentById(
 export async function setInstallmentPaid(
   debtId: string,
   installmentId: string,
-  isPaid: boolean
+  isPaid: boolean,
+  transactionId: string | null
 ): Promise<DebtInstallmentRow> {
   const ref = debtsCol.doc(debtId).collection("installments").doc(installmentId);
-  await ref.update({ isPaid, paidAt: isPaid ? FieldValue.serverTimestamp() : null });
+  await ref.update({ isPaid, paidAt: isPaid ? FieldValue.serverTimestamp() : null, transactionId });
   const doc = await ref.get();
   return toInstallmentRow(debtId, doc);
 }
 
 export async function deleteDebt(debtId: string): Promise<void> {
   const installmentsSnapshot = await debtsCol.doc(debtId).collection("installments").get();
+  const linkedTransactionIds = installmentsSnapshot.docs
+    .map((doc) => doc.data().transactionId as string | null)
+    .filter((id): id is string => Boolean(id));
+
   const batch = db.batch();
   installmentsSnapshot.docs.forEach((doc) => batch.delete(doc.ref));
   batch.delete(debtsCol.doc(debtId));
   await batch.commit();
+
+  // Removes the auto-generated expenses along with the debt they belong to,
+  // instead of leaving orphaned transactions in the extrato.
+  await Promise.all(linkedTransactionIds.map((transactionId) => deleteTransaction(transactionId)));
 }

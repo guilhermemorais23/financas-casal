@@ -41,7 +41,7 @@ export function ReportsPage() {
 
   async function load(selectedMonth: string) {
     const [summaryRes, txRes] = await Promise.all([
-      apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}`, { token }),
+      apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
       apiRequest<TransactionListRow[]>(`/transactions?limit=100&month=${selectedMonth}`, { token }),
     ]);
     setSummary(summaryRes);

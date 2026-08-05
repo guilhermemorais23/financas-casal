@@ -14,6 +14,7 @@ import {
   insertTransaction,
   updateTransaction,
   type SplitType,
+  type SummaryScope,
   type TransactionType,
 } from "./transactions.repository";
 
@@ -123,10 +124,10 @@ export async function getBalance(userId: string) {
   return { balances };
 }
 
-export async function getMonthlySummaryForUser(userId: string, monthParam?: string) {
+export async function getMonthlySummaryForUser(userId: string, monthParam?: string, scope?: SummaryScope) {
   const groupId = await requireGroupId(userId);
   const { periodMonth, monthStart, monthEnd } = parseMonthRange(monthParam);
-  const summary = await getMonthlySummary(groupId, userId, monthStart, monthEnd);
+  const summary = await getMonthlySummary(groupId, userId, monthStart, monthEnd, scope);
   return { periodMonth, ...summary };
 }
 

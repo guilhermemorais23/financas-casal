@@ -237,27 +237,60 @@ export interface PayerSummaryRow {
   total: string;
 }
 
-// Scoped to the joint account only: the group's shared budget/summary
-// tracks what leaves "Nossa Conta", not any member's independent personal
-// spending (which other members can't see at all -- see findTransactionsVisibleTo).
-export async function getMonthlySummary(
+export type SummaryScope = "joint" | "visible";
+
+// "joint": only what leaves "Nossa Conta" -- used by the Par page, which is
+// specifically about the shared budget.
+// "visible": joint + the requester's own personal account -- matches exactly
+// what findTransactionsVisibleTo returns, so a page showing both a category
+// breakdown and an extrato (Relatórios) never has one contradict the other.
+async function fetchExpenseDocsForSummary(
   groupId: string,
   requestingUserId: string,
   monthStart: string,
-  monthEnd: string
-): Promise<{ byCategory: CategorySummaryRow[]; byPayer: PayerSummaryRow[]; total: string }> {
-  const snapshot = await transactionsCol
+  monthEnd: string,
+  scope: SummaryScope
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  let jointQuery: FirebaseFirestore.Query = transactionsCol
     .where("groupId", "==", groupId)
     .where("accountType", "==", "joint")
     .where("transactionType", "==", "expense")
     .where("occurredAt", ">=", monthStart)
-    .where("occurredAt", "<", monthEnd)
-    .get();
+    .where("occurredAt", "<", monthEnd);
+
+  if (scope === "joint") {
+    return (await jointQuery.get()).docs;
+  }
+
+  const ownQuery: FirebaseFirestore.Query = transactionsCol
+    .where("groupId", "==", groupId)
+    .where("accountOwnerId", "==", requestingUserId)
+    .where("transactionType", "==", "expense")
+    .where("occurredAt", ">=", monthStart)
+    .where("occurredAt", "<", monthEnd);
+
+  const [jointSnap, ownSnap] = await Promise.all([jointQuery.get(), ownQuery.get()]);
+  const seen = new Set<string>();
+  return [...jointSnap.docs, ...ownSnap.docs].filter((doc) => {
+    if (seen.has(doc.id)) return false;
+    seen.add(doc.id);
+    return true;
+  });
+}
+
+export async function getMonthlySummary(
+  groupId: string,
+  requestingUserId: string,
+  monthStart: string,
+  monthEnd: string,
+  scope: SummaryScope = "joint"
+): Promise<{ byCategory: CategorySummaryRow[]; byPayer: PayerSummaryRow[]; total: string }> {
+  const docs = await fetchExpenseDocsForSummary(groupId, requestingUserId, monthStart, monthEnd, scope);
 
   const categoriesById = await loadCategoriesMap(groupId);
 
   const byCategoryMap = new Map<string, { categoryId: string | null; total: number }>();
-  for (const doc of snapshot.docs) {
+  for (const doc of docs) {
     const data = doc.data();
     if (!(data.isPrivate === false || data.createdBy === requestingUserId)) continue;
     const key = data.categoryId ?? "none";
@@ -281,7 +314,7 @@ export async function getMonthlySummary(
   // SQL asymmetry (a couple's total spend-by-person is real even if one
   // entry's description is private).
   const byPayerMap = new Map<string, number>();
-  for (const doc of snapshot.docs) {
+  for (const doc of docs) {
     const data = doc.data();
     byPayerMap.set(data.payerId, (byPayerMap.get(data.payerId) ?? 0) + data.amountCents);
   }
@@ -290,7 +323,7 @@ export async function getMonthlySummary(
     total: fromCents(total),
   }));
 
-  const totalCents = snapshot.docs.reduce((sum, doc) => sum + doc.data().amountCents, 0);
+  const totalCents = docs.reduce((sum, doc) => sum + doc.data().amountCents, 0);
 
   return { byCategory, byPayer, total: fromCents(totalCents) };
 }
