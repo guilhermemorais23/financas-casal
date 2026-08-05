@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "demo-par",
+    "production": "par-projeto"
+  }
+}

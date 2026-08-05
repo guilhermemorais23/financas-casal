@@ -6,12 +6,12 @@ import { Brand } from "../components/Brand";
 
 type Mode = "choose" | "create" | "accept";
 
-interface CreateCoupleResponse {
-  couple: { id: string };
+interface CreateGroupResponse {
+  group: { id: string };
   inviteToken: string;
 }
 
-export function CoupleSetupPage() {
+export function GroupSetupPage() {
   const { token, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -26,7 +26,7 @@ export function CoupleSetupPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const response = await apiRequest<CreateCoupleResponse>("/couples", {
+      const response = await apiRequest<CreateGroupResponse>("/groups", {
         method: "POST",
         token,
       });
@@ -34,7 +34,7 @@ export function CoupleSetupPage() {
       setMode("create");
       await refreshUser();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível criar o casal");
+      setError(err instanceof ApiError ? err.message : "Não foi possível criar o grupo");
     } finally {
       setIsSubmitting(false);
     }
@@ -45,7 +45,7 @@ export function CoupleSetupPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await apiRequest("/couples/accept", {
+      await apiRequest("/groups/accept", {
         method: "POST",
         token,
         body: { token: acceptToken },
@@ -64,8 +64,8 @@ export function CoupleSetupPage() {
       <div className="page-center">
         <Brand />
         <div className="card">
-          <h1>Convide seu par</h1>
-          <p className="card-subtitle">Compartilhe este link com seu parceiro(a):</p>
+          <h1>Convide seu grupo</h1>
+          <p className="card-subtitle">Compartilhe este link com quem for entrar (pode ser mais de uma pessoa):</p>
           <div className="invite-link-row">
             <input readOnly value={inviteLink ?? ""} onFocus={(e) => e.target.select()} />
             <button
@@ -90,7 +90,7 @@ export function CoupleSetupPage() {
         <Brand />
         <div className="card">
           <h1>Já tenho um convite</h1>
-          <p className="card-subtitle">Cole o código que seu parceiro(a) te enviou.</p>
+          <p className="card-subtitle">Cole o código que você recebeu.</p>
           <form onSubmit={handleAccept}>
             <div className="field">
               <label htmlFor="invite-token">Código do convite</label>
@@ -103,7 +103,7 @@ export function CoupleSetupPage() {
             </div>
             {error && <p className="alert" role="alert">{error}</p>}
             <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? "Entrando..." : "Entrar no casal"}
+              {isSubmitting ? "Entrando..." : "Entrar no grupo"}
             </button>
           </form>
           <button type="button" className="btn btn-ghost" onClick={() => setMode("choose")}>
@@ -121,11 +121,11 @@ export function CoupleSetupPage() {
         <div className="circle" />
       </div>
       <h1>Bem-vindos ao PAR.</h1>
-      <p className="onboarding-subtitle">Finanças a dois, sem atrito.</p>
+      <p className="onboarding-subtitle">Finanças em grupo, sem atrito.</p>
       {error && <p className="alert" role="alert">{error}</p>}
       <div className="onboarding-actions">
         <button type="button" className="btn btn-white" onClick={handleCreate} disabled={isSubmitting}>
-          Criar conta do casal
+          Criar grupo
         </button>
         <button type="button" className="btn btn-outline-light" onClick={() => setMode("accept")}>
           Já tenho um convite

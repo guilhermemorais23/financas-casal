@@ -1,17 +1,28 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError } from "../api/client";
+import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { PENDING_INVITE_STORAGE_KEY } from "./AcceptInvitePage";
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+
+  function goAfterAuth() {
+    const pendingInviteToken = sessionStorage.getItem(PENDING_INVITE_STORAGE_KEY);
+    if (pendingInviteToken) {
+      sessionStorage.removeItem(PENDING_INVITE_STORAGE_KEY);
+      navigate(`/group-setup?token=${pendingInviteToken}`);
+    } else {
+      navigate("/dashboard");
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -19,17 +30,24 @@ export function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      const pendingInviteToken = sessionStorage.getItem(PENDING_INVITE_STORAGE_KEY);
-      if (pendingInviteToken) {
-        sessionStorage.removeItem(PENDING_INVITE_STORAGE_KEY);
-        navigate(`/couple-setup?token=${pendingInviteToken}`);
-      } else {
-        navigate("/dashboard");
-      }
+      goAfterAuth();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível entrar");
+      setError(authErrorMessage(err, "Não foi possível entrar"));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleGoogle() {
+    setError(null);
+    setIsGoogleSubmitting(true);
+    try {
+      await loginWithGoogle();
+      goAfterAuth();
+    } catch (err) {
+      setError(authErrorMessage(err, "Não foi possível entrar com Google"));
+    } finally {
+      setIsGoogleSubmitting(false);
     }
   }
 
@@ -38,7 +56,13 @@ export function LoginPage() {
       <Brand />
       <div className="card">
         <h1>Entrar</h1>
-        <p className="card-subtitle">Finanças a dois, sem atrito.</p>
+        <p className="card-subtitle">Finanças em grupo, sem atrito.</p>
+
+        <button type="button" className="btn btn-outline" onClick={handleGoogle} disabled={isGoogleSubmitting}>
+          {isGoogleSubmitting ? "Entrando..." : "Continuar com Google"}
+        </button>
+        <div className="divider">ou</div>
+
         <form onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="login-email">Email</label>

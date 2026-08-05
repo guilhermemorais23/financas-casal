@@ -1,16 +1,21 @@
+import {
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  onIdTokenChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+} from "firebase/auth";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { apiRequest, ApiError } from "../api/client";
+import { apiRequest } from "../api/client";
+import { firebaseAuth } from "../firebase";
 
 export interface AuthUser {
   id: string;
   email: string;
   displayName: string;
-  coupleId: string | null;
-}
-
-interface AuthResponse {
-  user: AuthUser;
-  token: string;
+  groupId: string | null;
 }
 
 interface AuthContextValue {
@@ -18,77 +23,103 @@ interface AuthContextValue {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
-const TOKEN_STORAGE_KEY = "fincae_token";
-
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+async function bootstrapProfile(idToken: string, displayName: string): Promise<AuthUser> {
+  return apiRequest<AuthUser>("/me/bootstrap", {
+    method: "POST",
+    token: idToken,
+    body: { displayName },
+  });
+}
+
+async function fetchProfile(idToken: string): Promise<AuthUser> {
+  return apiRequest<AuthUser>("/me", { token: idToken });
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function rehydrate() {
-      if (!token) {
+    // Fires on sign-in, sign-out, and automatic ID-token refresh -- token in
+    // context stays fresh without every page having to call getIdToken().
+    const unsubscribe = onIdTokenChanged(firebaseAuth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setUser(null);
+        setToken(null);
         setIsLoading(false);
         return;
       }
+
+      const idToken = await firebaseUser.getIdToken();
+      setToken(idToken);
       try {
-        const me = await apiRequest<AuthUser>("/me", { token });
-        setUser(me);
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
-          localStorage.removeItem(TOKEN_STORAGE_KEY);
-          setToken(null);
-        }
+        const profile = await fetchProfile(idToken);
+        setUser(profile);
+      } catch {
+        // No Firestore profile doc yet (first sign-in) -- bootstrap creates it.
+        const profile = await bootstrapProfile(idToken, firebaseUser.displayName ?? "");
+        setUser(profile);
       } finally {
         setIsLoading(false);
       }
-    }
-    rehydrate();
-  }, [token]);
+    });
+    return unsubscribe;
+  }, []);
 
   async function refreshUser() {
     if (!token) return;
-    const me = await apiRequest<AuthUser>("/me", { token });
-    setUser(me);
+    const profile = await fetchProfile(token);
+    setUser(profile);
   }
 
-  function applyAuthResponse(response: AuthResponse) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
-    setToken(response.token);
-    setUser(response.user);
-  }
-
+  // login/loginWithGoogle/register set user+token themselves, synchronously
+  // within their own promise, rather than relying solely on onIdTokenChanged
+  // (a separate, independently-fired listener). Without this, a caller that
+  // awaits register() and immediately navigates can land on a route guarded
+  // by `user` before the listener has gotten around to populating it --
+  // ProtectedRoute then sees no user and bounces back to /login.
   async function login(email: string, password: string) {
-    const response = await apiRequest<AuthResponse>("/auth/login", {
-      method: "POST",
-      body: { email, password },
-    });
-    applyAuthResponse(response);
+    const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
+    const idToken = await credential.user.getIdToken();
+    const profile = await fetchProfile(idToken);
+    setToken(idToken);
+    setUser(profile);
+  }
+
+  async function loginWithGoogle() {
+    const credential = await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
+    const idToken = await credential.user.getIdToken();
+    const profile = await bootstrapProfile(idToken, credential.user.displayName ?? credential.user.email ?? "");
+    setToken(idToken);
+    setUser(profile);
   }
 
   async function register(email: string, password: string, displayName: string) {
-    const response = await apiRequest<AuthResponse>("/auth/register", {
-      method: "POST",
-      body: { email, password, displayName },
-    });
-    applyAuthResponse(response);
+    const credential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+    await updateProfile(credential.user, { displayName });
+    const idToken = await credential.user.getIdToken();
+    const profile = await bootstrapProfile(idToken, displayName);
+    setToken(idToken);
+    setUser(profile);
   }
 
-  function logout() {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    setToken(null);
-    setUser(null);
+  async function logout() {
+    await signOut(firebaseAuth);
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

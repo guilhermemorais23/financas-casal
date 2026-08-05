@@ -2,9 +2,10 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { AccountPage } from "./pages/AccountPage";
-import { CoupleSetupPage } from "./pages/CoupleSetupPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DebtsPage } from "./pages/DebtsPage";
 import { GoalsPage } from "./pages/GoalsPage";
+import { GroupSetupPage } from "./pages/GroupSetupPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NewTransactionPage } from "./pages/NewTransactionPage";
 import { ParPage } from "./pages/ParPage";
@@ -20,10 +21,10 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route
-          path="/couple-setup"
+          path="/group-setup"
           element={
             <ProtectedRoute>
-              <CoupleSetupPage />
+              <GroupSetupPage />
             </ProtectedRoute>
           }
         />
@@ -31,7 +32,7 @@ function App() {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute requireCouple>
+            <ProtectedRoute requireGroup>
               <DashboardPage />
             </ProtectedRoute>
           }
@@ -39,7 +40,7 @@ function App() {
         <Route
           path="/par"
           element={
-            <ProtectedRoute requireCouple>
+            <ProtectedRoute requireGroup>
               <ParPage />
             </ProtectedRoute>
           }
@@ -47,15 +48,23 @@ function App() {
         <Route
           path="/transactions/new"
           element={
-            <ProtectedRoute requireCouple>
+            <ProtectedRoute requireGroup>
               <NewTransactionPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/debts"
+          element={
+            <ProtectedRoute requireGroup>
+              <DebtsPage />
             </ProtectedRoute>
           }
         />
         <Route
           path="/goals"
           element={
-            <ProtectedRoute requireCouple>
+            <ProtectedRoute requireGroup>
               <GoalsPage />
             </ProtectedRoute>
           }
@@ -63,7 +72,7 @@ function App() {
         <Route
           path="/reports"
           element={
-            <ProtectedRoute requireCouple>
+            <ProtectedRoute requireGroup>
               <ReportsPage />
             </ProtectedRoute>
           }
@@ -71,7 +80,7 @@ function App() {
         <Route
           path="/account"
           element={
-            <ProtectedRoute requireCouple>
+            <ProtectedRoute requireGroup>
               <AccountPage />
             </ProtectedRoute>
           }

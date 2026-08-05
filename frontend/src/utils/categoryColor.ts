@@ -21,8 +21,11 @@ export function categoryColor(id: string | null): string {
   return CATEGORY_SLOTS[hash % CATEGORY_SLOTS.length];
 }
 
-export function personColor(isYou: boolean): string {
-  return isYou ? "var(--series-1)" : "var(--series-2)";
+// Stable categorical slot per member, by their sorted index within the
+// group (0 = "Você", 1..N-1 = the other members in a fixed order) -- no
+// longer a fixed you/partner pair now that a group can have any size.
+export function personColor(memberIndex: number): string {
+  return CATEGORY_SLOTS[memberIndex % CATEGORY_SLOTS.length];
 }
 
 export function tint(color: string): string {

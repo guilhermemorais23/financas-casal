@@ -13,7 +13,7 @@ interface AccountRow {
 
 interface MemberRow {
   id: string;
-  display_name: string;
+  displayName: string;
 }
 
 interface CategoryRow {
@@ -58,13 +58,13 @@ export function NewTransactionPage() {
 
   useEffect(() => {
     async function load() {
-      const [coupleRes] = await Promise.all([
-        apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/couples/me", { token }),
+      const [groupRes] = await Promise.all([
+        apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/groups/me", { token }),
         loadCategories(),
       ]);
-      setAccounts(coupleRes.accounts);
-      setMembers(coupleRes.members);
-      setAccountId((current) => current || coupleRes.accounts.find((a) => a.type === "joint")?.id || "");
+      setAccounts(groupRes.accounts);
+      setMembers(groupRes.members);
+      setAccountId((current) => current || groupRes.accounts.find((a) => a.type === "joint")?.id || "");
       setPayerId((current) => current || user?.id || "");
     }
     load();
@@ -136,7 +136,7 @@ export function NewTransactionPage() {
       <div className="card form-card">
         <h1>{isIncome ? "Nova entrada" : "Nova despesa"}</h1>
         <p className="card-subtitle">
-          {isIncome ? "Registre um valor recebido pelo casal ou pessoal." : "Registre um gasto do casal ou pessoal."}
+          {isIncome ? "Registre um valor recebido pelo grupo ou pessoal." : "Registre um gasto do grupo ou pessoal."}
         </p>
 
         <div className="segmented">
@@ -251,7 +251,7 @@ export function NewTransactionPage() {
             <select id="payer" value={payerId} onChange={(e) => setPayerId(e.target.value)} required>
               {members.map((member) => (
                 <option key={member.id} value={member.id}>
-                  {member.id === user?.id ? "Você" : member.display_name}
+                  {member.id === user?.id ? "Você" : member.displayName}
                 </option>
               ))}
             </select>
@@ -267,7 +267,7 @@ export function NewTransactionPage() {
                   onChange={(e) => setSplitType(e.target.value as "none" | "equal")}
                 >
                   <option value="none">Não dividir</option>
-                  <option value="equal">Dividir igualmente (50/50)</option>
+                  <option value="equal">Dividir igualmente entre o grupo</option>
                 </select>
               </div>
 

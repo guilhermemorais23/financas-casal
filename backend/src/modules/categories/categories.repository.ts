@@ -1,48 +1,73 @@
-import { query } from "../../db/pool";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "../../db/firestore";
 
 export interface CategoryRow {
   id: string;
-  couple_id: string | null;
+  groupId: string | null;
   name: string;
   emoji: string | null;
-  is_default: boolean;
+  isDefault: boolean;
 }
 
-export async function findVisibleCategories(coupleId: string | null): Promise<CategoryRow[]> {
-  const result = await query<CategoryRow>(
-    "SELECT * FROM categories WHERE couple_id IS NULL OR couple_id = $1 ORDER BY is_default DESC, name",
-    [coupleId]
-  );
-  return result.rows;
+const categoriesCol = db.collection("categories");
+
+function normalize(name: string): string {
+  return name.trim().toLowerCase().replace(/\//g, "-");
 }
 
-export async function categoryIsVisibleTo(categoryId: string, coupleId: string): Promise<boolean> {
-  const result = await query(
-    "SELECT 1 FROM categories WHERE id = $1 AND (couple_id IS NULL OR couple_id = $2)",
-    [categoryId, coupleId]
-  );
-  return result.rows.length > 0;
+function categoryDocId(groupId: string | null, name: string): string {
+  return `${groupId ?? "global"}__${normalize(name)}`;
+}
+
+function toCategoryRow(doc: FirebaseFirestore.DocumentSnapshot): CategoryRow {
+  const data = doc.data()!;
+  return {
+    id: doc.id,
+    groupId: data.groupId ?? null,
+    name: data.name,
+    emoji: data.emoji ?? null,
+    isDefault: data.isDefault ?? false,
+  };
+}
+
+export async function findVisibleCategories(groupId: string | null): Promise<CategoryRow[]> {
+  const queries = [categoriesCol.where("groupId", "==", null).get()];
+  if (groupId) {
+    queries.push(categoriesCol.where("groupId", "==", groupId).get());
+  }
+  const snapshots = await Promise.all(queries);
+  const rows = snapshots.flatMap((snapshot) => snapshot.docs.map(toCategoryRow));
+  return rows.sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
 }
 
 export class DuplicateCategoryError extends Error {}
 
 export async function insertCategory(input: {
-  coupleId: string;
+  groupId: string;
   name: string;
   emoji: string | null;
 }): Promise<CategoryRow> {
+  const id = categoryDocId(input.groupId, input.name);
   try {
-    const result = await query<CategoryRow>(
-      `INSERT INTO categories (couple_id, name, emoji, is_default)
-       VALUES ($1, $2, $3, false)
-       RETURNING *`,
-      [input.coupleId, input.name, input.emoji]
-    );
-    return result.rows[0];
+    await categoriesCol.doc(id).create({
+      groupId: input.groupId,
+      name: input.name,
+      emoji: input.emoji,
+      isDefault: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
   } catch (err) {
-    if (err && typeof err === "object" && "code" in err && err.code === "23505") {
+    if (err && typeof err === "object" && "code" in err && err.code === 6 /* ALREADY_EXISTS */) {
       throw new DuplicateCategoryError();
     }
     throw err;
   }
+  return { id, groupId: input.groupId, name: input.name, emoji: input.emoji, isDefault: false };
+}
+
+export async function categoryIsVisibleTo(categoryId: string, groupId: string): Promise<boolean> {
+  const doc = await categoriesCol.doc(categoryId).get();
+  if (!doc.exists) return false;
+  const data = doc.data()!;
+  return data.groupId === null || data.groupId === groupId;
 }

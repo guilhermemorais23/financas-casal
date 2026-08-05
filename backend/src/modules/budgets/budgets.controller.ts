@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { NoCoupleError } from "../couples/couples.service";
+import { NoGroupError } from "../groups/groups.service";
 import {
   InvalidCapAmountError,
   InvalidMonthError,
@@ -17,8 +17,8 @@ export async function getCurrentBudgetHandler(req: Request, res: Response) {
     const result = await getCurrentBudget(req.user!.id, monthParam(req));
     res.status(200).json(result);
   } catch (err) {
-    if (err instanceof NoCoupleError) {
-      res.status(404).json({ error: "no couple yet" });
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
       return;
     }
     if (err instanceof InvalidMonthError) {
@@ -40,8 +40,8 @@ export async function setCurrentBudgetHandler(req: Request, res: Response) {
     const budget = await setCurrentBudget(req.user!.id, capAmount, monthParam(req));
     res.status(200).json(budget);
   } catch (err) {
-    if (err instanceof NoCoupleError) {
-      res.status(404).json({ error: "no couple yet" });
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
       return;
     }
     if (err instanceof InvalidMonthError || err instanceof InvalidCapAmountError) {

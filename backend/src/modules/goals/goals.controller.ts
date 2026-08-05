@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { NoCoupleError } from "../couples/couples.service";
+import { NoGroupError } from "../groups/groups.service";
 import {
   GoalNotFoundError,
   InvalidContributionError,
@@ -30,8 +30,8 @@ export async function createGoalHandler(req: Request, res: Response) {
     });
     res.status(201).json(goal);
   } catch (err) {
-    if (err instanceof NoCoupleError) {
-      res.status(404).json({ error: "no couple yet" });
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
       return;
     }
     throw err;
@@ -43,8 +43,8 @@ export async function listGoalsHandler(req: Request, res: Response) {
     const goals = await listGoals(req.user!.id);
     res.status(200).json(goals);
   } catch (err) {
-    if (err instanceof NoCoupleError) {
-      res.status(404).json({ error: "no couple yet" });
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
       return;
     }
     throw err;
@@ -62,7 +62,7 @@ export async function contributeToGoalHandler(req: Request, res: Response) {
     const goal = await contributeToGoal(req.user!.id, req.params.id, amount);
     res.status(200).json(goal);
   } catch (err) {
-    if (err instanceof NoCoupleError || err instanceof GoalNotFoundError) {
+    if (err instanceof NoGroupError || err instanceof GoalNotFoundError) {
       res.status(404).json({ error: "goal not found" });
       return;
     }
@@ -79,7 +79,7 @@ export async function deleteGoalHandler(req: Request, res: Response) {
     await removeGoal(req.user!.id, req.params.id);
     res.status(204).send();
   } catch (err) {
-    if (err instanceof NoCoupleError || err instanceof GoalNotFoundError) {
+    if (err instanceof NoGroupError || err instanceof GoalNotFoundError) {
       res.status(404).json({ error: "goal not found" });
       return;
     }

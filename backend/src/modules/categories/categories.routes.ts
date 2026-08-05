@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
-import { NoCoupleError, requireCoupleId } from "../couples/couples.service";
+import { NoGroupError, requireGroupId } from "../groups/groups.service";
 import { DuplicateCategoryError, findVisibleCategories, insertCategory } from "./categories.repository";
 
 export const categoriesRouter = Router();
@@ -15,17 +15,17 @@ function isNonEmptyString(value: unknown): value is string {
 categoriesRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    let coupleId: string;
+    let groupId: string;
     try {
-      coupleId = await requireCoupleId(req.user!.id);
+      groupId = await requireGroupId(req.user!.id);
     } catch (err) {
-      if (err instanceof NoCoupleError) {
-        res.status(404).json({ error: "no couple yet" });
+      if (err instanceof NoGroupError) {
+        res.status(404).json({ error: "no group yet" });
         return;
       }
       throw err;
     }
-    const categories = await findVisibleCategories(coupleId);
+    const categories = await findVisibleCategories(groupId);
     res.status(200).json(categories);
   })
 );
@@ -39,12 +39,12 @@ categoriesRouter.post(
       return;
     }
 
-    let coupleId: string;
+    let groupId: string;
     try {
-      coupleId = await requireCoupleId(req.user!.id);
+      groupId = await requireGroupId(req.user!.id);
     } catch (err) {
-      if (err instanceof NoCoupleError) {
-        res.status(404).json({ error: "no couple yet" });
+      if (err instanceof NoGroupError) {
+        res.status(404).json({ error: "no group yet" });
         return;
       }
       throw err;
@@ -52,7 +52,7 @@ categoriesRouter.post(
 
     try {
       const category = await insertCategory({
-        coupleId,
+        groupId,
         name: name.trim(),
         emoji: isNonEmptyString(emoji) ? emoji.trim() : null,
       });

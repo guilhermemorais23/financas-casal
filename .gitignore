@@ -2,7 +2,14 @@ node_modules/
 dist/
 build/
 .env
+.env.production
 *.local
+serviceAccountKey.json
+emulator-fake-credentials.json
+emulator-data/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
 
 npm-debug.log*
 .DS_Store

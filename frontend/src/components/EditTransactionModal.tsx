@@ -12,9 +12,9 @@ export interface EditableTransaction {
   id: string;
   description: string;
   amount: string;
-  transaction_type: "expense" | "income";
-  category_id: string | null;
-  occurred_at: string;
+  transactionType: "expense" | "income";
+  categoryId: string | null;
+  occurredAt: string;
 }
 
 export function EditTransactionModal({
@@ -32,10 +32,10 @@ export function EditTransactionModal({
   const [description, setDescription] = useState(transaction.description);
   const [amount, setAmount] = useState(transaction.amount);
   const [transactionType, setTransactionType] = useState<"expense" | "income">(
-    transaction.transaction_type
+    transaction.transactionType
   );
-  const [categoryId, setCategoryId] = useState(transaction.category_id ?? "");
-  const [occurredAt, setOccurredAt] = useState(transaction.occurred_at.slice(0, 10));
+  const [categoryId, setCategoryId] = useState(transaction.categoryId ?? "");
+  const [occurredAt, setOccurredAt] = useState(transaction.occurredAt.slice(0, 10));
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Painel", icon: "🏠" },
   { to: "/par", label: "Par", icon: "💞" },
   { to: "/transactions/new", label: "Nova despesa", icon: "➕" },
+  { to: "/debts", label: "Dívidas", icon: "💳" },
   { to: "/goals", label: "Metas", icon: "🎯" },
   { to: "/reports", label: "Relatórios", icon: "📊" },
   { to: "/account", label: "Conta", icon: "⚙️" },

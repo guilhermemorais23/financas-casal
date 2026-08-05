@@ -4,7 +4,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { AppLayout } from "../layouts/AppLayout";
-import { categoryColor, personColor, tint } from "../utils/categoryColor";
+import { categoryColor, tint } from "../utils/categoryColor";
 import { formatCurrency, currentMonthParam } from "../utils/format";
 
 interface AccountWithBalance {
@@ -12,69 +12,62 @@ interface AccountWithBalance {
   type: "personal" | "joint";
   name: string;
   emoji: string | null;
-  owner_user_id: string | null;
+  ownerUserId: string | null;
   balance: number;
 }
 
 interface MemberRow {
   id: string;
-  display_name: string;
+  displayName: string;
 }
 
-interface CoupleResponse {
+interface GroupResponse {
   accounts: AccountWithBalance[];
   members: MemberRow[];
-}
-
-interface PayerSummaryRow {
-  payer_id: string;
-  total: string;
-}
-
-interface SummaryResponse {
-  total: string;
-  byPayer: PayerSummaryRow[];
-}
-
-interface BudgetResponse {
-  budget: { cap_amount: string } | null;
-  spent: number;
 }
 
 interface TransactionListRow {
   id: string;
   description: string;
   amount: string;
-  transaction_type: "expense" | "income";
-  occurred_at: string;
-  category_id: string | null;
-  category_name: string | null;
-  category_emoji: string | null;
+  transactionType: "expense" | "income";
+  occurredAt: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
 }
 
 export function DashboardPage() {
   const { user, token } = useAuth();
-  const [couple, setCouple] = useState<CoupleResponse | null>(null);
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [budget, setBudget] = useState<BudgetResponse | null>(null);
+  const [group, setGroup] = useState<GroupResponse | null>(null);
+  const [personalMonthTx, setPersonalMonthTx] = useState<TransactionListRow[]>([]);
   const [recent, setRecent] = useState<TransactionListRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function load() {
     setError(null);
     const month = currentMonthParam();
     try {
-      const [coupleRes, summaryRes, budgetRes, recentRes] = await Promise.all([
-        apiRequest<CoupleResponse>("/couples/me", { token }),
-        apiRequest<SummaryResponse>(`/transactions/summary?month=${month}`, { token }),
-        apiRequest<BudgetResponse>(`/budgets/current?month=${month}`, { token }),
+      const groupRes = await apiRequest<GroupResponse>("/groups/me", { token });
+      const personalAccount = groupRes.accounts.find(
+        (account) => account.type === "personal" && account.ownerUserId === user?.id
+      );
+
+      const [personalMonthRes, recentRes] = await Promise.all([
+        personalAccount
+          ? apiRequest<TransactionListRow[]>(
+              `/transactions?limit=100&month=${month}&accountId=${personalAccount.id}`,
+              { token }
+            )
+          : Promise.resolve([]),
         apiRequest<TransactionListRow[]>("/transactions?limit=5", { token }),
       ]);
-      setCouple(coupleRes);
-      setSummary(summaryRes);
-      setBudget(budgetRes);
+
+      setGroup(groupRes);
+      setPersonalMonthTx(personalMonthRes);
       setRecent(recentRes);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
@@ -87,6 +80,19 @@ export function DashboardPage() {
     load();
   }, [token]);
 
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setError(null);
+    try {
+      await apiRequest(`/transactions/${id}`, { method: "DELETE", token });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   if (error) {
     return (
       <AppLayout>
@@ -97,7 +103,7 @@ export function DashboardPage() {
     );
   }
 
-  if (isLoading || !couple || !summary || !budget) {
+  if (isLoading || !group) {
     return (
       <AppLayout>
         <p className="loading-page">Carregando...</p>
@@ -105,73 +111,32 @@ export function DashboardPage() {
     );
   }
 
-  const jointAccount = couple.accounts.find((account) => account.type === "joint");
-  const partner = couple.members.find((member) => member.id !== user?.id);
-
-  const spentByUser = (userId: string | undefined) =>
-    userId
-      ? summary.byPayer.find((row) => row.payer_id === userId)?.total ?? "0"
-      : "0";
-
-  const cap = budget.budget ? Number(budget.budget.cap_amount) : null;
-  const spent = budget.spent;
-  const rawPercent = cap ? Math.round((spent / cap) * 100) : 0;
-  const budgetPercent = Math.min(100, rawPercent);
-  const budgetSeverity = rawPercent >= 100 ? "over" : rawPercent >= 80 ? "warning" : "";
+  const personalAccount = group.accounts.find(
+    (account) => account.type === "personal" && account.ownerUserId === user?.id
+  );
+  const income = personalMonthTx
+    .filter((tx) => tx.transactionType === "income")
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+  const expense = personalMonthTx
+    .filter((tx) => tx.transactionType === "expense")
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
 
   return (
     <AppLayout>
       <div className="dashboard">
-        <div className="stat-card">
-          <p className="label">Conta conjunta</p>
-          <p className="value">{formatCurrency(jointAccount?.balance ?? 0)}</p>
-        </div>
-
-        <div className="stat-row">
-          <div className="stat-box">
-            <div className="stat-box-header">
-              <span className="identity-dot" style={{ background: personColor(true) }} />
-              <p className="label">Você</p>
-            </div>
-            <p className="value-sm">{formatCurrency(Number(spentByUser(user?.id)))}</p>
+        <div className="stat-row wrap">
+          <div className="stat-box tone-good">
+            <p className="label">Entrada do mês</p>
+            <p className="value-sm income-text">{formatCurrency(income)}</p>
           </div>
-          <div className="stat-box">
-            <div className="stat-box-header">
-              <span className="identity-dot" style={{ background: personColor(false) }} />
-              <p className="label">{partner?.display_name ?? "Parceiro(a)"}</p>
-            </div>
-            <p className="value-sm">{formatCurrency(Number(spentByUser(partner?.id)))}</p>
+          <div className="stat-box tone-warm">
+            <p className="label">Saída do mês</p>
+            <p className="value-sm">{formatCurrency(expense)}</p>
           </div>
-        </div>
-
-        <div className="card budget-card">
-          <div className="budget-header">
-            <p className="card-title">Orçamento do mês</p>
-            {cap ? (
-              <span className="budget-amounts">
-                {formatCurrency(spent)} / {formatCurrency(cap)}
-              </span>
-            ) : (
-              <Link to="/account" className="link">
-                Definir orçamento
-              </Link>
-            )}
+          <div className="stat-box tone-accent">
+            <p className="label">Você tem</p>
+            <p className="value-sm">{formatCurrency(personalAccount?.balance ?? 0)}</p>
           </div>
-          {cap && (
-            <>
-              <div className="progress-track">
-                <div
-                  className={`progress-fill${budgetSeverity ? ` ${budgetSeverity}` : ""}`}
-                  style={{ width: `${budgetPercent}%` }}
-                />
-              </div>
-              {budgetSeverity && (
-                <p className={`budget-status ${budgetSeverity}`}>
-                  {budgetSeverity === "over" ? "⚠️ Passou do orçamento" : "⚠️ Perto do limite"}
-                </p>
-              )}
-            </>
-          )}
         </div>
 
         <div className="card">
@@ -189,29 +154,35 @@ export function DashboardPage() {
                 <li key={tx.id} className="transaction-row">
                   <span
                     className="transaction-icon"
-                    style={{ background: tint(categoryColor(tx.category_id)) }}
+                    style={{ background: tint(categoryColor(tx.categoryId)) }}
                   >
-                    {tx.category_emoji ?? "💸"}
+                    {tx.categoryEmoji ?? "💸"}
                   </span>
                   <div className="transaction-info">
                     <span className="transaction-desc">{tx.description}</span>
                     <span className="transaction-meta">
-                      {tx.category_name ?? "Sem categoria"} ·{" "}
-                      {new Date(tx.occurred_at).toLocaleDateString("pt-BR")}
+                      {tx.categoryName ?? "Sem categoria"} ·{" "}
+                      {new Date(tx.occurredAt).toLocaleDateString("pt-BR")}
                     </span>
                   </div>
-                  <span className={`transaction-amount ${tx.transaction_type}`}>
-                    {tx.transaction_type === "income" ? "+" : "-"}
+                  <span className={`transaction-amount ${tx.transactionType}`}>
+                    {tx.transactionType === "income" ? "+" : "-"}
                     {formatCurrency(Number(tx.amount))}
                   </span>
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    title="Editar"
-                    onClick={() => setEditingTx(tx)}
-                  >
-                    ✎
-                  </button>
+                  <div className="transaction-row-actions">
+                    <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      title="Excluir"
+                      disabled={deletingId === tx.id}
+                      onClick={() => handleDelete(tx.id)}
+                    >
+                      🗑
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

@@ -581,11 +581,27 @@ input:focus {
   flex: 1;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--stat-box-accent, var(--color-border));
   border-radius: var(--radius);
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+}
+
+.stat-box.tone-good {
+  --stat-box-accent: var(--status-good);
+  background: color-mix(in srgb, var(--status-good) 8%, var(--surface));
+}
+
+.stat-box.tone-warm {
+  --stat-box-accent: var(--series-2);
+  background: color-mix(in srgb, var(--series-2) 8%, var(--surface));
+}
+
+.stat-box.tone-accent {
+  --stat-box-accent: var(--series-1);
+  background: color-mix(in srgb, var(--series-1) 8%, var(--surface));
 }
 
 .stat-box-header {
@@ -1044,4 +1060,115 @@ select {
   display: flex;
   align-items: center;
   gap: 0.15rem;
+}
+
+/* Debts ---------------------------------------------------------------------- */
+
+.debt-card {
+  max-width: none;
+}
+
+.installment-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.installment-chip {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.installment-chip:hover {
+  border-color: var(--color-primary);
+}
+
+.installment-chip.paid {
+  background: var(--status-good);
+  border-color: var(--status-good);
+  color: #fff;
+}
+
+/* Auth extras (Google button divider), N-member stat row, danger action ---- */
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  margin: 1rem 0;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.stat-row.wrap {
+  flex-wrap: wrap;
+}
+
+.stat-row.wrap .stat-box {
+  min-width: 140px;
+}
+
+.danger-text {
+  color: var(--color-danger-text);
+}
+
+.income-text {
+  color: var(--success-text);
+}
+
+/* Success checkmark (register/login confirmation) ------------------------- */
+
+.success-check {
+  color: var(--status-good);
+  margin-bottom: 0.5rem;
+}
+
+.success-check-circle {
+  stroke: var(--status-good);
+  stroke-width: 2;
+  stroke-miterlimit: 10;
+  stroke-dasharray: 151;
+  stroke-dashoffset: 151;
+  animation: success-circle 0.5s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+.success-check-mark {
+  stroke: var(--status-good);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 36;
+  stroke-dashoffset: 36;
+  animation: success-mark 0.35s cubic-bezier(0.65, 0, 0.45, 1) 0.45s forwards;
+}
+
+@keyframes success-circle {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes success-mark {
+  to {
+    stroke-dashoffset: 0;
+  }
 }

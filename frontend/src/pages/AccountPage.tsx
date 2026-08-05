@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
@@ -14,39 +15,42 @@ interface AccountRow {
 
 interface MemberRow {
   id: string;
-  display_name: string;
+  displayName: string;
 }
 
-interface CoupleResponse {
+interface GroupResponse {
   accounts: AccountRow[];
   members: MemberRow[];
   pendingInviteToken: string | null;
 }
 
 interface BudgetResponse {
-  budget: { cap_amount: string } | null;
+  budget: { capAmount: string } | null;
   spent: number;
 }
 
 export function AccountPage() {
-  const { user, token, logout } = useAuth();
-  const [couple, setCouple] = useState<CoupleResponse | null>(null);
+  const { user, token, logout, refreshUser } = useAuth();
+  const navigate = useNavigate();
+  const [group, setGroup] = useState<GroupResponse | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
   const [capInput, setCapInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   const month = currentMonthParam();
 
   async function load() {
-    const [coupleRes, budgetRes] = await Promise.all([
-      apiRequest<CoupleResponse>("/couples/me", { token }),
+    const [groupRes, budgetRes] = await Promise.all([
+      apiRequest<GroupResponse>("/groups/me", { token }),
       apiRequest<BudgetResponse>(`/budgets/current?month=${month}`, { token }),
     ]);
-    setCouple(coupleRes);
+    setGroup(groupRes);
     setBudget(budgetRes);
-    setCapInput(budgetRes.budget ? budgetRes.budget.cap_amount : "");
+    setCapInput(budgetRes.budget ? budgetRes.budget.capAmount : "");
   }
 
   useEffect(() => {
@@ -78,14 +82,45 @@ export function AccountPage() {
   }
 
   function copyInvite() {
-    if (!couple?.pendingInviteToken) return;
-    const link = `${window.location.origin}/invite/${couple.pendingInviteToken}`;
+    if (!group?.pendingInviteToken) return;
+    const link = `${window.location.origin}/invite/${group.pendingInviteToken}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (!couple) {
+  async function handleNewInvite() {
+    setError(null);
+    setIsInviting(true);
+    try {
+      await apiRequest("/groups/invite", { method: "POST", token });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível gerar o convite");
+    } finally {
+      setIsInviting(false);
+    }
+  }
+
+  async function handleLeaveGroup() {
+    const confirmed = window.confirm(
+      "Desvincular sua conta desse grupo? Você continua usando o app individualmente e pode criar ou entrar em outro grupo depois."
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setIsLeaving(true);
+    try {
+      await apiRequest("/groups/leave", { method: "POST", token });
+      await refreshUser();
+      navigate("/group-setup");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível desvincular a conta");
+      setIsLeaving(false);
+    }
+  }
+
+  if (!group) {
     return (
       <AppLayout>
         <p className="loading-page">Carregando...</p>
@@ -99,33 +134,43 @@ export function AccountPage() {
         <h1>Conta</h1>
 
         <div className="card">
-          <p className="card-title">Casal</p>
+          <p className="card-title">Grupo</p>
           <ul className="member-list">
-            {couple.members.map((member) => (
+            {group.members.map((member) => (
               <li key={member.id} className="member-row">
                 <span className="onboarding-avatars-inline circle" />
-                {member.id === user?.id ? "Você" : member.display_name}
+                {member.id === user?.id ? "Você" : member.displayName}
               </li>
             ))}
           </ul>
-          {couple.pendingInviteToken && (
+          {group.pendingInviteToken ? (
             <div className="invite-link-row" style={{ marginTop: "1rem" }}>
               <input
                 readOnly
-                value={`${window.location.origin}/invite/${couple.pendingInviteToken}`}
+                value={`${window.location.origin}/invite/${group.pendingInviteToken}`}
                 onFocus={(e) => e.target.select()}
               />
               <button type="button" className="btn btn-outline" onClick={copyInvite}>
                 {copied ? "Copiado!" : "Copiar convite"}
               </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ marginTop: "1rem" }}
+              onClick={handleNewInvite}
+              disabled={isInviting}
+            >
+              {isInviting ? "Gerando..." : "Gerar link de convite"}
+            </button>
           )}
         </div>
 
         <div className="card">
           <p className="card-title">Contas</p>
           <ul className="account-list">
-            {couple.accounts.map((account) => (
+            {group.accounts.map((account) => (
               <li key={account.id} className="account-row">
                 <span>
                   {account.emoji ?? (account.type === "joint" ? "🏠" : "👤")} {account.name}
@@ -165,6 +210,10 @@ export function AccountPage() {
 
         <button type="button" className="btn btn-outline" onClick={logout}>
           Sair da conta
+        </button>
+
+        <button type="button" className="btn btn-ghost danger-text" onClick={handleLeaveGroup} disabled={isLeaving}>
+          {isLeaving ? "Desvinculando..." : "Desvincular conta do grupo"}
         </button>
       </div>
     </AppLayout>

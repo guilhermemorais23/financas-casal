@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { NoCoupleError } from "../couples/couples.service";
+import { NoGroupError } from "../groups/groups.service";
 import {
   InvalidAccountError,
   InvalidCategoryError,
@@ -62,8 +62,8 @@ export async function createTransactionHandler(req: Request, res: Response) {
     });
     res.status(201).json(transaction);
   } catch (err) {
-    if (err instanceof NoCoupleError) {
-      res.status(404).json({ error: "no couple yet" });
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
       return;
     }
     if (
@@ -88,8 +88,8 @@ export async function listTransactionsHandler(req: Request, res: Response) {
     const transactions = await listTransactions(req.user!.id, limit, month, accountId);
     res.status(200).json(transactions);
   } catch (err) {
-    if (err instanceof NoCoupleError) {
-      res.status(404).json({ error: "no couple yet" });
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
       return;
     }
     if (err instanceof InvalidMonthError) {
@@ -105,8 +105,8 @@ export async function getBalanceHandler(req: Request, res: Response) {
     const balance = await getBalance(req.user!.id);
     res.status(200).json(balance);
   } catch (err) {
-    if (err instanceof NoCoupleError) {
-      res.status(404).json({ error: "no couple yet" });
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
       return;
     }
     throw err;
@@ -120,8 +120,8 @@ export async function getSummaryHandler(req: Request, res: Response) {
     const summary = await getMonthlySummaryForUser(req.user!.id, month);
     res.status(200).json(summary);
   } catch (err) {
-    if (err instanceof NoCoupleError) {
-      res.status(404).json({ error: "no couple yet" });
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
       return;
     }
     if (err instanceof InvalidMonthError) {
@@ -156,7 +156,7 @@ export async function updateTransactionHandler(req: Request, res: Response) {
     });
     res.status(200).json(transaction);
   } catch (err) {
-    if (err instanceof NoCoupleError || err instanceof TransactionNotFoundError) {
+    if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
       res.status(404).json({ error: "transaction not found" });
       return;
     }
@@ -173,7 +173,7 @@ export async function deleteTransactionHandler(req: Request, res: Response) {
     await deleteTransactionForUser(req.user!.id, req.params.id);
     res.status(204).send();
   } catch (err) {
-    if (err instanceof NoCoupleError || err instanceof TransactionNotFoundError) {
+    if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
       res.status(404).json({ error: "transaction not found" });
       return;
     }

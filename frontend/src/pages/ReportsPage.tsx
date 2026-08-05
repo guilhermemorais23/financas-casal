@@ -7,9 +7,9 @@ import { categoryColor, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
 
 interface CategorySummaryRow {
-  category_id: string | null;
-  category_name: string | null;
-  category_emoji: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
   total: string;
 }
 
@@ -22,12 +22,12 @@ interface TransactionListRow {
   id: string;
   description: string;
   amount: string;
-  transaction_type: "expense" | "income";
-  occurred_at: string;
-  category_id: string | null;
-  category_name: string | null;
-  category_emoji: string | null;
-  is_private: boolean;
+  transactionType: "expense" | "income";
+  occurredAt: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  isPrivate: boolean;
 }
 
 export function ReportsPage() {
@@ -84,13 +84,13 @@ export function ReportsPage() {
             {summary?.byCategory.map((row) => {
               const value = Number(row.total);
               const percent = total > 0 ? Math.round((value / total) * 100) : 0;
-              const color = categoryColor(row.category_id);
+              const color = categoryColor(row.categoryId);
               return (
-                <li key={row.category_id ?? "none"} className="category-row">
+                <li key={row.categoryId ?? "none"} className="category-row">
                   <div className="category-row-header">
                     <span className="category-name">
                       <span className="identity-dot" style={{ background: color }} />
-                      {row.category_emoji ?? "✨"} {row.category_name ?? "Sem categoria"}
+                      {row.categoryEmoji ?? "✨"} {row.categoryName ?? "Sem categoria"}
                     </span>
                     <span className="value">{formatCurrency(value)}</span>
                   </div>
@@ -123,22 +123,22 @@ export function ReportsPage() {
               <li key={tx.id} className="transaction-row">
                 <span
                   className="transaction-icon"
-                  style={{ background: tint(categoryColor(tx.category_id)) }}
+                  style={{ background: tint(categoryColor(tx.categoryId)) }}
                 >
-                  {tx.category_emoji ?? "💸"}
+                  {tx.categoryEmoji ?? "💸"}
                 </span>
                 <div className="transaction-info">
                   <span className="transaction-desc">
                     {tx.description}
-                    {tx.is_private && <span className="badge private-badge">privado</span>}
+                    {tx.isPrivate && <span className="badge private-badge">privado</span>}
                   </span>
                   <span className="transaction-meta">
-                    {tx.category_name ?? "Sem categoria"} ·{" "}
-                    {new Date(tx.occurred_at).toLocaleDateString("pt-BR")}
+                    {tx.categoryName ?? "Sem categoria"} ·{" "}
+                    {new Date(tx.occurredAt).toLocaleDateString("pt-BR")}
                   </span>
                 </div>
-                <span className={`transaction-amount ${tx.transaction_type}`}>
-                  {tx.transaction_type === "income" ? "+" : "-"}
+                <span className={`transaction-amount ${tx.transactionType}`}>
+                  {tx.transactionType === "income" ? "+" : "-"}
                   {formatCurrency(Number(tx.amount))}
                 </span>
                 <div className="transaction-row-actions">
@@ -152,7 +152,7 @@ export function ReportsPage() {
                     disabled={deletingId === tx.id}
                     onClick={() => handleDelete(tx.id)}
                   >
-                    ✕
+                    🗑
                   </button>
                 </div>
               </li>

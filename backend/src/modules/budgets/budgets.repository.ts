@@ -1,66 +1,77 @@
-import { query } from "../../db/pool";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "../../db/firestore";
+import { fromCents, toCents } from "../../utils/money";
 
 export interface BudgetRow {
   id: string;
-  couple_id: string;
-  period_month: string;
-  cap_amount: string;
-  category_id: string | null;
-  created_at: string;
-  updated_at: string;
+  groupId: string;
+  periodMonth: string;
+  capAmount: string;
+  categoryId: string | null;
 }
 
-// Whole-couple budget for a month (category_id IS NULL). The schema's
-// UNIQUE(couple_id, period_month, category_id) doesn't dedupe NULLs in
-// Postgres, so upserts for the whole-couple row are done as find-then-
-// update/insert in application code rather than ON CONFLICT.
-export async function findCoupleBudget(
-  coupleId: string,
-  periodMonth: string
-): Promise<BudgetRow | null> {
-  const result = await query<BudgetRow>(
-    `SELECT * FROM budgets WHERE couple_id = $1 AND period_month = $2 AND category_id IS NULL`,
-    [coupleId, periodMonth]
-  );
-  return result.rows[0] ?? null;
+const budgetsCol = db.collection("budgets");
+
+// Deterministic doc ID gives true create-time uniqueness (via .create()),
+// unlike the old SQL UNIQUE(couple_id, period_month, category_id) which
+// didn't actually dedupe NULL category_id rows in Postgres.
+function budgetDocId(groupId: string, periodMonth: string, categoryId: string | null): string {
+  return `${groupId}_${periodMonth}_${categoryId ?? "none"}`;
 }
 
-export async function insertCoupleBudget(input: {
-  coupleId: string;
+function toBudgetRow(doc: FirebaseFirestore.DocumentSnapshot): BudgetRow {
+  const data = doc.data()!;
+  return {
+    id: doc.id,
+    groupId: data.groupId,
+    periodMonth: data.periodMonth,
+    capAmount: fromCents(data.capAmountCents),
+    categoryId: data.categoryId ?? null,
+  };
+}
+
+export async function findGroupBudget(groupId: string, periodMonth: string): Promise<BudgetRow | null> {
+  const doc = await budgetsCol.doc(budgetDocId(groupId, periodMonth, null)).get();
+  if (!doc.exists) return null;
+  return toBudgetRow(doc);
+}
+
+export async function upsertGroupBudget(input: {
+  groupId: string;
   periodMonth: string;
   capAmount: number;
 }): Promise<BudgetRow> {
-  const result = await query<BudgetRow>(
-    `INSERT INTO budgets (couple_id, period_month, cap_amount, category_id)
-     VALUES ($1, $2, $3, NULL)
-     RETURNING *`,
-    [input.coupleId, input.periodMonth, input.capAmount]
+  const ref = budgetsCol.doc(budgetDocId(input.groupId, input.periodMonth, null));
+  const existing = await ref.get();
+  await ref.set(
+    {
+      groupId: input.groupId,
+      periodMonth: input.periodMonth,
+      capAmountCents: toCents(input.capAmount),
+      categoryId: null,
+      updatedAt: FieldValue.serverTimestamp(),
+      ...(existing.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+    },
+    { merge: true }
   );
-  return result.rows[0];
+  const doc = await ref.get();
+  return toBudgetRow(doc);
 }
 
-export async function updateBudgetCap(budgetId: string, capAmount: number): Promise<BudgetRow> {
-  const result = await query<BudgetRow>(
-    `UPDATE budgets SET cap_amount = $2, updated_at = now() WHERE id = $1 RETURNING *`,
-    [budgetId, capAmount]
-  );
-  return result.rows[0];
-}
-
-// Scoped to the joint account: the couple's budget tracks "Nossa Conta"
-// spending, not either partner's independent personal spending.
 export async function getMonthlyExpenseTotal(
-  coupleId: string,
+  groupId: string,
   monthStart: string,
   monthEnd: string
 ): Promise<number> {
-  const result = await query<{ total: string | null }>(
-    `SELECT SUM(t.amount) AS total
-     FROM transactions t
-     JOIN accounts a ON a.id = t.account_id AND a.type = 'joint'
-     WHERE t.couple_id = $1 AND t.transaction_type = 'expense'
-       AND t.occurred_at >= $2 AND t.occurred_at < $3`,
-    [coupleId, monthStart, monthEnd]
-  );
-  return Number(result.rows[0]?.total ?? 0);
+  const snapshot = await db
+    .collection("transactions")
+    .where("groupId", "==", groupId)
+    .where("accountType", "==", "joint")
+    .where("transactionType", "==", "expense")
+    .where("occurredAt", ">=", monthStart)
+    .where("occurredAt", "<", monthEnd)
+    .select("amountCents")
+    .get();
+  const totalCents = snapshot.docs.reduce((sum, doc) => sum + doc.data().amountCents, 0);
+  return totalCents / 100;
 }

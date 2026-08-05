@@ -12,7 +12,7 @@ export function AcceptInvitePage() {
   }
 
   if (!invitationToken) {
-    return <Navigate to="/couple-setup" replace />;
+    return <Navigate to="/group-setup" replace />;
   }
 
   if (!user) {
@@ -20,5 +20,5 @@ export function AcceptInvitePage() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to={`/couple-setup?token=${invitationToken}`} replace />;
+  return <Navigate to={`/group-setup?token=${invitationToken}`} replace />;
 }

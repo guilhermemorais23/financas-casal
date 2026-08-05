@@ -1,9 +1,9 @@
-import { requireCoupleId } from "../couples/couples.service";
+import { requireGroupId } from "../groups/groups.service";
 import {
   addToGoalAmount,
   deleteGoal,
   findGoalById,
-  findGoalsByCoupleId,
+  findGoalsByGroupId,
   insertGoal,
 } from "./goals.repository";
 
@@ -18,9 +18,9 @@ export interface CreateGoalInput {
 }
 
 export async function createGoal(userId: string, input: CreateGoalInput) {
-  const coupleId = await requireCoupleId(userId);
+  const groupId = await requireGroupId(userId);
   return insertGoal({
-    coupleId,
+    groupId,
     name: input.name,
     emoji: input.emoji,
     targetAmount: input.targetAmount,
@@ -29,14 +29,14 @@ export async function createGoal(userId: string, input: CreateGoalInput) {
 }
 
 export async function listGoals(userId: string) {
-  const coupleId = await requireCoupleId(userId);
-  return findGoalsByCoupleId(coupleId);
+  const groupId = await requireGroupId(userId);
+  return findGoalsByGroupId(groupId);
 }
 
-async function requireGoalInCouple(userId: string, goalId: string) {
-  const coupleId = await requireCoupleId(userId);
+async function requireGoalInGroup(userId: string, goalId: string) {
+  const groupId = await requireGroupId(userId);
   const goal = await findGoalById(goalId);
-  if (!goal || goal.couple_id !== coupleId) {
+  if (!goal || goal.groupId !== groupId) {
     throw new GoalNotFoundError();
   }
   return goal;
@@ -46,11 +46,11 @@ export async function contributeToGoal(userId: string, goalId: string, amount: n
   if (amount <= 0) {
     throw new InvalidContributionError();
   }
-  await requireGoalInCouple(userId, goalId);
+  await requireGoalInGroup(userId, goalId);
   return addToGoalAmount(goalId, amount);
 }
 
 export async function removeGoal(userId: string, goalId: string) {
-  await requireGoalInCouple(userId, goalId);
+  await requireGoalInGroup(userId, goalId);
   await deleteGoal(goalId);
 }

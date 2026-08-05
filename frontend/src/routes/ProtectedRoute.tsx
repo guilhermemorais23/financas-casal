@@ -3,10 +3,10 @@ import { useAuth } from "../auth/AuthContext";
 
 export function ProtectedRoute({
   children,
-  requireCouple = false,
+  requireGroup = false,
 }: {
   children: React.ReactNode;
-  requireCouple?: boolean;
+  requireGroup?: boolean;
 }) {
   const { user, isLoading } = useAuth();
 
@@ -18,8 +18,8 @@ export function ProtectedRoute({
     return <Navigate to="/login" replace />;
   }
 
-  if (requireCouple && !user.coupleId) {
-    return <Navigate to="/couple-setup" replace />;
+  if (requireGroup && !user.groupId) {
+    return <Navigate to="/group-setup" replace />;
   }
 
   return <>{children}</>;

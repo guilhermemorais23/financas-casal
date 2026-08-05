@@ -1,7 +1,8 @@
 import { categoryIsVisibleTo } from "../categories/categories.repository";
-import { findAccountsByCoupleId, findMembersByCoupleId } from "../couples/couples.repository";
-import { requireCoupleId } from "../couples/couples.service";
+import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
+import { requireGroupId } from "../groups/groups.service";
 import { parseMonthRange } from "../../utils/month";
+import { splitEvenly } from "../../utils/money";
 import {
   deleteSplitsForTransaction,
   deleteTransaction,
@@ -38,19 +39,20 @@ export interface CreateTransactionInput {
 }
 
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
-  const coupleId = await requireCoupleId(userId);
+  const groupId = await requireGroupId(userId);
 
-  const accounts = await findAccountsByCoupleId(coupleId);
-  if (!accounts.some((account) => account.id === input.accountId)) {
+  const accounts = await findAccountsByGroupId(groupId);
+  const account = accounts.find((a) => a.id === input.accountId);
+  if (!account) {
     throw new InvalidAccountError();
   }
 
-  const members = await findMembersByCoupleId(coupleId);
+  const members = await findMembersByGroupId(groupId);
   if (!members.some((member) => member.id === input.payerId)) {
     throw new InvalidPayerError();
   }
 
-  if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, coupleId))) {
+  if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {
     throw new InvalidCategoryError();
   }
 
@@ -59,8 +61,10 @@ export async function createTransaction(userId: string, input: CreateTransaction
   }
 
   const transaction = await insertTransaction({
-    coupleId,
-    accountId: input.accountId,
+    groupId,
+    accountId: account.id,
+    accountType: account.type,
+    accountOwnerId: account.ownerUserId,
     categoryId: input.categoryId,
     payerId: input.payerId,
     createdBy: userId,
@@ -73,17 +77,14 @@ export async function createTransaction(userId: string, input: CreateTransaction
   });
 
   // Splits model who owes whom on a shared expense; income has no such debt.
-  if (input.transactionType === "expense" && input.splitType === "equal" && members.length === 2) {
-    const cents = Math.round(input.amount * 100);
-    const half = Math.floor(cents / 2);
-    const other = cents - half;
-    const payer = members.find((member) => member.id === input.payerId)!;
-    const partner = members.find((member) => member.id !== input.payerId)!;
-
-    await insertSplits(transaction.id, [
-      { userId: payer.id, shareAmount: half / 100 },
-      { userId: partner.id, shareAmount: other / 100 },
-    ]);
+  // Divides evenly across however many members the group actually has.
+  if (input.transactionType === "expense" && input.splitType === "equal" && members.length > 1) {
+    const shares = splitEvenly(input.amount, members.length);
+    await insertSplits(
+      groupId,
+      transaction.id,
+      members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
+    );
   }
 
   return transaction;
@@ -95,40 +96,51 @@ export async function listTransactions(
   monthParam?: string,
   accountId?: string
 ) {
-  const coupleId = await requireCoupleId(userId);
+  const groupId = await requireGroupId(userId);
   const range = monthParam ? parseMonthRange(monthParam) : undefined;
-  return findTransactionsVisibleTo(coupleId, userId, limit, range, accountId);
+  return findTransactionsVisibleTo(groupId, userId, limit, range, accountId);
 }
 
+// Pairwise "who owes whom" across every member pair with a shared-expense
+// debt. Not currently surfaced in any UI page.
 export async function getBalance(userId: string) {
-  const coupleId = await requireCoupleId(userId);
-  const rows = await getBalanceRows(coupleId);
-  const members = await findMembersByCoupleId(coupleId);
+  const groupId = await requireGroupId(userId);
+  const rows = await getBalanceRows(groupId);
 
-  const balances = members.map((member) => {
-    const owedToThem = rows
-      .filter((row) => row.paid_by === member.id)
-      .reduce((sum, row) => sum + Number(row.total_owed), 0);
-    const owedByThem = rows
-      .filter((row) => row.owed_by === member.id)
-      .reduce((sum, row) => sum + Number(row.total_owed), 0);
-    return { userId: member.id, netAmount: owedToThem - owedByThem };
+  const netByPair = new Map<string, number>();
+  for (const row of rows) {
+    const [a, b] = [row.paidBy, row.owedBy].sort();
+    const sign = a === row.paidBy ? 1 : -1;
+    const key = `${a}_${b}`;
+    netByPair.set(key, (netByPair.get(key) ?? 0) + sign * Number(row.totalOwed));
+  }
+
+  const balances = Array.from(netByPair.entries()).map(([key, amount]) => {
+    const [a, b] = key.split("_");
+    return amount >= 0 ? { fromUserId: b, toUserId: a, amount } : { fromUserId: a, toUserId: b, amount: -amount };
   });
 
   return { balances };
 }
 
 export async function getMonthlySummaryForUser(userId: string, monthParam?: string) {
-  const coupleId = await requireCoupleId(userId);
+  const groupId = await requireGroupId(userId);
   const { periodMonth, monthStart, monthEnd } = parseMonthRange(monthParam);
-  const summary = await getMonthlySummary(coupleId, userId, monthStart, monthEnd);
+  const summary = await getMonthlySummary(groupId, userId, monthStart, monthEnd);
   return { periodMonth, ...summary };
 }
 
+// Joint-account transactions are manageable by any group member (same rule
+// as joint debts); personal-account transactions stay restricted to whoever
+// created them.
+function canManageTransaction(userId: string, transaction: { accountType: string; createdBy: string }): boolean {
+  return transaction.accountType === "joint" || transaction.createdBy === userId;
+}
+
 export async function deleteTransactionForUser(userId: string, transactionId: string) {
-  const coupleId = await requireCoupleId(userId);
+  const groupId = await requireGroupId(userId);
   const transaction = await findTransactionById(transactionId);
-  if (!transaction || transaction.couple_id !== coupleId || transaction.created_by !== userId) {
+  if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
   }
   await deleteTransaction(transactionId);
@@ -147,39 +159,35 @@ export async function updateTransactionForUser(
   transactionId: string,
   input: UpdateTransactionInput
 ) {
-  const coupleId = await requireCoupleId(userId);
+  const groupId = await requireGroupId(userId);
   const transaction = await findTransactionById(transactionId);
-  if (!transaction || transaction.couple_id !== coupleId || transaction.created_by !== userId) {
+  if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
   }
 
-  if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, coupleId))) {
+  if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {
     throw new InvalidCategoryError();
   }
 
   const updated = await updateTransaction(transactionId, input);
 
-  // Keep "who owes whom" consistent with the edited amount/type: income has no
-  // debt, and an equal-split expense's 50/50 halves must track the new amount.
-  const nextType = input.transactionType ?? transaction.transaction_type;
+  // Keep "who owes whom" consistent with the edited amount/type: income has
+  // no debt, and an equal-split expense's shares must track the new amount.
+  const nextType = input.transactionType ?? transaction.transactionType;
   if (nextType === "income") {
-    if (transaction.split_type !== "none") {
+    if (transaction.splitType !== "none") {
       await deleteSplitsForTransaction(transactionId);
     }
-  } else if (transaction.split_type === "equal" && input.amount !== undefined) {
-    const members = await findMembersByCoupleId(coupleId);
-    if (members.length === 2) {
-      const cents = Math.round(input.amount * 100);
-      const half = Math.floor(cents / 2);
-      const other = cents - half;
-      const payer = members.find((member) => member.id === transaction.payer_id)!;
-      const partner = members.find((member) => member.id !== transaction.payer_id)!;
-
+  } else if (transaction.splitType === "equal" && input.amount !== undefined) {
+    const members = await findMembersByGroupId(groupId);
+    if (members.length > 1) {
+      const shares = splitEvenly(input.amount, members.length);
       await deleteSplitsForTransaction(transactionId);
-      await insertSplits(transactionId, [
-        { userId: payer.id, shareAmount: half / 100 },
-        { userId: partner.id, shareAmount: other / 100 },
-      ]);
+      await insertSplits(
+        groupId,
+        transactionId,
+        members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
+      );
     }
   }
 

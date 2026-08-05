@@ -3,12 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "concurrently -n db,backend,frontend -c blue,green,magenta \"npm run db:up\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
-    "db:up": "docker compose up",
-    "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up"
+    "dev": "concurrently -n emulators,backend,frontend -c blue,green,magenta \"npm run emulators\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "emulators": "firebase emulators:start --project demo-par --import=./emulator-data --export-on-exit",
+    "seed": "npm --prefix backend run seed"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "firebase-tools": "^15.25.1"
+  },
+  "dependencies": {
+    "firebase": "^12.17.1"
   }
 }

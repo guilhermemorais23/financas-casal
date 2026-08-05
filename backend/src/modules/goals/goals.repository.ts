@@ -1,65 +1,90 @@
-import { query } from "../../db/pool";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "../../db/firestore";
+import { fromCents, toCents } from "../../utils/money";
 
 export interface GoalRow {
   id: string;
-  couple_id: string;
+  groupId: string;
   name: string;
   emoji: string | null;
-  target_amount: string;
-  current_amount: string;
+  targetAmount: string;
+  currentAmount: string;
   deadline: string | null;
-  achieved_at: string | null;
-  created_at: string;
+  achievedAt: string | null;
+}
+
+const goalsCol = db.collection("goals");
+
+function toGoalRow(doc: FirebaseFirestore.DocumentSnapshot): GoalRow {
+  const data = doc.data()!;
+  return {
+    id: doc.id,
+    groupId: data.groupId,
+    name: data.name,
+    emoji: data.emoji ?? null,
+    targetAmount: fromCents(data.targetAmountCents),
+    currentAmount: fromCents(data.currentAmountCents),
+    deadline: data.deadline ?? null,
+    achievedAt: data.achievedAt ? data.achievedAt.toDate().toISOString() : null,
+  };
 }
 
 export async function insertGoal(input: {
-  coupleId: string;
+  groupId: string;
   name: string;
   emoji: string | null;
   targetAmount: number;
   deadline: string | null;
 }): Promise<GoalRow> {
-  const result = await query<GoalRow>(
-    `INSERT INTO goals (couple_id, name, emoji, target_amount, deadline)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING *`,
-    [input.coupleId, input.name, input.emoji, input.targetAmount, input.deadline]
-  );
-  return result.rows[0];
+  const ref = await goalsCol.add({
+    groupId: input.groupId,
+    name: input.name,
+    emoji: input.emoji,
+    targetAmountCents: toCents(input.targetAmount),
+    currentAmountCents: 0,
+    deadline: input.deadline,
+    achievedAt: null,
+    isAchieved: false,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  const doc = await ref.get();
+  return toGoalRow(doc);
 }
 
-export async function findGoalsByCoupleId(coupleId: string): Promise<GoalRow[]> {
-  const result = await query<GoalRow>(
-    "SELECT * FROM goals WHERE couple_id = $1 ORDER BY achieved_at IS NOT NULL, created_at DESC",
-    [coupleId]
-  );
-  return result.rows;
+export async function findGoalsByGroupId(groupId: string): Promise<GoalRow[]> {
+  const snapshot = await goalsCol
+    .where("groupId", "==", groupId)
+    .orderBy("isAchieved", "asc")
+    .orderBy("createdAt", "desc")
+    .get();
+  return snapshot.docs.map(toGoalRow);
 }
 
 export async function findGoalById(goalId: string): Promise<GoalRow | null> {
-  const result = await query<GoalRow>("SELECT * FROM goals WHERE id = $1", [goalId]);
-  return result.rows[0] ?? null;
+  const doc = await goalsCol.doc(goalId).get();
+  if (!doc.exists) return null;
+  return toGoalRow(doc);
 }
 
-export async function addToGoalAmount(
-  goalId: string,
-  amount: number
-): Promise<GoalRow> {
-  const result = await query<GoalRow>(
-    `UPDATE goals
-     SET current_amount = current_amount + $2,
-         achieved_at = CASE
-           WHEN achieved_at IS NULL AND current_amount + $2 >= target_amount THEN now()
-           ELSE achieved_at
-         END,
-         updated_at = now()
-     WHERE id = $1
-     RETURNING *`,
-    [goalId, amount]
-  );
-  return result.rows[0];
+export async function addToGoalAmount(goalId: string, amount: number): Promise<GoalRow> {
+  const ref = goalsCol.doc(goalId);
+  await db.runTransaction(async (tx) => {
+    const doc = await tx.get(ref);
+    const data = doc.data()!;
+    const nextAmount = data.currentAmountCents + toCents(amount);
+    const nowAchieved = data.achievedAt === null && nextAmount >= data.targetAmountCents;
+    tx.update(ref, {
+      currentAmountCents: nextAmount,
+      achievedAt: nowAchieved ? FieldValue.serverTimestamp() : (data.achievedAt ?? null),
+      isAchieved: data.isAchieved || nowAchieved,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  const doc = await ref.get();
+  return toGoalRow(doc);
 }
 
 export async function deleteGoal(goalId: string): Promise<void> {
-  await query("DELETE FROM goals WHERE id = $1", [goalId]);
+  await goalsCol.doc(goalId).delete();
 }

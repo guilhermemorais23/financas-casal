@@ -8,10 +8,10 @@ interface GoalRow {
   id: string;
   name: string;
   emoji: string | null;
-  target_amount: string;
-  current_amount: string;
+  targetAmount: string;
+  currentAmount: string;
   deadline: string | null;
-  achieved_at: string | null;
+  achievedAt: string | null;
 }
 
 export function GoalsPage() {
@@ -149,15 +149,15 @@ export function GoalsPage() {
         )}
 
         {goals?.map((goal) => {
-          const current = Number(goal.current_amount);
-          const target = Number(goal.target_amount);
+          const current = Number(goal.currentAmount);
+          const target = Number(goal.targetAmount);
           const percent = Math.min(100, Math.round((current / target) * 100));
           return (
             <div key={goal.id} className="card goal-card">
               <div className="section-header">
                 <p className="card-title">
                   {goal.emoji ?? "🎯"} {goal.name}
-                  {goal.achieved_at && <span className="badge goal-achieved">Concluída!</span>}
+                  {goal.achievedAt && <span className="badge goal-achieved">Concluída!</span>}
                 </p>
                 <button type="button" className="btn-icon" onClick={() => handleDelete(goal.id)} title="Remover meta">
                   ✕
@@ -172,7 +172,7 @@ export function GoalsPage() {
                 </span>
                 {goal.deadline && <span>até {new Date(goal.deadline).toLocaleDateString("pt-BR")}</span>}
               </div>
-              {!goal.achieved_at && (
+              {!goal.achievedAt && (
                 <div className="invite-link-row">
                   <input
                     placeholder="Adicionar valor"
