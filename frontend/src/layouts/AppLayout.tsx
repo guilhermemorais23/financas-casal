@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
@@ -14,13 +14,44 @@ const NAV_ITEMS = [
   { to: "/account", label: "Conta", icon: "⚙️" },
 ];
 
-export function AppLayout({ children }: { children: ReactNode }) {
+export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
+  const [isNavOpen, setIsNavOpen] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = isNavOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isNavOpen]);
+
+  useEffect(() => {
+    if (!isNavOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsNavOpen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isNavOpen]);
 
   return (
     <div className="app-shell-nav">
-      <aside className="app-sidebar">
+      <header className="app-mobile-topbar">
+        <button
+          type="button"
+          className="hamburger-btn"
+          onClick={() => setIsNavOpen(true)}
+          aria-label="Abrir menu"
+        >
+          ☰
+        </button>
+        <Brand />
+      </header>
+
+      {isNavOpen && <div className="app-nav-overlay" onClick={() => setIsNavOpen(false)} />}
+
+      <aside className={`app-sidebar${isNavOpen ? " is-open" : ""}`}>
         <div className="app-sidebar-brand">
           <Brand />
         </div>
@@ -30,6 +61,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               key={item.to}
               to={item.to}
               className={({ isActive }) => `app-nav-link${isActive ? " active" : ""}`}
+              onClick={() => setIsNavOpen(false)}
             >
               <span className="app-nav-icon">{item.icon}</span>
               {item.label}
@@ -51,7 +83,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="app-main">{children}</main>
+      <main className={`app-main${wide ? " app-main-wide" : ""}`}>{children}</main>
     </div>
   );
 }

@@ -27,15 +27,17 @@ export async function findUserById(userId: string): Promise<UserRow | null> {
 
 // Idempotent: called on every sign-in, not just first-ever sign-up, so the
 // profile doc always exists by the time any other endpoint needs it.
+// isNew tells the caller whether this was the very first sign-in (e.g. to
+// gate a welcome email so it doesn't fire on every login).
 export async function upsertUserProfile(input: {
   id: string;
   email: string;
   displayName: string;
-}): Promise<UserRow> {
+}): Promise<{ user: UserRow; isNew: boolean }> {
   const ref = usersCol.doc(input.id);
   const existing = await ref.get();
   if (existing.exists) {
-    return toUserRow(existing.id, existing.data()!);
+    return { user: toUserRow(existing.id, existing.data()!), isNew: false };
   }
 
   await ref.set({
@@ -45,5 +47,8 @@ export async function upsertUserProfile(input: {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return { id: input.id, email: input.email, displayName: input.displayName, groupId: null };
+  return {
+    user: { id: input.id, email: input.email, displayName: input.displayName, groupId: null },
+    isNew: true,
+  };
 }

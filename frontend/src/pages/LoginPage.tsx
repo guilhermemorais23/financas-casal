@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
+import { GoogleIcon } from "../components/GoogleIcon";
+import { PasswordInput } from "../components/PasswordInput";
 import { PENDING_INVITE_STORAGE_KEY } from "./AcceptInvitePage";
 
 export function LoginPage() {
@@ -58,8 +60,15 @@ export function LoginPage() {
         <h1>Entrar</h1>
         <p className="card-subtitle">Finanças em grupo, sem atrito.</p>
 
-        <button type="button" className="btn btn-outline" onClick={handleGoogle} disabled={isGoogleSubmitting}>
-          {isGoogleSubmitting ? "Entrando..." : "Continuar com Google"}
+        <button
+          type="button"
+          className="btn btn-google-icon"
+          onClick={handleGoogle}
+          disabled={isGoogleSubmitting}
+          aria-label="Continuar com Google"
+          title="Continuar com Google"
+        >
+          <GoogleIcon />
         </button>
         <div className="divider">ou</div>
 
@@ -76,9 +85,8 @@ export function LoginPage() {
           </div>
           <div className="field">
             <label htmlFor="login-password">Senha</label>
-            <input
+            <PasswordInput
               id="login-password"
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
