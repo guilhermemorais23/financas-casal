@@ -5,6 +5,7 @@ import { EditTransactionModal } from "../components/EditTransactionModal";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
+import { readCache, writeCache } from "../utils/pageCache";
 
 interface CategorySummaryRow {
   categoryId: string | null;
@@ -31,21 +32,29 @@ interface TransactionListRow {
 }
 
 export function ReportsPage() {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const [month, setMonth] = useState(currentMonthParam());
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [transactions, setTransactions] = useState<TransactionListRow[] | null>(null);
+  const cacheKey = (name: string, selectedMonth: string) => `reports:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
+
+  const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(cacheKey("summary", month)));
+  const [transactions, setTransactions] = useState<TransactionListRow[] | null>(() =>
+    readCache(cacheKey("transactions", month))
+  );
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
 
   async function load(selectedMonth: string) {
+    setSummary(readCache(cacheKey("summary", selectedMonth)));
+    setTransactions(readCache(cacheKey("transactions", selectedMonth)));
     const [summaryRes, txRes] = await Promise.all([
       apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
       apiRequest<TransactionListRow[]>(`/transactions?limit=100&month=${selectedMonth}`, { token }),
     ]);
     setSummary(summaryRes);
     setTransactions(txRes);
+    writeCache(cacheKey("summary", selectedMonth), summaryRes);
+    writeCache(cacheKey("transactions", selectedMonth), txRes);
   }
 
   useEffect(() => {

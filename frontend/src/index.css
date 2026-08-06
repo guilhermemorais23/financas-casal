@@ -610,6 +610,18 @@ input:focus {
   gap: 0.5rem;
 }
 
+.stat-box-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--stat-box-accent, var(--color-primary)) 16%, transparent);
+}
+
 .identity-dot {
   width: 10px;
   height: 10px;
@@ -618,9 +630,78 @@ input:focus {
 }
 
 .value-sm {
-  font-size: 1.4rem;
+  font-size: 1.55rem;
   font-weight: 600;
   font-variant-numeric: proportional-nums;
+  letter-spacing: -0.01em;
+}
+
+.stat-box-note {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.refresh-note {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: -0.5rem 0 0.25rem;
+}
+
+/* Debt mini cards (Painel) --------------------------------------------- */
+
+.debt-mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.debt-mini-card {
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius) - 4px);
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--series-2) 5%, var(--surface));
+}
+
+.debt-mini-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.debt-mini-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.debt-mini-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.debt-mini-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.debt-mini-value {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.debt-mini-remaining {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }
 
 .card {

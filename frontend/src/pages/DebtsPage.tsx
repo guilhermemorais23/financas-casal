@@ -3,6 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency } from "../utils/format";
+import { readCache, writeCache } from "../utils/pageCache";
 
 interface InstallmentRow {
   id: string;
@@ -26,8 +27,10 @@ interface DebtRow {
 }
 
 export function DebtsPage() {
-  const { token } = useAuth();
-  const [debts, setDebts] = useState<DebtRow[] | null>(null);
+  const { user, token } = useAuth();
+  const cacheKey = `debts:${user?.id ?? "anon"}`;
+
+  const [debts, setDebts] = useState<DebtRow[] | null>(() => readCache(cacheKey));
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
@@ -41,6 +44,7 @@ export function DebtsPage() {
   async function load() {
     const result = await apiRequest<DebtRow[]>("/debts", { token });
     setDebts(result);
+    writeCache(cacheKey, result);
   }
 
   useEffect(() => {
@@ -110,7 +114,9 @@ export function DebtsPage() {
     return (
       <div key={debt.id} className="card debt-card">
         <div className="section-header">
-          <p className="card-title">{debt.name}</p>
+          <p className="card-title">
+            {debt.scope === "joint" ? "💞" : "💳"} {debt.name}
+          </p>
           <button type="button" className="btn-icon" title="Remover dívida" onClick={() => handleDelete(debt.id)}>
             ✕
           </button>
@@ -120,11 +126,11 @@ export function DebtsPage() {
         <div className="progress-track">
           <div className="progress-fill" style={{ width: `${percent}%` }} />
         </div>
-        <div className="budget-amounts goal-amounts">
-          <span>
+        <div className="goal-amounts">
+          <span className="debt-mini-value">
             {formatCurrency(debt.paidAmount)} pago de {formatCurrency(Number(debt.totalAmount))}
           </span>
-          <span>
+          <span className="debt-mini-remaining">
             faltam {formatCurrency(debt.remainingAmount)} · {debt.remainingCount} de {debt.installmentsCount} parcelas
           </span>
         </div>
