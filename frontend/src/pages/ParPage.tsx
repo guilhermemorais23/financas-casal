@@ -6,6 +6,7 @@ import { EditTransactionModal } from "../components/EditTransactionModal";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
+import { readCache, writeCache } from "../utils/pageCache";
 
 interface AccountRow {
   id: string;
@@ -53,11 +54,15 @@ interface BudgetResponse {
 
 export function ParPage() {
   const { user, token } = useAuth();
-  const [group, setGroup] = useState<GroupResponse | null>(null);
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [budget, setBudget] = useState<BudgetResponse | null>(null);
-  const [transactions, setTransactions] = useState<TransactionListRow[] | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const cacheKey = (name: string) => `par:${name}:${user?.id ?? "anon"}`;
+
+  const [group, setGroup] = useState<GroupResponse | null>(() => readCache(cacheKey("group")));
+  const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(cacheKey("summary")));
+  const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(cacheKey("budget")));
+  const [transactions, setTransactions] = useState<TransactionListRow[] | null>(() =>
+    readCache(cacheKey("transactions"))
+  );
+  const [isLoading, setIsLoading] = useState(!group);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +77,9 @@ export function ParPage() {
     setGroup(groupRes);
     setSummary(summaryRes);
     setBudget(budgetRes);
+    writeCache(cacheKey("group"), groupRes);
+    writeCache(cacheKey("summary"), summaryRes);
+    writeCache(cacheKey("budget"), budgetRes);
     const jointAccount = groupRes.accounts.find((a) => a.type === "joint");
     if (jointAccount) {
       const txRes = await apiRequest<TransactionListRow[]>(
@@ -79,6 +87,7 @@ export function ParPage() {
         { token }
       );
       setTransactions(txRes);
+      writeCache(cacheKey("transactions"), txRes);
     }
     setIsLoading(false);
   }
@@ -100,7 +109,7 @@ export function ParPage() {
     }
   }
 
-  if (isLoading || !group) {
+  if (!group) {
     return (
       <AppLayout>
         <p className="loading-page">Carregando...</p>
@@ -132,6 +141,7 @@ export function ParPage() {
   return (
     <AppLayout>
       <div className="page-stack">
+        {isLoading && <p className="refresh-note">Atualizando...</p>}
         <div>
           <h1>Par</h1>
           <p className="card-subtitle">
