@@ -18,4 +18,7 @@ function required(name: string): string {
 export const env = {
   firebaseProjectId: required("FIREBASE_PROJECT_ID"),
   port: Number(process.env.PORT ?? 4000),
+  // Optional: no key means the welcome email is skipped (logged, not thrown).
+  resendApiKey: process.env.RESEND_API_KEY,
+  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "PAR. <onboarding@resend.dev>",
 };

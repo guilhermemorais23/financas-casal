@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { sendWelcomeEmail } from "../../email/resend";
 import { findUserById, upsertUserProfile } from "./users.repository";
 
 function isNonEmptyString(value: unknown): value is string {
@@ -24,11 +25,16 @@ export async function bootstrapHandler(req: Request, res: Response) {
     return;
   }
 
-  const user = await upsertUserProfile({
+  const { user, isNew } = await upsertUserProfile({
     id: req.user!.id,
     email: req.user!.email,
     displayName: displayName.trim(),
   });
+
+  if (isNew) {
+    void sendWelcomeEmail(user.email, user.displayName);
+  }
+
   res.status(200).json(toPublicUser(user));
 }
 

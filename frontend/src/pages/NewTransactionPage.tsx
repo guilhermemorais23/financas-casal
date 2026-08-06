@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { EmojiPicker } from "../components/EmojiPicker";
 import { AppLayout } from "../layouts/AppLayout";
 
 interface AccountRow {
@@ -9,6 +10,7 @@ interface AccountRow {
   type: "personal" | "joint";
   name: string;
   emoji: string | null;
+  ownerUserId: string | null;
 }
 
 interface MemberRow {
@@ -64,7 +66,13 @@ export function NewTransactionPage() {
       ]);
       setAccounts(groupRes.accounts);
       setMembers(groupRes.members);
-      setAccountId((current) => current || groupRes.accounts.find((a) => a.type === "joint")?.id || "");
+      setAccountId(
+        (current) =>
+          current ||
+          groupRes.accounts.find((a) => a.type === "personal" && a.ownerUserId === user?.id)?.id ||
+          groupRes.accounts.find((a) => a.type === "joint")?.id ||
+          ""
+      );
       setPayerId((current) => current || user?.id || "");
     }
     load();
@@ -228,12 +236,7 @@ export function NewTransactionPage() {
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                 />
-                <input
-                  placeholder="Emoji"
-                  value={newCategoryEmoji}
-                  onChange={(e) => setNewCategoryEmoji(e.target.value)}
-                  style={{ maxWidth: 70 }}
-                />
+                <EmojiPicker value={newCategoryEmoji} onChange={setNewCategoryEmoji} />
                 <button
                   type="button"
                   className="btn btn-outline"
