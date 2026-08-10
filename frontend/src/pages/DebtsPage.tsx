@@ -124,7 +124,10 @@ export function DebtsPage() {
         {debt.description && <p className="card-subtitle" style={{ marginBottom: "0.75rem" }}>{debt.description}</p>}
 
         <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${percent}%` }} />
+          <div
+            className={`progress-fill${debt.scope === "personal" ? " tone-accent" : ""}`}
+            style={{ width: `${percent}%` }}
+          />
         </div>
         <div className="goal-amounts">
           <span className="debt-mini-value">

@@ -400,9 +400,6 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <Link to="/transactions/new" className="btn btn-primary fab-link">
-          + Nova despesa
-        </Link>
       </div>
 
       {editingTx && (
