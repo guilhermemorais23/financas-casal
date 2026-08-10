@@ -4,7 +4,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { AppLayout } from "../layouts/AppLayout";
-import { categoryColor, personColor, tint } from "../utils/categoryColor";
+import { categoryColor, personColor, personTint, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 
@@ -129,6 +129,14 @@ export function ParPage() {
     return group?.members.find((m) => m.id === userId)?.displayName ?? "Alguém do grupo";
   }
 
+  function memberInitial(userId: string) {
+    const realName =
+      userId === user?.id
+        ? user?.displayName
+        : group?.members.find((m) => m.id === userId)?.displayName;
+    return (realName?.charAt(0) ?? "?").toUpperCase();
+  }
+
   const spentByUser = (userId: string | undefined) =>
     userId ? summary?.byPayer.find((row) => row.payerId === userId)?.total ?? "0" : "0";
 
@@ -207,10 +215,18 @@ export function ParPage() {
         <div className="card">
           <p className="card-title">Quem faz parte</p>
           <ul className="member-list">
-            {group.members.map((member) => (
+            {orderedMembers.map((member, index) => (
               <li key={member.id} className="member-row">
-                <span className="onboarding-avatars-inline circle" />
-                {member.id === user?.id ? "Você" : member.displayName}
+                <span
+                  className="identity-avatar"
+                  style={{
+                    ["--identity-avatar-color" as string]: personColor(index),
+                    ["--identity-avatar-bg" as string]: personTint(personColor(index)),
+                  }}
+                >
+                  {memberInitial(member.id)}
+                </span>
+                {member.displayName}
               </li>
             ))}
           </ul>

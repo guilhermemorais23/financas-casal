@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { useTheme } from "../hooks/useTheme";
@@ -14,10 +14,20 @@ const NAV_ITEMS = [
   { to: "/account", label: "Conta", icon: "⚙️" },
 ];
 
+const BOTTOM_NAV_ITEMS = [
+  { to: "/dashboard", label: "Painel", icon: "🏠" },
+  { to: "/par", label: "Par", icon: "💞" },
+  { to: "/debts", label: "Dívidas", icon: "💳" },
+  { to: "/goals", label: "Metas", icon: "🎯" },
+  { to: "/reports", label: "Relatórios", icon: "📊" },
+];
+
 export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const location = useLocation();
+  const isOnNewTransaction = location.pathname === "/transactions/new";
 
   useEffect(() => {
     document.body.style.overflow = isNavOpen ? "hidden" : "";
@@ -84,6 +94,25 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         </div>
       </aside>
       <main className={`app-main${wide ? " app-main-wide" : ""}`}>{children}</main>
+
+      <nav className="app-bottom-nav">
+        {BOTTOM_NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}
+          >
+            <span className="app-bottom-nav-icon">{item.icon}</span>
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {!isOnNewTransaction && (
+        <Link to="/transactions/new" className="global-fab" aria-label="Nova despesa" title="Nova despesa">
+          +
+        </Link>
+      )}
     </div>
   );
 }

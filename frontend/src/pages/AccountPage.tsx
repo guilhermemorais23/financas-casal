@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
+import { personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
 
 interface AccountRow {
@@ -136,12 +137,22 @@ export function AccountPage() {
         <div className="card">
           <p className="card-title">Grupo</p>
           <ul className="member-list">
-            {group.members.map((member) => (
-              <li key={member.id} className="member-row">
-                <span className="onboarding-avatars-inline circle" />
-                {member.id === user?.id ? "Você" : member.displayName}
-              </li>
-            ))}
+            {[...group.members]
+              .sort((a, b) => (a.id === user?.id ? -1 : b.id === user?.id ? 1 : a.id.localeCompare(b.id)))
+              .map((member, index) => (
+                <li key={member.id} className="member-row">
+                  <span
+                    className="identity-avatar"
+                    style={{
+                      ["--identity-avatar-color" as string]: personColor(index),
+                      ["--identity-avatar-bg" as string]: personTint(personColor(index)),
+                    }}
+                  >
+                    {member.displayName.charAt(0).toUpperCase()}
+                  </span>
+                  {member.id === user?.id ? "Você" : member.displayName}
+                </li>
+              ))}
           </ul>
           {group.pendingInviteToken ? (
             <div className="invite-link-row" style={{ marginTop: "1rem" }}>
