@@ -146,6 +146,20 @@ export async function setInstallmentPaid(
   return toInstallmentRow(debtId, doc);
 }
 
+export async function updateDebt(
+  debtId: string,
+  input: { name: string; description: string | null }
+): Promise<DebtRow> {
+  const ref = debtsCol.doc(debtId);
+  await ref.update({
+    name: input.name,
+    description: input.description,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  const doc = await ref.get();
+  return toDebtRow(doc);
+}
+
 export async function deleteDebt(debtId: string): Promise<void> {
   const installmentsSnapshot = await debtsCol.doc(debtId).collection("installments").get();
   const linkedTransactionIds = installmentsSnapshot.docs

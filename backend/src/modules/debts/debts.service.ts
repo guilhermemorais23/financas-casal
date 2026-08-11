@@ -11,6 +11,7 @@ import {
   insertDebt,
   insertInstallments,
   setInstallmentPaid,
+  updateDebt,
   type DebtInstallmentRow,
 } from "./debts.repository";
 
@@ -160,4 +161,13 @@ export async function setInstallmentPaidForUser(
 export async function removeDebt(userId: string, debtId: string) {
   await requireManageableDebt(userId, debtId);
   await deleteDebt(debtId);
+}
+
+export async function updateDebtForUser(
+  userId: string,
+  debtId: string,
+  input: { name: string; description: string | null }
+) {
+  await requireManageableDebt(userId, debtId);
+  return updateDebt(debtId, input);
 }

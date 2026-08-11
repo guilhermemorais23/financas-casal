@@ -8,6 +8,7 @@ import {
   listDebts,
   removeDebt,
   setInstallmentPaidForUser,
+  updateDebtForUser,
   type DebtScope,
 } from "./debts.service";
 
@@ -79,6 +80,33 @@ export async function setInstallmentPaidHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof DebtNotFoundError || err instanceof InstallmentNotFoundError) {
       res.status(404).json({ error: "debt or installment not found" });
+      return;
+    }
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: "not allowed to manage this debt" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function updateDebtHandler(req: Request, res: Response) {
+  const { name, description } = req.body ?? {};
+
+  if (!isNonEmptyString(name)) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+
+  try {
+    const debt = await updateDebtForUser(req.user!.id, req.params.id, {
+      name: name.trim(),
+      description: isNonEmptyString(description) ? description.trim() : null,
+    });
+    res.status(200).json(debt);
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof DebtNotFoundError) {
+      res.status(404).json({ error: "debt not found" });
       return;
     }
     if (err instanceof ForbiddenError) {

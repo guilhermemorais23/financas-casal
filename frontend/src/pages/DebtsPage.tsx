@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { EditDebtModal } from "../components/EditDebtModal";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
@@ -32,6 +33,7 @@ export function DebtsPage() {
 
   const [debts, setDebts] = useState<DebtRow[] | null>(() => readCache(cacheKey));
   const [error, setError] = useState<string | null>(null);
+  const [editingDebt, setEditingDebt] = useState<DebtRow | null>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -101,6 +103,11 @@ export function DebtsPage() {
   }
 
   async function handleDelete(debtId: string) {
+    const confirmed = window.confirm(
+      "Excluir essa dívida? Isso também remove as parcelas e os lançamentos gerados por ela."
+    );
+    if (!confirmed) return;
+
     try {
       await apiRequest(`/debts/${debtId}`, { method: "DELETE", token });
       await load();
@@ -117,9 +124,14 @@ export function DebtsPage() {
           <p className="card-title">
             {debt.scope === "joint" ? "💞" : "💳"} {debt.name}
           </p>
-          <button type="button" className="btn-icon" title="Remover dívida" onClick={() => handleDelete(debt.id)}>
-            ✕
-          </button>
+          <div className="transaction-row-actions">
+            <button type="button" className="btn-icon" title="Editar dívida" onClick={() => setEditingDebt(debt)}>
+              ✎
+            </button>
+            <button type="button" className="btn-icon" title="Remover dívida" onClick={() => handleDelete(debt.id)}>
+              ✕
+            </button>
+          </div>
         </div>
         {debt.description && <p className="card-subtitle" style={{ marginBottom: "0.75rem" }}>{debt.description}</p>}
 
@@ -172,7 +184,8 @@ export function DebtsPage() {
   const personalDebts = debts?.filter((d) => d.scope === "personal") ?? [];
 
   return (
-    <AppLayout>
+    <>
+      <AppLayout>
       <div className="page-stack">
         <div className="card form-card">
           <h1>Dívidas</h1>
@@ -284,6 +297,11 @@ export function DebtsPage() {
           )}
         </div>
       </div>
-    </AppLayout>
+      </AppLayout>
+
+      {editingDebt && (
+        <EditDebtModal debt={editingDebt} onClose={() => setEditingDebt(null)} onSaved={load} />
+      )}
+    </>
   );
 }

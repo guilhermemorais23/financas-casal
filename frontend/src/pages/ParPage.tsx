@@ -97,6 +97,9 @@ export function ParPage() {
   }, [token]);
 
   async function handleDelete(id: string) {
+    const confirmed = window.confirm("Excluir esse lançamento?");
+    if (!confirmed) return;
+
     setDeletingId(id);
     setError(null);
     try {

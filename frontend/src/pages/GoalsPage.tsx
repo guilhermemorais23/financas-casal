@@ -87,6 +87,9 @@ export function GoalsPage() {
   }
 
   async function handleDelete(goalId: string) {
+    const confirmed = window.confirm("Excluir essa meta? O progresso salvo também será perdido.");
+    if (!confirmed) return;
+
     try {
       await apiRequest(`/goals/${goalId}`, { method: "DELETE", token });
       await loadGoals();
