@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { isValidMonthParam } from "../../utils/month";
 import { NoGroupError } from "../groups/groups.service";
 import {
   DebtNotFoundError,
@@ -9,6 +10,7 @@ import {
   removeDebt,
   setInstallmentPaidForUser,
   updateDebtForUser,
+  updateInstallmentMonth,
   type DebtScope,
 } from "./debts.service";
 
@@ -17,7 +19,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 export async function createDebtHandler(req: Request, res: Response) {
-  const { name, description, totalAmount, installmentsCount, scope } = req.body ?? {};
+  const { name, description, totalAmount, installmentsCount, scope, startMonth } = req.body ?? {};
 
   if (
     !isNonEmptyString(name) ||
@@ -25,9 +27,13 @@ export async function createDebtHandler(req: Request, res: Response) {
     totalAmount <= 0 ||
     (installmentsCount !== undefined &&
       (typeof installmentsCount !== "number" || !Number.isInteger(installmentsCount) || installmentsCount < 1)) ||
-    (scope !== undefined && scope !== "personal" && scope !== "joint")
+    (scope !== undefined && scope !== "personal" && scope !== "joint") ||
+    !isValidMonthParam(startMonth)
   ) {
-    res.status(400).json({ error: "name, totalAmount are required; installmentsCount must be a positive integer" });
+    res.status(400).json({
+      error:
+        "name, totalAmount and startMonth (YYYY-MM) are required; installmentsCount must be a positive integer",
+    });
     return;
   }
 
@@ -38,6 +44,7 @@ export async function createDebtHandler(req: Request, res: Response) {
       totalAmount,
       installmentsCount: installmentsCount ?? 1,
       scope: (scope as DebtScope) ?? "personal",
+      startMonth,
     });
     res.status(201).json(debt);
   } catch (err) {
@@ -63,19 +70,17 @@ export async function listDebtsHandler(req: Request, res: Response) {
 }
 
 export async function setInstallmentPaidHandler(req: Request, res: Response) {
-  const { isPaid } = req.body ?? {};
-  if (typeof isPaid !== "boolean") {
-    res.status(400).json({ error: "isPaid is required" });
+  const { isPaid, referenceMonth } = req.body ?? {};
+  if (typeof isPaid !== "boolean" && !isValidMonthParam(referenceMonth)) {
+    res.status(400).json({ error: "isPaid (boolean) or referenceMonth (YYYY-MM) is required" });
     return;
   }
 
   try {
-    const installment = await setInstallmentPaidForUser(
-      req.user!.id,
-      req.params.debtId,
-      req.params.installmentId,
-      isPaid
-    );
+    const installment =
+      typeof isPaid === "boolean"
+        ? await setInstallmentPaidForUser(req.user!.id, req.params.debtId, req.params.installmentId, isPaid)
+        : await updateInstallmentMonth(req.user!.id, req.params.debtId, req.params.installmentId, referenceMonth);
     res.status(200).json(installment);
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof DebtNotFoundError || err instanceof InstallmentNotFoundError) {

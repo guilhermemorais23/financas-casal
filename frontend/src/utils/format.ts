@@ -18,10 +18,24 @@ export function monthLongName(monthParam: string): string {
   return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", { month: "long" });
 }
 
+// "2026-09" -> "setembro/2026"
+export function monthYearLabel(monthParam: string): string {
+  return `${monthLongName(monthParam)}/${monthParam.slice(0, 4)}`;
+}
+
+// "2026-08-20" -> a Date at local midnight. `new Date("2026-08-20")` alone
+// parses as UTC midnight, which then renders as the day *before* once
+// formatted in any timezone behind UTC (all of Brazil) -- this is why dates
+// were showing one day earlier than what was actually entered.
+export function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 // "Hoje" / "Ontem" / "5 de agosto" -- assumes callers pass a date-only string
 // (YYYY-MM-DD), same as `occurredAt` everywhere else in this app.
 export function dayLabel(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
   const today = new Date();
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const diffDays = Math.round((startOfDay(today) - startOfDay(date)) / 86_400_000);

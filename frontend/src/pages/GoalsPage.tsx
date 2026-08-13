@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, parseLocalDate } from "../utils/format";
 
 interface GoalRow {
   id: string;
@@ -173,7 +173,7 @@ export function GoalsPage() {
                 <span>
                   {formatCurrency(current)} / {formatCurrency(target)}
                 </span>
-                {goal.deadline && <span>até {new Date(goal.deadline).toLocaleDateString("pt-BR")}</span>}
+                {goal.deadline && <span>até {parseLocalDate(goal.deadline).toLocaleDateString("pt-BR")}</span>}
               </div>
               {!goal.achievedAt && (
                 <div className="invite-link-row">
