@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
 import { fromCents, toCents } from "../../utils/money";
+import { currentMonthParam, monthParamFromDate } from "../../utils/month";
 import { deleteTransaction } from "../transactions/transactions.repository";
 
 export interface DebtRow {
@@ -28,6 +29,10 @@ export interface DebtInstallmentRow {
 
 const debtsCol = db.collection("debts");
 
+// startMonth/referenceMonth didn't exist before the debt-cycle feature, so
+// debts/installments created before that still have these fields missing in
+// Firestore -- default them instead of returning undefined, which would
+// otherwise crash the frontend's month formatting on old data.
 function toDebtRow(doc: FirebaseFirestore.DocumentSnapshot): DebtRow {
   const data = doc.data()!;
   return {
@@ -39,21 +44,22 @@ function toDebtRow(doc: FirebaseFirestore.DocumentSnapshot): DebtRow {
     description: data.description ?? null,
     totalAmount: fromCents(data.totalAmountCents),
     installmentsCount: data.installmentsCount,
-    startMonth: data.startMonth,
+    startMonth: data.startMonth ?? currentMonthParam(),
   };
 }
 
 function toInstallmentRow(debtId: string, doc: FirebaseFirestore.DocumentSnapshot): DebtInstallmentRow {
   const data = doc.data()!;
+  const paidAtDate: Date | null = data.paidAt ? data.paidAt.toDate() : null;
   return {
     id: doc.id,
     debtId,
     installmentNumber: data.installmentNumber,
     amount: fromCents(data.amountCents),
     isPaid: data.isPaid ?? false,
-    paidAt: data.paidAt ? data.paidAt.toDate().toISOString() : null,
+    paidAt: paidAtDate ? paidAtDate.toISOString() : null,
     transactionId: data.transactionId ?? null,
-    referenceMonth: data.referenceMonth,
+    referenceMonth: data.referenceMonth ?? (paidAtDate ? monthParamFromDate(paidAtDate) : currentMonthParam()),
   };
 }
 
