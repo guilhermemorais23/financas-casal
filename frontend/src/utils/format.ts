@@ -13,13 +13,19 @@ export function previousMonthParam(monthParam: string = currentMonthParam()): st
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function monthLongName(monthParam: string): string {
+// Tolerates a missing/malformed month string instead of throwing -- a
+// render crash here has no error boundary to catch it and blanks the whole
+// page, so this degrades to a placeholder instead.
+export function monthLongName(monthParam: string | null | undefined): string {
+  if (!monthParam) return "—";
   const [year, month] = monthParam.split("-").map(Number);
+  if (!year || !month) return "—";
   return new Date(year, month - 1, 1).toLocaleDateString("pt-BR", { month: "long" });
 }
 
 // "2026-09" -> "setembro/2026"
-export function monthYearLabel(monthParam: string): string {
+export function monthYearLabel(monthParam: string | null | undefined): string {
+  if (!monthParam) return "—";
   return `${monthLongName(monthParam)}/${monthParam.slice(0, 4)}`;
 }
 

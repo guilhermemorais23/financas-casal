@@ -1,5 +1,14 @@
 export class InvalidMonthError extends Error {}
 
+export function currentMonthParam(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export function monthParamFromDate(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 export function isValidMonthParam(value: unknown): value is string {
   return (
     typeof value === "string" &&
