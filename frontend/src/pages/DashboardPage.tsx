@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { CircularProgress } from "../components/CircularProgress";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { AppLayout } from "../layouts/AppLayout";
@@ -206,6 +207,13 @@ export function DashboardPage() {
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
         </div>
 
+        <div className="stat-card wide">
+          <span className="stat-card-circle" />
+          <span className="stat-card-circle stat-card-circle-2" />
+          <p className="label">Você tem no mês</p>
+          <p className="value">{formatCurrency(income - expense)}</p>
+        </div>
+
         <div className="stat-row wrap">
           <div className="stat-box tone-good">
             <p className="label">Entrada do mês</p>
@@ -227,43 +235,53 @@ export function DashboardPage() {
               </p>
             )}
           </div>
-          <div className="stat-box tone-accent">
-            <p className="label">Você tem no mês</p>
-            <p className={`value-sm ${income - expense >= 0 ? "income-text" : "danger-text"}`}>
-              {formatCurrency(income - expense)}
-            </p>
-          </div>
         </div>
 
         <div className="dashboard-grid">
           <div className="dashboard-col">
             <div className="card budget-card">
+              <span className="stat-card-circle" />
+              <span className="stat-card-circle stat-card-circle-2" />
               <div className="budget-header">
                 <p className="card-title">Orçamento do mês</p>
-                {cap ? (
-                  <span className="budget-amounts">
-                    {formatCurrency(spent)} / {formatCurrency(cap)}
-                  </span>
-                ) : (
+                {!cap && (
                   <Link to="/account" className="link">
                     Definir orçamento
                   </Link>
                 )}
               </div>
-              {cap && (
-                <>
-                  <div className="progress-track">
-                    <div
-                      className={`progress-fill${budgetSeverity ? ` ${budgetSeverity}` : ""}`}
-                      style={{ width: `${budgetPercent}%` }}
-                    />
-                  </div>
-                  {budgetSeverity && (
-                    <p className={`budget-status ${budgetSeverity}`}>
-                      {budgetSeverity === "over" ? "⚠️ Passou do orçamento" : "⚠️ Perto do limite"}
+              {cap ? (
+                <div className="budget-ring-row">
+                  <CircularProgress
+                    percent={budgetPercent}
+                    size={92}
+                    strokeWidth={9}
+                    trackColor="rgba(247, 239, 229, 0.25)"
+                    color={
+                      budgetSeverity === "over"
+                        ? "var(--status-critical)"
+                        : budgetSeverity === "warning"
+                          ? "var(--status-warning)"
+                          : "var(--peach)"
+                    }
+                  >
+                    <span className="budget-ring-percent">{Math.round(budgetRawPercent)}%</span>
+                  </CircularProgress>
+                  <div className="budget-ring-details">
+                    <span className="budget-amounts">
+                      {formatCurrency(spent)} de {formatCurrency(cap)}
+                    </span>
+                    <p className={`budget-status ${budgetSeverity || "good"}`}>
+                      {budgetSeverity === "over"
+                        ? "⚠️ Passou do orçamento"
+                        : budgetSeverity === "warning"
+                          ? "⚠️ Perto do limite"
+                          : "✅ Tudo sob controle"}
                     </p>
-                  )}
-                </>
+                  </div>
+                </div>
+              ) : (
+                <p className="empty-state">Defina um teto mensal na Conta pra acompanhar aqui.</p>
               )}
             </div>
 
@@ -277,30 +295,23 @@ export function DashboardPage() {
               {topCategories.length === 0 ? (
                 <p className="empty-state">Nenhuma despesa neste mês.</p>
               ) : (
-                <ul className="category-breakdown">
+                <div className="category-gauge-grid">
                   {topCategories.map((row) => {
                     const value = Number(row.total);
                     const percent =
                       topCategoriesTotal > 0 ? Math.round((value / topCategoriesTotal) * 100) : 0;
                     const color = categoryColor(row.categoryId);
                     return (
-                      <li key={row.categoryId ?? "none"}>
-                        <div className="category-row-header">
-                          <span className="category-name">
-                            <span className="identity-dot" style={{ background: color }} />
-                            {row.categoryEmoji ?? "✨"} {row.categoryName ?? "Sem categoria"}
-                          </span>
-                          <span className="value">
-                            {formatCurrency(value)} <span className="donut-legend-percent">({percent}%)</span>
-                          </span>
-                        </div>
-                        <div className="progress-track thin">
-                          <div className="progress-fill" style={{ width: `${percent}%`, background: color }} />
-                        </div>
-                      </li>
+                      <div className="category-gauge-item" key={row.categoryId ?? "none"}>
+                        <CircularProgress percent={percent} size={72} strokeWidth={7} color={color}>
+                          <span className="category-gauge-emoji">{row.categoryEmoji ?? "✨"}</span>
+                        </CircularProgress>
+                        <span className="category-gauge-name">{row.categoryName ?? "Sem categoria"}</span>
+                        <span className="category-gauge-amount">{formatCurrency(value)}</span>
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               )}
             </div>
 

@@ -118,6 +118,10 @@
     --color-primary-dark: var(--coffee-300);
     --color-primary-soft: rgba(201, 146, 107, 0.18);
     --color-danger-bg: rgba(230, 103, 103, 0.15);
+
+    --tan-card: #271d14;
+    --tan-input: #332619;
+    --tan-track: #4a3826;
   }
 }
 
@@ -145,6 +149,10 @@
   --color-primary-dark: var(--coffee-300);
   --color-primary-soft: rgba(201, 146, 107, 0.18);
   --color-danger-bg: rgba(230, 103, 103, 0.15);
+
+  --tan-card: #271d14;
+  --tan-input: #332619;
+  --tan-track: #4a3826;
 }
 
 * {
@@ -638,6 +646,13 @@ input:focus {
   margin-top: 1rem;
 }
 
+.app-version-footer {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin: 0.5rem 0 0;
+}
+
 .app-sidebar-user {
   font-size: 0.85rem;
   font-weight: 600;
@@ -906,6 +921,25 @@ input:focus {
   background: var(--identity-avatar-bg, var(--tan-card));
 }
 
+.circular-progress {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.circular-progress-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.15rem;
+}
+
 .donut-chart {
   display: flex;
   align-items: center;
@@ -1106,7 +1140,35 @@ input:focus {
   margin: 0;
 }
 
+/* Budget card gets its own hero treatment (olive gradient) so it reads as
+   a second "highlight" distinct from the coffee-gradient hero cards
+   ("Nossa conta" / "Você tem no mês") -- same warm/cool complementary
+   pairing as the terracotta-vs-olive person-identity colors. */
+.budget-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, var(--olive-500), var(--olive-700));
+  color: var(--cream);
+}
+
+.budget-card .budget-amounts,
+.budget-card .empty-state {
+  color: var(--cream);
+  opacity: 0.85;
+}
+
+.budget-card .link {
+  color: var(--cream);
+  text-decoration: underline;
+}
+
+.budget-card .budget-status.good {
+  color: var(--cream);
+}
+
 .budget-header {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1120,6 +1182,35 @@ input:focus {
   font-variant-numeric: tabular-nums;
 }
 
+.budget-ring-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.budget-card .empty-state {
+  position: relative;
+  z-index: 1;
+}
+
+.budget-ring-percent {
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-ring-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.budget-ring-details .budget-amounts {
+  font-size: 0.98rem;
+}
+
 .budget-status {
   display: flex;
   align-items: center;
@@ -1127,6 +1218,14 @@ input:focus {
   font-size: 0.8rem;
   font-weight: 600;
   margin-top: 0.6rem;
+}
+
+.budget-ring-details .budget-status {
+  margin-top: 0;
+}
+
+.budget-status.good {
+  color: var(--success-text);
 }
 
 .budget-status.warning {
@@ -1463,6 +1562,35 @@ select {
   gap: 0.75rem;
 }
 
+.category-gauge-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.1rem 0.75rem;
+}
+
+.category-gauge-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  text-align: center;
+}
+
+.category-gauge-emoji {
+  font-size: 1.4rem;
+}
+
+.category-gauge-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.category-gauge-amount {
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .category-row-header {
   display: flex;
   align-items: center;
@@ -1518,6 +1646,8 @@ select {
 /* Hero stat card (Painel / Par joint balance) --------------------------------- */
 
 .stat-card {
+  position: relative;
+  overflow: hidden;
   background: linear-gradient(160deg, var(--coffee-600), var(--coffee-900));
   color: var(--cream);
   border-radius: var(--radius);
@@ -1525,6 +1655,28 @@ select {
   width: 100%;
   max-width: 420px;
   margin-bottom: 0;
+}
+
+.stat-card.wide {
+  max-width: none;
+}
+
+.stat-card-circle {
+  position: absolute;
+  top: -1.5rem;
+  right: -1.5rem;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 50%;
+  background: rgba(247, 239, 229, 0.14);
+}
+
+.stat-card-circle.stat-card-circle-2 {
+  top: 2.25rem;
+  right: 3rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  background: rgba(232, 168, 124, 0.28);
 }
 
 :root[data-theme="dark"] .stat-card {
@@ -1538,6 +1690,8 @@ select {
 }
 
 .stat-card .label {
+  position: relative;
+  z-index: 1;
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1545,6 +1699,8 @@ select {
 }
 
 .stat-card .value {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-display);
   font-size: 2.75rem;
   font-weight: 700;

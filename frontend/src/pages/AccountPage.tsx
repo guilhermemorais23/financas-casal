@@ -226,6 +226,8 @@ export function AccountPage() {
         <button type="button" className="btn btn-ghost danger-text" onClick={handleLeaveGroup} disabled={isLeaving}>
           {isLeaving ? "Desvinculando..." : "Desvincular conta do grupo"}
         </button>
+
+        <p className="app-version-footer">PAR. v{__APP_VERSION__}</p>
       </div>
     </AppLayout>
   );
