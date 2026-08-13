@@ -8,8 +8,16 @@
     "seed": "npm --prefix backend run seed"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^11.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "concurrently": "^8.2.2",
-    "firebase-tools": "^15.25.1"
+    "conventional-changelog-conventionalcommits": "^10.3.0",
+    "firebase-tools": "^15.25.1",
+    "semantic-release": "^25.0.9"
   },
   "dependencies": {
     "firebase": "^12.17.1"
