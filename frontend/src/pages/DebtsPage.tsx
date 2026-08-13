@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { EditDebtModal } from "../components/EditDebtModal";
+import { EditInstallmentModal } from "../components/EditInstallmentModal";
 import { AppLayout } from "../layouts/AppLayout";
-import { formatCurrency } from "../utils/format";
+import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 
 interface InstallmentRow {
@@ -10,6 +12,7 @@ interface InstallmentRow {
   installmentNumber: number;
   amount: string;
   isPaid: boolean;
+  referenceMonth: string;
 }
 
 interface DebtRow {
@@ -19,6 +22,7 @@ interface DebtRow {
   description: string | null;
   totalAmount: string;
   installmentsCount: number;
+  startMonth: string;
   installments: InstallmentRow[];
   paidAmount: number;
   remainingAmount: number;
@@ -32,6 +36,10 @@ export function DebtsPage() {
 
   const [debts, setDebts] = useState<DebtRow[] | null>(() => readCache(cacheKey));
   const [error, setError] = useState<string | null>(null);
+  const [editingDebt, setEditingDebt] = useState<DebtRow | null>(null);
+  const [editingInstallment, setEditingInstallment] = useState<
+    (InstallmentRow & { debtId: string; installmentsCount: number }) | null
+  >(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -39,6 +47,7 @@ export function DebtsPage() {
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentsCount, setInstallmentsCount] = useState("2");
   const [scope, setScope] = useState<"personal" | "joint">("personal");
+  const [startMonth, setStartMonth] = useState(currentMonthParam());
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function load() {
@@ -56,8 +65,8 @@ export function DebtsPage() {
     setError(null);
     const parsedTotal = Number(totalAmount.replace(",", "."));
     const parsedCount = isInstallment ? Number(installmentsCount) : 1;
-    if (!name.trim() || !(parsedTotal > 0) || !(parsedCount >= 1)) {
-      setError("Informe nome, valor total e (se parcelado) a quantidade de parcelas.");
+    if (!name.trim() || !(parsedTotal > 0) || !(parsedCount >= 1) || !startMonth) {
+      setError("Informe nome, valor total, mês de início e (se parcelado) a quantidade de parcelas.");
       return;
     }
 
@@ -72,6 +81,7 @@ export function DebtsPage() {
           totalAmount: parsedTotal,
           installmentsCount: parsedCount,
           scope,
+          startMonth,
         },
       });
       setName("");
@@ -79,6 +89,7 @@ export function DebtsPage() {
       setTotalAmount("");
       setIsInstallment(false);
       setInstallmentsCount("2");
+      setStartMonth(currentMonthParam());
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar a dívida");
@@ -88,6 +99,13 @@ export function DebtsPage() {
   }
 
   async function toggleInstallment(debt: DebtRow, installment: InstallmentRow) {
+    if (installment.isPaid) {
+      const confirmed = window.confirm(
+        "Desfazer o pagamento dessa parcela? O lançamento gerado por ela some do extrato."
+      );
+      if (!confirmed) return;
+    }
+
     try {
       await apiRequest(`/debts/${debt.id}/installments/${installment.id}`, {
         method: "PATCH",
@@ -101,6 +119,11 @@ export function DebtsPage() {
   }
 
   async function handleDelete(debtId: string) {
+    const confirmed = window.confirm(
+      "Excluir essa dívida? Isso também remove as parcelas e os lançamentos gerados por ela."
+    );
+    if (!confirmed) return;
+
     try {
       await apiRequest(`/debts/${debtId}`, { method: "DELETE", token });
       await load();
@@ -117,9 +140,14 @@ export function DebtsPage() {
           <p className="card-title">
             {debt.scope === "joint" ? "💞" : "💳"} {debt.name}
           </p>
-          <button type="button" className="btn-icon" title="Remover dívida" onClick={() => handleDelete(debt.id)}>
-            ✕
-          </button>
+          <div className="transaction-row-actions">
+            <button type="button" className="btn-icon" title="Editar dívida" onClick={() => setEditingDebt(debt)}>
+              ✎
+            </button>
+            <button type="button" className="btn-icon" title="Remover dívida" onClick={() => handleDelete(debt.id)}>
+              ✕
+            </button>
+          </div>
         </div>
         {debt.description && <p className="card-subtitle" style={{ marginBottom: "0.75rem" }}>{debt.description}</p>}
 
@@ -145,8 +173,16 @@ export function DebtsPage() {
                 key={installment.id}
                 type="button"
                 className={`installment-chip${installment.isPaid ? " paid" : ""}`}
-                title={`Parcela ${installment.installmentNumber} · ${formatCurrency(Number(installment.amount))}`}
-                onClick={() => toggleInstallment(debt, installment)}
+                title={
+                  installment.isPaid
+                    ? `Parcela ${installment.installmentNumber} · ${formatCurrency(Number(installment.amount))} · ${monthYearLabel(installment.referenceMonth)} · clique pra editar`
+                    : `Parcela ${installment.installmentNumber} · ${formatCurrency(Number(installment.amount))} · conta em ${monthYearLabel(installment.referenceMonth)}`
+                }
+                onClick={() =>
+                  installment.isPaid
+                    ? setEditingInstallment({ ...installment, debtId: debt.id, installmentsCount: debt.installmentsCount })
+                    : toggleInstallment(debt, installment)
+                }
               >
                 {installment.isPaid ? "✓" : installment.installmentNumber}
               </button>
@@ -172,7 +208,8 @@ export function DebtsPage() {
   const personalDebts = debts?.filter((d) => d.scope === "personal") ?? [];
 
   return (
-    <AppLayout>
+    <>
+      <AppLayout>
       <div className="page-stack">
         <div className="card form-card">
           <h1>Dívidas</h1>
@@ -221,6 +258,22 @@ export function DebtsPage() {
                 onChange={(e) => setTotalAmount(e.target.value)}
                 required
               />
+            </div>
+
+            <div className="field">
+              <label htmlFor="debt-start-month">Mês de início</label>
+              <input
+                id="debt-start-month"
+                type="month"
+                value={startMonth}
+                onChange={(e) => setStartMonth(e.target.value)}
+                required
+              />
+              <p className="card-subtitle" style={{ marginBottom: 0 }}>
+                {isInstallment
+                  ? "A parcela 1 conta nesse mês, a 2 no seguinte, e assim por diante."
+                  : "Mês em que essa dívida entra nas contas."}
+              </p>
             </div>
 
             <label className="checkbox-field">
@@ -284,6 +337,19 @@ export function DebtsPage() {
           )}
         </div>
       </div>
-    </AppLayout>
+      </AppLayout>
+
+      {editingDebt && (
+        <EditDebtModal debt={editingDebt} onClose={() => setEditingDebt(null)} onSaved={load} />
+      )}
+
+      {editingInstallment && (
+        <EditInstallmentModal
+          installment={editingInstallment}
+          onClose={() => setEditingInstallment(null)}
+          onSaved={load}
+        />
+      )}
+    </>
   );
 }

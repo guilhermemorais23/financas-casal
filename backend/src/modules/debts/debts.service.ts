@@ -1,7 +1,8 @@
 import { findAccountsByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { deleteTransaction, insertTransaction } from "../transactions/transactions.repository";
+import { deleteTransaction, insertTransaction, updateTransaction } from "../transactions/transactions.repository";
 import { splitEvenly } from "../../utils/money";
+import { addMonths, monthToDate } from "../../utils/month";
 import {
   deleteDebt,
   findDebtById,
@@ -11,6 +12,8 @@ import {
   insertDebt,
   insertInstallments,
   setInstallmentPaid,
+  updateDebt,
+  updateInstallmentReferenceMonth,
   type DebtInstallmentRow,
 } from "./debts.repository";
 
@@ -26,6 +29,7 @@ export interface CreateDebtInput {
   totalAmount: number;
   installmentsCount: number;
   scope: DebtScope;
+  startMonth: string;
 }
 
 export interface DebtWithInstallments {
@@ -35,6 +39,7 @@ export interface DebtWithInstallments {
   description: string | null;
   totalAmount: string;
   installmentsCount: number;
+  startMonth: string;
   createdBy: string;
   installments: DebtInstallmentRow[];
   paidAmount: number;
@@ -55,10 +60,18 @@ export async function createDebt(userId: string, input: CreateDebtInput) {
     description: input.description,
     totalAmount: input.totalAmount,
     installmentsCount: input.installmentsCount,
+    startMonth: input.startMonth,
   });
 
+  // Installment N books against startMonth + (N-1) by default -- e.g. a
+  // debt starting 2026-08 has parcela 1 in August, parcela 2 in September,
+  // regardless of which real-world day each one actually gets marked paid.
   const shares = splitEvenly(input.totalAmount, input.installmentsCount);
-  await insertInstallments(debt.id, shares);
+  const installments = shares.map((amountCents, index) => ({
+    amountCents,
+    referenceMonth: addMonths(input.startMonth, index),
+  }));
+  await insertInstallments(debt.id, installments);
 
   return debt;
 }
@@ -81,6 +94,7 @@ export async function listDebts(userId: string): Promise<DebtWithInstallments[]>
       description: debt.description,
       totalAmount: debt.totalAmount,
       installmentsCount: debt.installmentsCount,
+      startMonth: debt.startMonth,
       createdBy: debt.createdBy,
       installments: debtInstallments,
       paidAmount,
@@ -140,7 +154,7 @@ export async function setInstallmentPaidForUser(
       description: `${debt.name} — parcela ${installment.installmentNumber}/${debt.installmentsCount}`,
       amount: Number(installment.amount),
       transactionType: "expense",
-      occurredAt: new Date().toISOString().slice(0, 10),
+      occurredAt: monthToDate(installment.referenceMonth),
       isPrivate: false,
       splitType: "none",
     });
@@ -157,7 +171,40 @@ export async function setInstallmentPaidForUser(
   return installment;
 }
 
+// Lets a user re-book a specific installment into a different month --
+// e.g. they caught up and paid parcela 1 and 2 in the same real month, so
+// parcela 2 should count against that same month instead of the default
+// startMonth+1. If it's already paid, the linked transaction's date moves
+// along with it so the extrato stays consistent.
+export async function updateInstallmentMonth(
+  userId: string,
+  debtId: string,
+  installmentId: string,
+  referenceMonth: string
+) {
+  await requireManageableDebt(userId, debtId);
+  const installment = await findInstallmentById(debtId, installmentId);
+  if (!installment) {
+    throw new InstallmentNotFoundError();
+  }
+
+  const updated = await updateInstallmentReferenceMonth(debtId, installmentId, referenceMonth);
+  if (installment.isPaid && installment.transactionId) {
+    await updateTransaction(installment.transactionId, { occurredAt: monthToDate(referenceMonth) });
+  }
+  return updated;
+}
+
 export async function removeDebt(userId: string, debtId: string) {
   await requireManageableDebt(userId, debtId);
   await deleteDebt(debtId);
+}
+
+export async function updateDebtForUser(
+  userId: string,
+  debtId: string,
+  input: { name: string; description: string | null }
+) {
+  await requireManageableDebt(userId, debtId);
+  return updateDebt(debtId, input);
 }

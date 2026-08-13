@@ -5,7 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, personTint, tint } from "../utils/categoryColor";
-import { currentMonthParam, formatCurrency } from "../utils/format";
+import { currentMonthParam, formatCurrency, parseLocalDate } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 
 interface AccountRow {
@@ -97,6 +97,9 @@ export function ParPage() {
   }, [token]);
 
   async function handleDelete(id: string) {
+    const confirmed = window.confirm("Excluir esse lançamento?");
+    if (!confirmed) return;
+
     setDeletingId(id);
     setError(null);
     try {
@@ -260,7 +263,7 @@ export function ParPage() {
                   <span className="transaction-desc">{tx.description}</span>
                   <span className="transaction-meta">
                     {memberName(tx.payerId)} · {tx.categoryName ?? "Sem categoria"} ·{" "}
-                    {new Date(tx.occurredAt).toLocaleDateString("pt-BR")}
+                    {parseLocalDate(tx.occurredAt).toLocaleDateString("pt-BR")}
                   </span>
                 </div>
                 <span className={`transaction-amount ${tx.transactionType}`}>

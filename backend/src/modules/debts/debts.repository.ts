@@ -12,6 +12,7 @@ export interface DebtRow {
   description: string | null;
   totalAmount: string;
   installmentsCount: number;
+  startMonth: string;
 }
 
 export interface DebtInstallmentRow {
@@ -22,6 +23,7 @@ export interface DebtInstallmentRow {
   isPaid: boolean;
   paidAt: string | null;
   transactionId: string | null;
+  referenceMonth: string;
 }
 
 const debtsCol = db.collection("debts");
@@ -37,6 +39,7 @@ function toDebtRow(doc: FirebaseFirestore.DocumentSnapshot): DebtRow {
     description: data.description ?? null,
     totalAmount: fromCents(data.totalAmountCents),
     installmentsCount: data.installmentsCount,
+    startMonth: data.startMonth,
   };
 }
 
@@ -50,6 +53,7 @@ function toInstallmentRow(debtId: string, doc: FirebaseFirestore.DocumentSnapsho
     isPaid: data.isPaid ?? false,
     paidAt: data.paidAt ? data.paidAt.toDate().toISOString() : null,
     transactionId: data.transactionId ?? null,
+    referenceMonth: data.referenceMonth,
   };
 }
 
@@ -61,6 +65,7 @@ export async function insertDebt(input: {
   description: string | null;
   totalAmount: number;
   installmentsCount: number;
+  startMonth: string;
 }): Promise<DebtRow> {
   const ref = await debtsCol.add({
     groupId: input.groupId,
@@ -70,6 +75,7 @@ export async function insertDebt(input: {
     description: input.description,
     totalAmountCents: toCents(input.totalAmount),
     installmentsCount: input.installmentsCount,
+    startMonth: input.startMonth,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -80,16 +86,20 @@ export async function insertDebt(input: {
 // Doc ID = String(installmentNumber) -- matches SQL's
 // UNIQUE(debt_id, installment_number). installmentNumber is also stored as
 // a field since a string doc-ID sort would order "10" before "2".
+// Each installment gets its own referenceMonth ("competência") so marking
+// it paid always books against that month regardless of the real day the
+// user actually clicks it -- installment N defaults to startMonth + (N-1).
 export async function insertInstallments(
   debtId: string,
-  installmentAmountsCents: number[]
+  installments: { amountCents: number; referenceMonth: string }[]
 ): Promise<void> {
   const installmentsCol = debtsCol.doc(debtId).collection("installments");
   const batch = db.batch();
-  installmentAmountsCents.forEach((amountCents, index) => {
+  installments.forEach(({ amountCents, referenceMonth }, index) => {
     batch.set(installmentsCol.doc(String(index + 1)), {
       installmentNumber: index + 1,
       amountCents,
+      referenceMonth,
       isPaid: false,
       paidAt: null,
       transactionId: null,
@@ -144,6 +154,31 @@ export async function setInstallmentPaid(
   await ref.update({ isPaid, paidAt: isPaid ? FieldValue.serverTimestamp() : null, transactionId });
   const doc = await ref.get();
   return toInstallmentRow(debtId, doc);
+}
+
+export async function updateInstallmentReferenceMonth(
+  debtId: string,
+  installmentId: string,
+  referenceMonth: string
+): Promise<DebtInstallmentRow> {
+  const ref = debtsCol.doc(debtId).collection("installments").doc(installmentId);
+  await ref.update({ referenceMonth });
+  const doc = await ref.get();
+  return toInstallmentRow(debtId, doc);
+}
+
+export async function updateDebt(
+  debtId: string,
+  input: { name: string; description: string | null }
+): Promise<DebtRow> {
+  const ref = debtsCol.doc(debtId);
+  await ref.update({
+    name: input.name,
+    description: input.description,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  const doc = await ref.get();
+  return toDebtRow(doc);
 }
 
 export async function deleteDebt(debtId: string): Promise<void> {
