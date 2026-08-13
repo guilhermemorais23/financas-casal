@@ -1,7 +1,7 @@
 {
   "name": "fincae",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.1.0",
   "scripts": {
     "dev": "concurrently -n emulators,backend,frontend -c blue,green,magenta \"npm run emulators\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "emulators": "firebase emulators:start --project demo-par --import=./emulator-data --export-on-exit",
