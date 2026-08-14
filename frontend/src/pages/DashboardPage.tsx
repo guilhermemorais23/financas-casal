@@ -15,6 +15,7 @@ import {
   percentChange,
   previousMonthParam,
 } from "../utils/format";
+import { readCache, writeCache } from "../utils/pageCache";
 
 interface AccountWithBalance {
   id: string;
@@ -76,14 +77,22 @@ interface BudgetResponse {
 export function DashboardPage() {
   const { user, token } = useAuth();
   const [month, setMonth] = useState(currentMonthParam());
-  const [group, setGroup] = useState<GroupResponse | null>(null);
-  const [personalMonthTx, setPersonalMonthTx] = useState<TransactionListRow[]>([]);
-  const [personalPrevMonthTx, setPersonalPrevMonthTx] = useState<TransactionListRow[]>([]);
-  const [recent, setRecent] = useState<TransactionListRow[]>([]);
-  const [debts, setDebts] = useState<DebtRow[]>([]);
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [budget, setBudget] = useState<BudgetResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+
+  const staticKey = (name: string) => `dashboard:${name}:${user?.id ?? "anon"}`;
+  const monthKey = (name: string) => `dashboard:${name}:${month}:${user?.id ?? "anon"}`;
+
+  const [group, setGroup] = useState<GroupResponse | null>(() => readCache(staticKey("group")));
+  const [personalMonthTx, setPersonalMonthTx] = useState<TransactionListRow[]>(
+    () => readCache(monthKey("personalMonthTx")) ?? []
+  );
+  const [personalPrevMonthTx, setPersonalPrevMonthTx] = useState<TransactionListRow[]>(
+    () => readCache(monthKey("personalPrevMonthTx")) ?? []
+  );
+  const [recent, setRecent] = useState<TransactionListRow[]>(() => readCache(monthKey("recent")) ?? []);
+  const [debts, setDebts] = useState<DebtRow[]>(() => readCache(staticKey("debts")) ?? []);
+  const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(monthKey("summary")));
+  const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(monthKey("budget")));
+  const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -91,6 +100,8 @@ export function DashboardPage() {
   async function load(selectedMonth: string) {
     setError(null);
     const prevMonth = previousMonthParam(selectedMonth);
+    const sKey = (name: string) => `dashboard:${name}:${user?.id ?? "anon"}`;
+    const mKey = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
     try {
       const groupRes = await apiRequest<GroupResponse>("/groups/me", { token });
       const personalAccount = groupRes.accounts.find(
@@ -124,6 +135,13 @@ export function DashboardPage() {
       setDebts(debtsRes);
       setSummary(summaryRes);
       setBudget(budgetRes);
+      writeCache(sKey("group"), groupRes);
+      writeCache(mKey("personalMonthTx"), personalMonthRes);
+      writeCache(mKey("personalPrevMonthTx"), personalPrevMonthRes);
+      writeCache(mKey("recent"), recentRes);
+      writeCache(sKey("debts"), debtsRes);
+      writeCache(mKey("summary"), summaryRes);
+      writeCache(mKey("budget"), budgetRes);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
     } finally {
@@ -151,7 +169,7 @@ export function DashboardPage() {
     }
   }
 
-  if (error) {
+  if (error && !group) {
     return (
       <AppLayout>
         <p className="alert" role="alert">
@@ -161,7 +179,7 @@ export function DashboardPage() {
     );
   }
 
-  if (isLoading || !group) {
+  if (!group) {
     return (
       <AppLayout>
         <p className="loading-page">Carregando...</p>
@@ -198,6 +216,7 @@ export function DashboardPage() {
   return (
     <AppLayout wide>
       <div className="dashboard">
+        {isLoading && <p className="refresh-note">Atualizando...</p>}
         <div className="section-header" style={{ alignItems: "flex-start" }}>
           <div className="dashboard-greeting">
             <h1>Olá, {user?.displayName?.split(" ")[0]} 👋</h1>

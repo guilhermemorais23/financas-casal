@@ -7,6 +7,7 @@ import { IncomeExpenseDonut } from "../components/IncomeExpenseDonut";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay } from "../utils/format";
+import { readCache, writeCache } from "../utils/pageCache";
 
 interface CategorySummaryRow {
   categoryId: string | null;
@@ -33,22 +34,41 @@ interface TransactionListRow {
 }
 
 export function ReportsPage() {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
+  const cacheKey = (name: string, forMonth: string) => `reports:${name}:${forMonth}:${user?.id ?? "anon"}`;
+
   const [month, setMonth] = useState(currentMonthParam());
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [transactions, setTransactions] = useState<TransactionListRow[] | null>(null);
+  const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(cacheKey("summary", month)));
+  const [transactions, setTransactions] = useState<TransactionListRow[] | null>(() =>
+    readCache(cacheKey("transactions", month))
+  );
+  const [isLoading, setIsLoading] = useState(!summary);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   async function load(selectedMonth: string) {
-    const [summaryRes, txRes] = await Promise.all([
-      apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
-      apiRequest<TransactionListRow[]>(`/transactions?limit=100&month=${selectedMonth}`, { token }),
-    ]);
-    setSummary(summaryRes);
-    setTransactions(txRes);
+    setIsLoading(true);
+    const cached = readCache<SummaryResponse>(cacheKey("summary", selectedMonth));
+    if (cached) {
+      setSummary(cached);
+      setTransactions(readCache(cacheKey("transactions", selectedMonth)));
+    }
+    try {
+      const [summaryRes, txRes] = await Promise.all([
+        apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
+        apiRequest<TransactionListRow[]>(`/transactions?limit=100&month=${selectedMonth}`, { token }),
+      ]);
+      setSummary(summaryRes);
+      setTransactions(txRes);
+      writeCache(cacheKey("summary", selectedMonth), summaryRes);
+      writeCache(cacheKey("transactions", selectedMonth), txRes);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível carregar os relatórios");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -91,6 +111,7 @@ export function ReportsPage() {
   return (
     <AppLayout>
       <div className="page-stack">
+        {isLoading && <p className="refresh-note">Atualizando...</p>}
         <div className="section-header">
           <h1>Relatórios</h1>
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
