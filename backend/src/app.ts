@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
 import { debtsRouter } from "./modules/debts/debts.routes";
@@ -11,8 +12,28 @@ import { asyncHandler } from "./middleware/asyncHandler";
 import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
 
+// Render sits behind a reverse proxy, so req.ip is otherwise the proxy's own
+// address -- trust its X-Forwarded-For so rate limiting (and any future
+// IP-based logic) keys on the real client, not "everyone is one IP".
+const TRUST_PROXY = process.env.NODE_ENV === "production" ? 1 : false;
+
+// Every request here hits Firestore (a real cost, and the thing that
+// actually falls over under load -- a burst of concurrent connections was
+// measured to push single-digit-ms responses past 1.5s median). 300
+// requests/15min/IP is far above normal usage (the frontend caches and only
+// refetches on navigation) but stops a flood well before it reaches
+// Firestore or exhausts the Render instance.
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas requisições. Tente novamente em alguns minutos." },
+});
+
 export function createApp() {
   const app = express();
+  app.set("trust proxy", TRUST_PROXY);
 
   // ALLOWED_ORIGIN unset (local dev) => allow any origin. Set it in
   // production to the real frontend URL(s), comma-separated, to stop
@@ -20,6 +41,7 @@ export function createApp() {
   const allowedOrigins = process.env.ALLOWED_ORIGIN?.split(",").map((origin) => origin.trim());
   app.use(cors(allowedOrigins ? { origin: allowedOrigins } : undefined));
   app.use(express.json());
+  app.use("/api", apiLimiter);
 
   app.get("/api/me", requireAuth, asyncHandler(meHandler));
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));
