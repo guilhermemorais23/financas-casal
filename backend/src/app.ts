@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
+import { cardsRouter } from "./modules/cards/cards.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
 import { debtsRouter } from "./modules/debts/debts.routes";
 import { goalsRouter } from "./modules/goals/goals.routes";
@@ -51,6 +52,7 @@ export function createApp() {
   app.use("/api/goals", goalsRouter);
   app.use("/api/budgets", budgetsRouter);
   app.use("/api/debts", debtsRouter);
+  app.use("/api/cards", cardsRouter);
 
   app.use(errorHandler);
 
