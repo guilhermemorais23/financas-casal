@@ -1,13 +1,14 @@
 :root {
-  /* Surfaces & ink (dataviz skill reference palette) */
-  --surface: #fcfcfb;
-  --page-plane: #f3e9d9;
-  --ink-primary: #241a12;
-  --ink-secondary: #6b5643;
-  --ink-muted: #9c8a76;
-  --gridline: #e1e0d9;
-  --baseline: #c3c2b7;
-  --border: rgba(36, 26, 18, 0.08);
+  /* Surfaces & ink -- clean white ground with a cool sage-grey ink instead
+     of the previous warm coffee tint. */
+  --surface: #ffffff;
+  --page-plane: #f2f4ef;
+  --ink-primary: #171a16;
+  --ink-secondary: #5b6358;
+  --ink-muted: #8d958a;
+  --gridline: #e2e6dd;
+  --baseline: #c7ccc1;
+  --border: rgba(23, 26, 22, 0.08);
 
   /* Categorical slots, fixed order (CVD-validated, never cycled) */
   --series-1: #2a78d6; /* blue   */
@@ -37,42 +38,45 @@
   --status-critical: #d03b3b;
   --success-text: #006300;
 
-  /* Brand palette (warm coffee + cream + peach) -- decoupled from the
+  /* Brand palette (sage + rose + gold, on white) -- decoupled from the
      --series-* categorical chart colors on purpose, so re-theming the
-     brand never touches the validated chart palette. */
-  --coffee-100: #f0e2d3;
-  --coffee-300: #c9926b;
-  --coffee-500: #8b5e3c;
-  --coffee-600: #6b4226;
-  --coffee-700: #4a2c1a;
-  --coffee-900: #2e1b10;
-  --cream: #f7efe5;
-  --peach: #e8a87c;
-  --peach-dark: #c9754a;
+     brand never touches the validated chart palette. Variable names kept
+     from the previous coffee/peach/olive theme so every usage site below
+     picks up the new palette without needing to be touched individually. */
+  --coffee-100: #e8f2ec;
+  --coffee-300: #7fb69a;
+  --coffee-500: #3f7d5c;
+  --coffee-600: #316348;
+  --coffee-700: #234634;
+  --coffee-900: #14261c;
+  --cream: #f7faf5;
+  --peach: #d98aa0;
+  --peach-dark: #b8465f;
 
-  /* Olive green -- the second brand accent (Par's partner identity color,
-     shared/group progress bars) kept distinct from the coffee/terracotta
-     primary so "your stuff" vs "shared stuff" reads at a glance. */
-  --olive-100: #e6efd8;
-  --olive-500: #71914c;
-  --olive-600: #587339;
-  --olive-700: #445c2b;
+  /* Gold -- the second brand accent (Par's partner identity color,
+     shared/group progress bars) kept distinct from the sage primary so
+     "your stuff" vs "shared stuff" reads at a glance. */
+  --olive-100: #f7f0da;
+  --olive-500: #c9962c;
+  --olive-600: #a67b23;
+  --olive-700: #7d5d1a;
 
   /* Person identity slots (Você / parceiro) -- brand-matched, decoupled
      from the CVD-safe --series-* chart palette on purpose. */
-  --person-1: var(--peach-dark);
+  --person-1: var(--coffee-500);
   --person-2: var(--olive-500);
 
-  /* Warm surfaces for cards/inputs -- distinct from the pure-white --surface
-     used by chart tint math, so the whole UI reads as "one warm room". */
-  --tan-card: #e9dcc0;
-  --tan-input: #e7d9ba;
-  --tan-track: #dbcaa6;
+  /* Card/input surfaces -- white cards on the faint sage-grey page plane,
+     so a card reads as "lifted" from thin contrast + a hairline border
+     instead of a filled warm tone. */
+  --tan-card: #ffffff;
+  --tan-input: #eef1ea;
+  --tan-track: #e3e8dd;
 
-  /* App aliases -- primary is the vivid terracotta used for buttons/FAB/
-     active nav; the darker coffee tones are reserved for the hero gradient
-     card ("Nossa conta") so the two warm accents stay visually distinct. */
-  --color-primary: var(--peach-dark);
+  /* App aliases -- primary is sage (buttons/FAB/active nav); rose is
+     reserved for the "peach" accent slots (badges, warm highlights) so the
+     two stay visually distinct. */
+  --color-primary: var(--coffee-500);
   --color-primary-dark: var(--coffee-600);
   --color-primary-soft: var(--coffee-100);
   --color-text: var(--ink-primary);
@@ -83,7 +87,7 @@
   --color-border: var(--gridline);
   --color-danger-bg: rgba(208, 59, 59, 0.08);
   --color-danger-text: var(--status-critical);
-  --color-brand-accent: var(--peach-dark);
+  --color-brand-accent: var(--coffee-500);
   --radius: 20px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-brand: "Archivo", var(--font-sans);
@@ -96,13 +100,13 @@
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --surface: #1a1a19;
-    --page-plane: #0d0d0d;
+    --surface: #141713;
+    --page-plane: #0d0f0c;
     --ink-primary: #ffffff;
-    --ink-secondary: #c3c2b7;
-    --ink-muted: #898781;
-    --gridline: #2c2c2a;
-    --baseline: #383835;
+    --ink-secondary: #c3c7bd;
+    --ink-muted: #8f948a;
+    --gridline: #292c26;
+    --baseline: #3a3d37;
     --border: rgba(255, 255, 255, 0.1);
 
     --series-1: #3987e5;
@@ -116,24 +120,24 @@
 
     --success-text: var(--status-good);
     --color-primary-dark: var(--coffee-300);
-    --color-primary-soft: rgba(201, 146, 107, 0.18);
+    --color-primary-soft: rgba(127, 182, 154, 0.18);
     --color-danger-bg: rgba(230, 103, 103, 0.15);
 
-    --tan-card: #271d14;
-    --tan-input: #332619;
-    --tan-track: #4a3826;
+    --tan-card: #1a201b;
+    --tan-input: #212a22;
+    --tan-track: #2c3a2e;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface: #1a1a19;
-  --page-plane: #0d0d0d;
+  --surface: #141713;
+  --page-plane: #0d0f0c;
   --ink-primary: #ffffff;
-  --ink-secondary: #c3c2b7;
-  --ink-muted: #898781;
-  --gridline: #2c2c2a;
-  --baseline: #383835;
+  --ink-secondary: #c3c7bd;
+  --ink-muted: #8f948a;
+  --gridline: #292c26;
+  --baseline: #3a3d37;
   --border: rgba(255, 255, 255, 0.1);
 
   --series-1: #3987e5;
@@ -147,12 +151,12 @@
 
   --success-text: var(--status-good);
   --color-primary-dark: var(--coffee-300);
-  --color-primary-soft: rgba(201, 146, 107, 0.18);
+  --color-primary-soft: rgba(127, 182, 154, 0.18);
   --color-danger-bg: rgba(230, 103, 103, 0.15);
 
-  --tan-card: #271d14;
-  --tan-input: #332619;
-  --tan-track: #4a3826;
+  --tan-card: #1a201b;
+  --tan-input: #212a22;
+  --tan-track: #2c3a2e;
 }
 
 * {
