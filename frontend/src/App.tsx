@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { AccountPage } from "./pages/AccountPage";
+import { CardsPage } from "./pages/CardsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DebtsPage } from "./pages/DebtsPage";
 import { GoalsPage } from "./pages/GoalsPage";
@@ -58,6 +59,14 @@ function App() {
           element={
             <ProtectedRoute requireGroup>
               <DebtsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cards"
+          element={
+            <ProtectedRoute requireGroup>
+              <CardsPage />
             </ProtectedRoute>
           }
         />
