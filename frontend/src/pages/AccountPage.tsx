@@ -41,6 +41,8 @@ export function AccountPage() {
   const [copied, setCopied] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [telegramCode, setTelegramCode] = useState<string | null>(null);
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
 
   const month = currentMonthParam();
 
@@ -118,6 +120,19 @@ export function AccountPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível desvincular a conta");
       setIsLeaving(false);
+    }
+  }
+
+  async function handleGenerateTelegramCode() {
+    setError(null);
+    setIsGeneratingCode(true);
+    try {
+      const res = await apiRequest<{ code: string }>("/assistant/telegram/link-code", { method: "POST", token });
+      setTelegramCode(res.code);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível gerar o código");
+    } finally {
+      setIsGeneratingCode(false);
     }
   }
 
@@ -217,6 +232,32 @@ export function AccountPage() {
               {isSaving ? "Salvando..." : "Salvar orçamento"}
             </button>
           </form>
+        </div>
+
+        <div className="card">
+          <p className="card-title">Assistente (Telegram)</p>
+          <p className="card-subtitle">
+            Fale seus gastos ou pergunte sobre suas finanças pelo Telegram. Gere um código aqui e envie ele pro bot
+            pra vincular sua conta.
+          </p>
+          {telegramCode && (
+            <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.1rem" }}>
+              {telegramCode}
+            </p>
+          )}
+          {error && (
+            <p className="alert" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={handleGenerateTelegramCode}
+            disabled={isGeneratingCode}
+          >
+            {isGeneratingCode ? "Gerando..." : telegramCode ? "Gerar novo código" : "Gerar código"}
+          </button>
         </div>
 
         <button type="button" className="btn btn-outline" onClick={logout}>

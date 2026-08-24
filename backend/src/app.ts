@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { assistantRouter } from "./modules/assistant/assistant.routes";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { cardsRouter } from "./modules/cards/cards.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
@@ -55,6 +56,7 @@ export function createApp() {
   app.use("/api/debts", debtsRouter);
   app.use("/api/cards", cardsRouter);
   app.use("/api/insights", insightsRouter);
+  app.use("/api/assistant", assistantRouter);
 
   app.use(errorHandler);
 
