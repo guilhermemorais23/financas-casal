@@ -1,9 +1,14 @@
 import { GoogleGenerativeAI, type Part } from "@google/generative-ai";
 import { consumeLinkCode, findLinkByChatId, saveLink, saveLinkCode } from "./assistant.repository";
 import { sendTelegramMessage, type TelegramAudio } from "./telegram.client";
+import { getCurrentBudget } from "../budgets/budgets.service";
 import { findVisibleCategories } from "../categories/categories.repository";
-import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
+import { listDebts } from "../debts/debts.service";
+import { listGoals } from "../goals/goals.service";
+import { findAccountsByGroupId } from "../groups/groups.repository";
+import { getMonthlySummary } from "../transactions/transactions.repository";
 import { createTransaction } from "../transactions/transactions.service";
+import { currentMonthParam, parseMonthRange } from "../../utils/month";
 
 export class AssistantNotConfiguredError extends Error {}
 
@@ -27,6 +32,45 @@ interface AssistantReply {
   amount?: number;
   categoryName?: string | null;
   reply?: string;
+}
+
+// Grounds "chat" replies in the user's real numbers -- without this, the
+// model has nothing but the category *names* (for expense-logging) and
+// answers financial questions purely from guesswork, which reads as
+// confident but can invent things (a "subscription" that doesn't exist).
+async function buildFinanceContext(userId: string, groupId: string): Promise<string> {
+  const month = currentMonthParam();
+  const { monthStart, monthEnd } = parseMonthRange(month);
+
+  const [summary, budget, debts, goals] = await Promise.all([
+    getMonthlySummary(groupId, userId, monthStart, monthEnd, "visible"),
+    getCurrentBudget(userId, month),
+    listDebts(userId),
+    listGoals(userId),
+  ]);
+
+  const categoriesText = summary.byCategory.length
+    ? summary.byCategory.map((row) => `${row.categoryName ?? "Sem categoria"}: R$ ${row.total}`).join("; ")
+    : "nenhum gasto registrado ainda este mês";
+
+  const debtsText = debts.length
+    ? debts.map((debt) => `${debt.name}: R$ ${debt.remainingAmount.toFixed(2)} restante`).join("; ")
+    : "nenhuma dívida cadastrada";
+
+  const openGoals = goals.filter((goal) => !goal.achievedAt);
+  const goalsText = openGoals.length
+    ? openGoals.map((goal) => `${goal.name}: R$ ${goal.currentAmount} guardado de R$ ${goal.targetAmount}`).join("; ")
+    : "nenhuma meta de economia cadastrada";
+
+  const budgetText = budget.budget
+    ? `teto de R$ ${budget.budget.capAmount}, já gasto R$ ${budget.spent.toFixed(2)} dentro desse teto`
+    : "nenhum orçamento definido para este mês";
+
+  return `Dados reais de ${month} (use SOMENTE estes números -- nunca invente gasto, categoria, dívida ou meta que não esteja listada aqui):
+Gastos por categoria: ${categoriesText}. Total do mês: R$ ${summary.total}.
+Orçamento: ${budgetText}.
+Dívidas em aberto: ${debtsText}.
+Metas de economia: ${goalsText}.`;
 }
 
 async function askGemini(prompt: string, audio?: TelegramAudio): Promise<string> {
@@ -82,22 +126,26 @@ export async function handleTelegramMessage(
   }
 
   const { userId, groupId } = link;
-  const [accounts, categories] = await Promise.all([
+  const [accounts, categories, financeContext] = await Promise.all([
     findAccountsByGroupId(groupId),
     findVisibleCategories(groupId),
+    buildFinanceContext(userId, groupId),
   ]);
   const personalAccount = accounts.find((account) => account.type === "personal" && account.ownerUserId === userId);
   const categoryNames = categories.map((category) => category.name).join(", ");
 
-  const prompt = `Você é o assistente financeiro do app PAR. (finanças de casal), conversando por mensagem. Categorias disponíveis: ${categoryNames || "nenhuma cadastrada"}.
+  const prompt = `Você é o assistente financeiro do app PAR. (finanças de casal), conversando por mensagem. Categorias disponíveis pra lançamento: ${categoryNames || "nenhuma cadastrada"}.
+
+${financeContext}
+
 ${audio ? "A mensagem do usuário é um áudio -- transcreva mentalmente e entenda a intenção." : `Mensagem do usuário: "${text}"`}
 
 Responda APENAS com um JSON puro (sem markdown, sem texto fora do JSON), em um destes formatos:
 {"intent":"log_expense","description":"...","amount":123.45,"categoryName":"uma categoria da lista ou null"}
 {"intent":"log_income","description":"...","amount":123.45}
-{"intent":"chat","reply":"resposta curta, direta, em português do Brasil"}
+{"intent":"chat","reply":"resposta curta, direta, em português do Brasil, baseada SOMENTE nos dados reais acima"}
 
-Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento real (ex: "gastei 50 no mercado", "recebi 200 de salário"). Use "chat" pra perguntas, conversa ou qualquer coisa que não seja um lançamento -- responda a pergunta da melhor forma possível no campo "reply".`;
+Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento real (ex: "gastei 50 no mercado", "recebi 200 de salário"). Use "chat" pra perguntas, conversa, pedido de análise ou qualquer coisa que não seja um lançamento -- responda com base nos dados reais acima, nunca invente um gasto/categoria/dívida que não esteja listado. Se fizer sentido, termine com uma pergunta curta pra entender melhor o que a pessoa quer (ex: se não há meta cadastrada, pergunte se ela quer criar uma; se há dívida em aberto, pergunte se o foco agora é pagar ela ou economizar mais primeiro).`;
 
   let raw: string;
   try {
