@@ -331,6 +331,98 @@ export async function getMonthlySummary(
   return { byCategory, byPayer, total: fromCents(totalCents) };
 }
 
+export interface DailySeriesPoint {
+  day: string;
+  income: string;
+  expense: string;
+}
+
+// Same query shape as findTransactionsVisibleTo (groupId + accountType/
+// accountOwnerId + occurredAt range, no transactionType filter) so it rides
+// the composite indexes that already exist for the extrato -- no new index
+// needed. Unlike fetchExpenseDocsForSummary this pulls both income and
+// expense docs, since the daily series charts both.
+async function fetchDocsForDailySeries(
+  groupId: string,
+  requestingUserId: string,
+  monthStart: string,
+  monthEnd: string,
+  scope: SummaryScope
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  let jointQuery: FirebaseFirestore.Query = transactionsCol
+    .where("groupId", "==", groupId)
+    .where("accountType", "==", "joint")
+    .where("occurredAt", ">=", monthStart)
+    .where("occurredAt", "<", monthEnd);
+
+  if (scope === "joint") {
+    return (await jointQuery.get()).docs;
+  }
+
+  const ownQuery: FirebaseFirestore.Query = transactionsCol
+    .where("groupId", "==", groupId)
+    .where("accountOwnerId", "==", requestingUserId)
+    .where("occurredAt", ">=", monthStart)
+    .where("occurredAt", "<", monthEnd);
+
+  const [jointSnap, ownSnap] = await Promise.all([jointQuery.get(), ownQuery.get()]);
+  const seen = new Set<string>();
+  return [...jointSnap.docs, ...ownSnap.docs].filter((doc) => {
+    if (seen.has(doc.id)) return false;
+    seen.add(doc.id);
+    return true;
+  });
+}
+
+// Cumulative income/expense per day, from the 1st of the month through
+// today (or through the month's last day, for a past month) -- one point
+// per calendar day so the line has no gaps, carrying the running total
+// forward on days with no transactions.
+export async function getDailySeries(
+  groupId: string,
+  requestingUserId: string,
+  monthStart: string,
+  monthEnd: string,
+  scope: SummaryScope = "visible"
+): Promise<DailySeriesPoint[]> {
+  const docs = await fetchDocsForDailySeries(groupId, requestingUserId, monthStart, monthEnd, scope);
+
+  const byDay = new Map<string, { income: number; expense: number }>();
+  for (const doc of docs) {
+    const data = doc.data();
+    if (!(data.isPrivate === false || data.createdBy === requestingUserId)) continue;
+    const entry = byDay.get(data.occurredAt) ?? { income: 0, expense: 0 };
+    if (data.transactionType === "income") {
+      entry.income += data.amountCents;
+    } else {
+      entry.expense += data.amountCents;
+    }
+    byDay.set(data.occurredAt, entry);
+  }
+
+  const monthEndDate = new Date(`${monthEnd}T00:00:00Z`);
+  const todayDate = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const lastDate = todayDate < monthEndDate ? todayDate : new Date(monthEndDate.getTime() - 86_400_000);
+
+  const points: DailySeriesPoint[] = [];
+  let cumIncomeCents = 0;
+  let cumExpenseCents = 0;
+  for (
+    const cursor = new Date(`${monthStart}T00:00:00Z`);
+    cursor <= lastDate;
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    const day = cursor.toISOString().slice(0, 10);
+    const entry = byDay.get(day);
+    if (entry) {
+      cumIncomeCents += entry.income;
+      cumExpenseCents += entry.expense;
+    }
+    points.push({ day, income: fromCents(cumIncomeCents), expense: fromCents(cumExpenseCents) });
+  }
+  return points;
+}
+
 export interface BalanceRow {
   paidBy: string;
   owedBy: string;

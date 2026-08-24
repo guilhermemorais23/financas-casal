@@ -9,6 +9,7 @@ import {
   findTransactionById,
   findTransactionsVisibleTo,
   getBalanceRows,
+  getDailySeries,
   getMonthlySummary,
   insertSplits,
   insertTransaction,
@@ -131,6 +132,12 @@ export async function getMonthlySummaryForUser(userId: string, monthParam?: stri
   const { periodMonth, monthStart, monthEnd } = parseMonthRange(monthParam);
   const summary = await getMonthlySummary(groupId, userId, monthStart, monthEnd, scope);
   return { periodMonth, ...summary };
+}
+
+export async function getDailySeriesForUser(userId: string, monthParam?: string, scope?: SummaryScope) {
+  const groupId = await requireGroupId(userId);
+  const { monthStart, monthEnd } = parseMonthRange(monthParam);
+  return getDailySeries(groupId, userId, monthStart, monthEnd, scope);
 }
 
 // Joint-account transactions are manageable by any group member (same rule

@@ -107,10 +107,13 @@ export function DashboardPage() {
     const sKey = (name: string) => `dashboard:${name}:${user?.id ?? "anon"}`;
     const mKey = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
     try {
-      // Fire everything that doesn't depend on the group/account lookup right
-      // away, in parallel with /groups/me itself -- only the two
-      // personal-account transaction fetches actually need personalAccount.id
-      // from groupRes, so they're the only ones that wait for it below.
+      // Fire every request up front, in parallel -- the personal-account
+      // transaction fetches need personalAccount.id, which normally only
+      // comes from /groups/me. But that account rarely changes, so once
+      // we've loaded it once (the `group` already in state, e.g. from a
+      // previous month), reuse it instead of paying a second sequential
+      // round trip on every month switch; only fall back to awaiting a
+      // fresh /groups/me when we don't know the account yet (first load).
       const groupPromise = apiRequest<GroupResponse>("/groups/me", { token });
       const recentPromise = apiRequest<TransactionListRow[]>(`/transactions?limit=8&month=${selectedMonth}`, {
         token,
@@ -122,25 +125,28 @@ export function DashboardPage() {
       );
       const budgetPromise = apiRequest<BudgetResponse>(`/budgets/current?month=${selectedMonth}`, { token });
 
-      const groupRes = await groupPromise;
-      const personalAccount = groupRes.accounts.find(
+      const knownPersonalAccountId = group?.accounts.find(
         (account) => account.type === "personal" && account.ownerUserId === user?.id
-      );
+      )?.id;
 
-      const [personalMonthRes, personalPrevMonthRes, recentRes, debtsRes, summaryRes, budgetRes] =
+      async function personalTx(forMonth: string): Promise<TransactionListRow[]> {
+        const accountId =
+          knownPersonalAccountId ??
+          (await groupPromise).accounts.find(
+            (account) => account.type === "personal" && account.ownerUserId === user?.id
+          )?.id;
+        if (!accountId) return [];
+        return apiRequest<TransactionListRow[]>(
+          `/transactions?limit=100&month=${forMonth}&accountId=${accountId}`,
+          { token }
+        );
+      }
+
+      const [groupRes, personalMonthRes, personalPrevMonthRes, recentRes, debtsRes, summaryRes, budgetRes] =
         await Promise.all([
-          personalAccount
-            ? apiRequest<TransactionListRow[]>(
-                `/transactions?limit=100&month=${selectedMonth}&accountId=${personalAccount.id}`,
-                { token }
-              )
-            : Promise.resolve([]),
-          personalAccount
-            ? apiRequest<TransactionListRow[]>(
-                `/transactions?limit=100&month=${prevMonth}&accountId=${personalAccount.id}`,
-                { token }
-              )
-            : Promise.resolve([]),
+          groupPromise,
+          personalTx(selectedMonth),
+          personalTx(prevMonth),
           recentPromise,
           debtsPromise,
           summaryPromise,

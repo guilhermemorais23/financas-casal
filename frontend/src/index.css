@@ -668,6 +668,21 @@ input:focus {
   margin-top: 0.4rem;
 }
 
+.daily-trend-chart {
+  background: var(--tan-card);
+  border-radius: calc(var(--radius) - 6px);
+  padding: 0.9rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.daily-trend-chart .app-sidebar-spending-label {
+  margin-bottom: 0.6rem;
+}
+
+.daily-trend-chart .category-breakdown {
+  gap: 0.6rem;
+}
+
 .app-sidebar-footer {
   display: flex;
   align-items: center;

@@ -47,7 +47,7 @@ export function IncomeExpenseDonut({ income, expense }: IncomeExpenseDonutProps)
               cy={SIZE / 2}
               r={RADIUS}
               fill="none"
-              stroke="var(--status-good)"
+              stroke="var(--series-1)"
               strokeWidth={STROKE}
               strokeLinecap="round"
               strokeDasharray={`${incomeArc} ${CIRCUMFERENCE}`}
@@ -81,9 +81,9 @@ export function IncomeExpenseDonut({ income, expense }: IncomeExpenseDonutProps)
         </text>
       </svg>
       <div className="donut-legend">
-        <div className="donut-legend-item" style={{ "--legend-tint": "var(--status-good)" } as CSSProperties}>
+        <div className="donut-legend-item" style={{ "--legend-tint": "var(--series-1)" } as CSSProperties}>
           <span className="donut-legend-label">
-            <span className="identity-dot" style={{ background: "var(--status-good)" }} />
+            <span className="identity-dot" style={{ background: "var(--series-1)" }} />
             Receita
           </span>
           <span className="donut-legend-value">{formatCurrency(income)}</span>

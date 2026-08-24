@@ -3,6 +3,8 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
+import { type DailyTrendPoint } from "../components/DailyTrendChart";
+import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
 import { useTheme } from "../hooks/useTheme";
 import { currentMonthParam, formatCurrency, monthLongName } from "../utils/format";
 
@@ -35,15 +37,19 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const { theme, toggle } = useTheme();
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
+  const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[] | null>(null);
   const location = useLocation();
   const isOnNewTransaction = location.pathname === "/transactions/new";
 
   useEffect(() => {
     if (!token) return;
-    // Decorative sidebar widget -- a failed fetch just hides it, no error UI.
+    // Decorative sidebar widgets -- a failed fetch just hides them, no error UI.
     apiRequest<BudgetSummary>(`/budgets/current?month=${currentMonthParam()}`, { token })
       .then(setBudgetSummary)
       .catch(() => setBudgetSummary(null));
+    apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${currentMonthParam()}`, { token })
+      .then(setDailyTrend)
+      .catch(() => setDailyTrend(null));
   }, [token]);
 
   useEffect(() => {
@@ -97,6 +103,15 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         </nav>
 
         {budgetSummary && <SidebarSpending summary={budgetSummary} />}
+        {dailyTrend && dailyTrend.length > 0 && (
+          <div className="daily-trend-chart">
+            <p className="app-sidebar-spending-label">Entrada x saída</p>
+            <IncomeExpenseBars
+              income={Number(dailyTrend[dailyTrend.length - 1].income)}
+              expense={Number(dailyTrend[dailyTrend.length - 1].expense)}
+            />
+          </div>
+        )}
 
         <div className="app-sidebar-footer">
           <span className="app-sidebar-user">{user?.displayName}</span>

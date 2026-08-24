@@ -5,6 +5,7 @@ import {
   createTransactionHandler,
   deleteTransactionHandler,
   getBalanceHandler,
+  getDailySeriesHandler,
   getSummaryHandler,
   listTransactionsHandler,
   updateTransactionHandler,
@@ -18,5 +19,6 @@ transactionsRouter.post("/", asyncHandler(createTransactionHandler));
 transactionsRouter.get("/", asyncHandler(listTransactionsHandler));
 transactionsRouter.get("/balance", asyncHandler(getBalanceHandler));
 transactionsRouter.get("/summary", asyncHandler(getSummaryHandler));
+transactionsRouter.get("/daily-series", asyncHandler(getDailySeriesHandler));
 transactionsRouter.patch("/:id", asyncHandler(updateTransactionHandler));
 transactionsRouter.delete("/:id", asyncHandler(deleteTransactionHandler));
