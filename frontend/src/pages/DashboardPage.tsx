@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { CircularProgress } from "../components/CircularProgress";
@@ -80,7 +80,19 @@ function sumByType(rows: TransactionListRow[], type: "income" | "expense") {
 
 export function DashboardPage() {
   const { user, token } = useAuth();
-  const [month, setMonth] = useState(currentMonthParam());
+  // Kept in the URL (not just local state) so the sidebar in AppLayout --
+  // which fetches its own "spending this month" widgets -- can read the
+  // same selected month instead of always defaulting to the real current
+  // month, which was confusing when browsing a different month here.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const month = searchParams.get("month") ?? currentMonthParam();
+  function setMonth(nextMonth: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("month", nextMonth);
+      return next;
+    });
+  }
 
   const staticKey = (name: string) => `dashboard:${name}:${user?.id ?? "anon"}`;
   const monthKey = (name: string) => `dashboard:${name}:${month}:${user?.id ?? "anon"}`;

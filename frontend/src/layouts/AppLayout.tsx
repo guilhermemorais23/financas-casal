@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
@@ -40,17 +40,22 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[] | null>(null);
   const location = useLocation();
   const isOnNewTransaction = location.pathname === "/transactions/new";
+  // Dashboard/Reports keep their selected month in the URL (?month=...) --
+  // read the same value here so these widgets track whatever month is being
+  // browsed instead of always defaulting to the real current month.
+  const [searchParams] = useSearchParams();
+  const sidebarMonth = searchParams.get("month") ?? currentMonthParam();
 
   useEffect(() => {
     if (!token) return;
     // Decorative sidebar widgets -- a failed fetch just hides them, no error UI.
-    apiRequest<BudgetSummary>(`/budgets/current?month=${currentMonthParam()}`, { token })
+    apiRequest<BudgetSummary>(`/budgets/current?month=${sidebarMonth}`, { token })
       .then(setBudgetSummary)
       .catch(() => setBudgetSummary(null));
-    apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${currentMonthParam()}`, { token })
+    apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${sidebarMonth}`, { token })
       .then(setDailyTrend)
       .catch(() => setDailyTrend(null));
-  }, [token]);
+  }, [token, sidebarMonth]);
 
   useEffect(() => {
     document.body.style.overflow = isNavOpen ? "hidden" : "";
@@ -102,7 +107,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
           ))}
         </nav>
 
-        {budgetSummary && <SidebarSpending summary={budgetSummary} />}
+        {budgetSummary && <SidebarSpending summary={budgetSummary} month={sidebarMonth} />}
         {dailyTrend && dailyTrend.length > 0 && (
           <div className="daily-trend-chart">
             <p className="app-sidebar-spending-label">Entrada x saída</p>
@@ -152,7 +157,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   );
 }
 
-function SidebarSpending({ summary }: { summary: BudgetSummary }) {
+function SidebarSpending({ summary, month }: { summary: BudgetSummary; month: string }) {
   const cap = summary.budget ? Number(summary.budget.capAmount) : null;
   const rawPercent = cap ? (summary.spent / cap) * 100 : 0;
   const percent = Math.min(100, rawPercent);
@@ -160,7 +165,7 @@ function SidebarSpending({ summary }: { summary: BudgetSummary }) {
 
   return (
     <div className="app-sidebar-spending">
-      <p className="app-sidebar-spending-label">Gasto em {monthLongName(currentMonthParam())}</p>
+      <p className="app-sidebar-spending-label">Gasto em {monthLongName(month)}</p>
       <p className="app-sidebar-spending-value">{formatCurrency(summary.spent)}</p>
       {cap ? (
         <>

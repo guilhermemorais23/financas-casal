@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
@@ -37,7 +38,18 @@ export function ReportsPage() {
   const { user, token } = useAuth();
   const cacheKey = (name: string, forMonth: string) => `reports:${name}:${forMonth}:${user?.id ?? "anon"}`;
 
-  const [month, setMonth] = useState(currentMonthParam());
+  // Same URL-backed month as DashboardPage, so AppLayout's sidebar widgets
+  // track whatever month is being browsed here instead of the real current
+  // month.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const month = searchParams.get("month") ?? currentMonthParam();
+  function setMonth(nextMonth: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("month", nextMonth);
+      return next;
+    });
+  }
   const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(cacheKey("summary", month)));
   const [transactions, setTransactions] = useState<TransactionListRow[] | null>(() =>
     readCache(cacheKey("transactions", month))
