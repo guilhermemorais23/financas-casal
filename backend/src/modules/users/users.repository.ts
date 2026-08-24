@@ -6,6 +6,7 @@ export interface UserRow {
   email: string;
   displayName: string;
   groupId: string | null;
+  photoDataUrl: string | null;
 }
 
 const usersCol = db.collection("users");
@@ -16,6 +17,7 @@ function toUserRow(id: string, data: FirebaseFirestore.DocumentData): UserRow {
     email: data.email,
     displayName: data.displayName,
     groupId: data.groupId ?? null,
+    photoDataUrl: data.photoDataUrl ?? null,
   };
 }
 
@@ -44,11 +46,22 @@ export async function upsertUserProfile(input: {
     email: input.email,
     displayName: input.displayName,
     groupId: null,
+    photoDataUrl: null,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
   return {
-    user: { id: input.id, email: input.email, displayName: input.displayName, groupId: null },
+    user: { id: input.id, email: input.email, displayName: input.displayName, groupId: null, photoDataUrl: null },
     isNew: true,
   };
+}
+
+export async function updateUserProfile(
+  userId: string,
+  updates: { displayName?: string; photoDataUrl?: string | null }
+): Promise<UserRow> {
+  const ref = usersCol.doc(userId);
+  await ref.update({ ...updates, updatedAt: FieldValue.serverTimestamp() });
+  const doc = await ref.get();
+  return toUserRow(doc.id, doc.data()!);
 }

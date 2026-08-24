@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { type DailyTrendPoint } from "../components/DailyTrendChart";
 import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
+import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
 import { useTheme } from "../hooks/useTheme";
 import { currentMonthParam, formatCurrency, monthLongName } from "../utils/format";
 
@@ -22,7 +23,13 @@ const NAV_ITEMS = [
   { to: "/goals", label: "Metas", icon: "🎯" },
   { to: "/reports", label: "Relatórios", icon: "📊" },
   { to: "/account", label: "Conta", icon: "⚙️" },
-  { to: "/admin", label: "Admin", icon: "🛠️" },
+];
+
+// Admin isn't a plain link -- it expands into a submenu (handled separately
+// in the JSX below) instead of navigating straight to a page.
+const ADMIN_SUBLINKS = [
+  { section: "overview", label: "Visão geral" },
+  { section: "logs", label: "Logs" },
 ];
 
 const BOTTOM_NAV_ITEMS = [
@@ -37,6 +44,8 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const { user, token, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAdminNavOpen, setIsAdminNavOpen] = useState(false);
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
   const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[] | null>(null);
   const location = useLocation();
@@ -106,6 +115,35 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
               {item.label}
             </NavLink>
           ))}
+
+          <button
+            type="button"
+            className={`app-nav-link app-nav-link-expandable${location.pathname === "/admin" ? " active" : ""}`}
+            onClick={() => setIsAdminNavOpen((open) => !open)}
+            aria-expanded={isAdminNavOpen}
+          >
+            <span className="app-nav-icon">🛠️</span>
+            Admin
+            <span className={`app-nav-chevron${isAdminNavOpen ? " open" : ""}`}>▾</span>
+          </button>
+          {isAdminNavOpen && (
+            <div className="app-nav-submenu">
+              {ADMIN_SUBLINKS.map((sublink) => (
+                <Link
+                  key={sublink.section}
+                  to={`/admin?section=${sublink.section}`}
+                  className={`app-nav-sublink${
+                    location.pathname === "/admin" && (searchParams.get("section") ?? "overview") === sublink.section
+                      ? " active"
+                      : ""
+                  }`}
+                  onClick={() => setIsNavOpen(false)}
+                >
+                  {sublink.label}
+                </Link>
+              ))}
+            </div>
+          )}
         </nav>
 
         {budgetSummary && <SidebarSpending summary={budgetSummary} month={sidebarMonth} />}
@@ -120,20 +158,39 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         )}
 
         <div className="app-sidebar-footer">
-          <span className="app-sidebar-user">{user?.displayName}</span>
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={toggle}
-            title={theme === "dark" ? "Tema claro" : "Tema escuro"}
-          >
-            {theme === "dark" ? "☀️" : "🌙"}
-          </button>
+          <div className="app-sidebar-footer-row">
+            {user?.photoDataUrl ? (
+              <img src={user.photoDataUrl} alt="" className="app-sidebar-avatar" />
+            ) : (
+              <span className="app-sidebar-avatar app-sidebar-avatar-fallback">
+                {user?.displayName?.charAt(0).toUpperCase() ?? "?"}
+              </span>
+            )}
+            <span className="app-sidebar-user">{user?.displayName}</span>
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={() => setIsProfileOpen(true)}
+              title="Editar perfil"
+            >
+              ⚙️
+            </button>
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={toggle}
+              title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+            >
+              {theme === "dark" ? "☀️" : "🌙"}
+            </button>
+          </div>
           <button type="button" className="btn btn-ghost" onClick={logout}>
             Sair
           </button>
         </div>
       </aside>
+
+      {isProfileOpen && <ProfileSettingsModal onClose={() => setIsProfileOpen(false)} />}
       <main className={`app-main${wide ? " app-main-wide" : ""}`}>{children}</main>
 
       <nav className="app-bottom-nav">

@@ -11,7 +11,7 @@ import { goalsRouter } from "./modules/goals/goals.routes";
 import { groupsRouter } from "./modules/groups/groups.routes";
 import { insightsRouter } from "./modules/insights/insights.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
-import { bootstrapHandler, meHandler } from "./modules/users/users.controller";
+import { bootstrapHandler, meHandler, updateProfileHandler } from "./modules/users/users.controller";
 import { asyncHandler } from "./middleware/asyncHandler";
 import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
@@ -44,11 +44,14 @@ export function createApp() {
   // other sites from calling this API with a signed-in user's token.
   const allowedOrigins = process.env.ALLOWED_ORIGIN?.split(",").map((origin) => origin.trim());
   app.use(cors(allowedOrigins ? { origin: allowedOrigins } : undefined));
-  app.use(express.json());
+  // Default 100kb body limit is too small for a profile photo data URL
+  // (base64 blows up ~33% over the raw image bytes).
+  app.use(express.json({ limit: "1mb" }));
   app.use("/api", apiLimiter);
 
   app.get("/api/me", requireAuth, asyncHandler(meHandler));
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));
+  app.patch("/api/me", requireAuth, asyncHandler(updateProfileHandler));
   app.use("/api/groups", groupsRouter);
   app.use("/api/categories", categoriesRouter);
   app.use("/api/transactions", transactionsRouter);

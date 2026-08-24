@@ -2,6 +2,7 @@ import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   onIdTokenChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -16,6 +17,7 @@ export interface AuthUser {
   email: string;
   displayName: string;
   groupId: string | null;
+  photoDataUrl: string | null;
 }
 
 interface AuthContextValue {
@@ -27,6 +29,7 @@ interface AuthContextValue {
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -116,9 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(firebaseAuth);
   }, []);
 
+  const resetPassword = useCallback(async (email: string) => {
+    await sendPasswordResetEmail(firebaseAuth, email);
+  }, []);
+
   const value = useMemo(
-    () => ({ user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser }),
-    [user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser]
+    () => ({ user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser, resetPassword }),
+    [user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser, resetPassword]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

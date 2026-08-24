@@ -235,6 +235,17 @@ export function AccountPage() {
         </div>
 
         <div className="card">
+          <div className="section-header">
+            <p className="card-title">Assistente (WhatsApp)</p>
+            <span className="soon-badge">Em breve</span>
+          </div>
+          <p className="card-subtitle">
+            Estamos preparando o assistente por WhatsApp -- por enquanto, use o Telegram abaixo pra lançar gastos e
+            tirar dúvidas por mensagem.
+          </p>
+        </div>
+
+        <div className="card">
           <p className="card-title">Assistente (Telegram)</p>
           <p className="card-subtitle">
             Fale seus gastos ou pergunte sobre suas finanças pelo Telegram. Gere um código aqui e envie ele pro bot
