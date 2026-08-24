@@ -59,6 +59,9 @@ export function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [insight, setInsight] = useState<string | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
 
   async function load(selectedMonth: string) {
     setIsLoading(true);
@@ -86,7 +89,30 @@ export function ReportsPage() {
   useEffect(() => {
     load(month);
     setSelectedCategoryId(null);
+    // A new month means the previous analysis text no longer applies --
+    // clear it instead of leaving a stale answer next to different numbers.
+    setInsight(null);
+    setInsightError(null);
   }, [token, month]);
+
+  async function handleGenerateInsight() {
+    setInsightLoading(true);
+    setInsightError(null);
+    try {
+      const res = await apiRequest<{ text: string }>(`/insights?month=${month}`, { token });
+      setInsight(res.text);
+    } catch (err) {
+      setInsightError(
+        err instanceof ApiError && err.status === 503
+          ? "Análise por IA ainda não configurada."
+          : err instanceof ApiError
+            ? err.message
+            : "Não foi possível gerar a análise agora."
+      );
+    } finally {
+      setInsightLoading(false);
+    }
+  }
 
   async function handleDelete(id: string) {
     const confirmed = window.confirm("Excluir esse lançamento?");
@@ -156,6 +182,30 @@ export function ReportsPage() {
           ) : (
             <IncomeExpenseDonut income={incomeTotal} expense={expenseTotal} />
           )}
+        </div>
+
+        <div className="card">
+          <p className="card-title">Análise inteligente</p>
+          {insight ? (
+            <p className="card-subtitle" style={{ color: "var(--color-text)" }}>
+              {insight}
+            </p>
+          ) : (
+            <p className="card-subtitle">Peça uma leitura rápida dos seus gastos deste mês.</p>
+          )}
+          {insightError && (
+            <p className="alert" role="alert">
+              {insightError}
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={handleGenerateInsight}
+            disabled={insightLoading}
+          >
+            {insightLoading ? "Gerando..." : insight ? "Gerar de novo" : "Gerar análise"}
+          </button>
         </div>
 
         <div className="card">
