@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { requireGroupId } from "../groups/groups.service";
 import { createTelegramLinkCode, handleTelegramMessage } from "./assistant.service";
 import { downloadTelegramVoice } from "./telegram.client";
+import { logError } from "../../utils/errorLog";
 
 export async function createTelegramLinkCodeHandler(req: Request, res: Response) {
   const groupId = await requireGroupId(req.user!.id);
@@ -44,6 +45,7 @@ export async function telegramWebhookHandler(req: Request, res: Response) {
     }
   } catch (err) {
     console.error("[telegram webhook]", err);
+    logError("telegram-webhook", err, { path: req.path, method: req.method });
   }
 
   res.status(200).end();

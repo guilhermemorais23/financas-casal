@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { to: "/goals", label: "Metas", icon: "🎯" },
   { to: "/reports", label: "Relatórios", icon: "📊" },
   { to: "/account", label: "Conta", icon: "⚙️" },
+  { to: "/admin", label: "Admin", icon: "🛠️" },
 ];
 
 const BOTTOM_NAV_ITEMS = [

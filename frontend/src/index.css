@@ -1240,6 +1240,18 @@ input:focus {
 .budget-card .empty-state {
   position: relative;
   z-index: 1;
+  margin: 0;
+}
+
+/* Without a cap set there's no ring to show, so the card collapses to a
+   compact prompt instead of keeping the full "feature card" height that
+   only makes sense once there's a progress ring to display. */
+.budget-card.is-empty {
+  padding: 1.1rem 1.5rem;
+}
+
+.budget-card.is-empty .budget-header {
+  margin-bottom: 0.35rem;
 }
 
 .budget-ring-percent {

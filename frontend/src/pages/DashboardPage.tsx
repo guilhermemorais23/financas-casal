@@ -302,7 +302,7 @@ export function DashboardPage() {
 
         <div className="dashboard-grid">
           <div className="dashboard-col">
-            <div className="card budget-card">
+            <div className={`card budget-card${cap ? "" : " is-empty"}`}>
               <span className="stat-card-circle" />
               <span className="stat-card-circle stat-card-circle-2" />
               <div className="budget-header">
