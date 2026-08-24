@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EditDebtModal } from "../components/EditDebtModal";
@@ -204,8 +204,8 @@ export function DebtsPage() {
     );
   }
 
-  const jointDebts = debts?.filter((d) => d.scope === "joint") ?? [];
-  const personalDebts = debts?.filter((d) => d.scope === "personal") ?? [];
+  const jointDebts = useMemo(() => debts?.filter((d) => d.scope === "joint") ?? [], [debts]);
+  const personalDebts = useMemo(() => debts?.filter((d) => d.scope === "personal") ?? [], [debts]);
 
   return (
     <>

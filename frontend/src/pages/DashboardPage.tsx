@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -74,6 +74,10 @@ interface BudgetResponse {
   spent: number;
 }
 
+function sumByType(rows: TransactionListRow[], type: "income" | "expense") {
+  return rows.filter((tx) => tx.transactionType === type).reduce((sum, tx) => sum + Number(tx.amount), 0);
+}
+
 export function DashboardPage() {
   const { user, token } = useAuth();
   const [month, setMonth] = useState(currentMonthParam());
@@ -103,7 +107,22 @@ export function DashboardPage() {
     const sKey = (name: string) => `dashboard:${name}:${user?.id ?? "anon"}`;
     const mKey = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
     try {
-      const groupRes = await apiRequest<GroupResponse>("/groups/me", { token });
+      // Fire everything that doesn't depend on the group/account lookup right
+      // away, in parallel with /groups/me itself -- only the two
+      // personal-account transaction fetches actually need personalAccount.id
+      // from groupRes, so they're the only ones that wait for it below.
+      const groupPromise = apiRequest<GroupResponse>("/groups/me", { token });
+      const recentPromise = apiRequest<TransactionListRow[]>(`/transactions?limit=8&month=${selectedMonth}`, {
+        token,
+      });
+      const debtsPromise = apiRequest<DebtRow[]>("/debts", { token });
+      const summaryPromise = apiRequest<SummaryResponse>(
+        `/transactions/summary?month=${selectedMonth}&scope=visible`,
+        { token }
+      );
+      const budgetPromise = apiRequest<BudgetResponse>(`/budgets/current?month=${selectedMonth}`, { token });
+
+      const groupRes = await groupPromise;
       const personalAccount = groupRes.accounts.find(
         (account) => account.type === "personal" && account.ownerUserId === user?.id
       );
@@ -122,10 +141,10 @@ export function DashboardPage() {
                 { token }
               )
             : Promise.resolve([]),
-          apiRequest<TransactionListRow[]>(`/transactions?limit=8&month=${selectedMonth}`, { token }),
-          apiRequest<DebtRow[]>("/debts", { token }),
-          apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
-          apiRequest<BudgetResponse>(`/budgets/current?month=${selectedMonth}`, { token }),
+          recentPromise,
+          debtsPromise,
+          summaryPromise,
+          budgetPromise,
         ]);
 
       setGroup(groupRes);
@@ -169,6 +188,39 @@ export function DashboardPage() {
     }
   }
 
+  // Derived values below must stay above any conditional `return` -- they're
+  // hooks (useMemo), and hook calls can't be conditional. Cheap arithmetic
+  // (percentChange, budget math) stays as plain consts; the array-heavy work
+  // (filtering/reducing up to 100 rows, regrouping by day) is memoized so
+  // opening/closing a modal (editingTx/deletingId) doesn't redo it for no
+  // reason -- none of those state changes affect this derived data.
+  const income = useMemo(() => sumByType(personalMonthTx, "income"), [personalMonthTx]);
+  const expense = useMemo(() => sumByType(personalMonthTx, "expense"), [personalMonthTx]);
+  const prevIncome = useMemo(() => sumByType(personalPrevMonthTx, "income"), [personalPrevMonthTx]);
+  const prevExpense = useMemo(() => sumByType(personalPrevMonthTx, "expense"), [personalPrevMonthTx]);
+  const incomeDelta = percentChange(income, prevIncome);
+  const expenseDelta = percentChange(expense, prevExpense);
+  const prevMonthName = monthLongName(previousMonthParam(month));
+  const monthLabel = `${monthLongName(month)} de ${month.slice(0, 4)}`;
+
+  const { activeDebts, totalDebtRemaining } = useMemo(() => {
+    const active = debts.filter((debt) => debt.remainingAmount > 0);
+    return { activeDebts: active, totalDebtRemaining: active.reduce((sum, debt) => sum + debt.remainingAmount, 0) };
+  }, [debts]);
+
+  const { topCategories, topCategoriesTotal } = useMemo(() => {
+    const top = summary?.byCategory.slice(0, 4) ?? [];
+    return { topCategories: top, topCategoriesTotal: top.reduce((sum, row) => sum + Number(row.total), 0) };
+  }, [summary]);
+
+  const cap = budget?.budget ? Number(budget.budget.capAmount) : null;
+  const spent = budget?.spent ?? 0;
+  const budgetRawPercent = cap ? (spent / cap) * 100 : 0;
+  const budgetPercent = Math.min(100, budgetRawPercent);
+  const budgetSeverity = budgetRawPercent >= 100 ? "over" : budgetRawPercent >= 80 ? "warning" : "";
+
+  const recentGroups = useMemo(() => groupByDay(recent), [recent]);
+
   if (error && !group) {
     return (
       <AppLayout>
@@ -186,32 +238,6 @@ export function DashboardPage() {
       </AppLayout>
     );
   }
-
-  const sumByType = (rows: TransactionListRow[], type: "income" | "expense") =>
-    rows.filter((tx) => tx.transactionType === type).reduce((sum, tx) => sum + Number(tx.amount), 0);
-
-  const income = sumByType(personalMonthTx, "income");
-  const expense = sumByType(personalMonthTx, "expense");
-  const prevIncome = sumByType(personalPrevMonthTx, "income");
-  const prevExpense = sumByType(personalPrevMonthTx, "expense");
-  const incomeDelta = percentChange(income, prevIncome);
-  const expenseDelta = percentChange(expense, prevExpense);
-  const prevMonthName = monthLongName(previousMonthParam(month));
-  const monthLabel = `${monthLongName(month)} de ${month.slice(0, 4)}`;
-
-  const activeDebts = debts.filter((debt) => debt.remainingAmount > 0);
-  const totalDebtRemaining = activeDebts.reduce((sum, debt) => sum + debt.remainingAmount, 0);
-
-  const topCategories = summary?.byCategory.slice(0, 4) ?? [];
-  const topCategoriesTotal = topCategories.reduce((sum, row) => sum + Number(row.total), 0);
-
-  const cap = budget?.budget ? Number(budget.budget.capAmount) : null;
-  const spent = budget?.spent ?? 0;
-  const budgetRawPercent = cap ? (spent / cap) * 100 : 0;
-  const budgetPercent = Math.min(100, budgetRawPercent);
-  const budgetSeverity = budgetRawPercent >= 100 ? "over" : budgetRawPercent >= 80 ? "warning" : "";
-
-  const recentGroups = groupByDay(recent);
 
   return (
     <AppLayout wide>

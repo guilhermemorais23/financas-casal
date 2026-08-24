@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Theme = "light" | "dark";
 const STORAGE_KEY = "fincae_theme";
@@ -20,16 +20,16 @@ export function useTheme() {
     applyTheme(theme);
   }, [theme]);
 
-  function toggle() {
+  const toggle = useCallback(() => {
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const current = theme ?? (prefersDark ? "dark" : "light");
     const next: Theme = current === "dark" ? "light" : "dark";
     localStorage.setItem(STORAGE_KEY, next);
     setTheme(next);
-  }
+  }, [theme]);
 
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const effective: Theme = theme ?? (prefersDark ? "dark" : "light");
 
-  return { theme: effective, toggle };
+  return useMemo(() => ({ theme: effective, toggle }), [effective, toggle]);
 }

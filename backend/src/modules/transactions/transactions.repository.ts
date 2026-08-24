@@ -289,14 +289,24 @@ export async function getMonthlySummary(
 
   const categoriesById = await loadCategoriesMap(groupId);
 
+  // Single pass over docs -- byCategory (privacy-gated), byPayer (ungated,
+  // see comment below) and the running total all accumulate together instead
+  // of three separate traversals of the same array.
   const byCategoryMap = new Map<string, { categoryId: string | null; total: number }>();
+  const byPayerMap = new Map<string, number>();
+  let totalCents = 0;
+
   for (const doc of docs) {
     const data = doc.data();
-    if (!(data.isPrivate === false || data.createdBy === requestingUserId)) continue;
-    const key = data.categoryId ?? "none";
-    const entry = byCategoryMap.get(key) ?? { categoryId: data.categoryId ?? null, total: 0 };
-    entry.total += data.amountCents;
-    byCategoryMap.set(key, entry);
+    totalCents += data.amountCents;
+    byPayerMap.set(data.payerId, (byPayerMap.get(data.payerId) ?? 0) + data.amountCents);
+
+    if (data.isPrivate === false || data.createdBy === requestingUserId) {
+      const key = data.categoryId ?? "none";
+      const entry = byCategoryMap.get(key) ?? { categoryId: data.categoryId ?? null, total: 0 };
+      entry.total += data.amountCents;
+      byCategoryMap.set(key, entry);
+    }
   }
   const byCategory: CategorySummaryRow[] = Array.from(byCategoryMap.values())
     .map((entry) => {
@@ -313,17 +323,10 @@ export async function getMonthlySummary(
   // byPayer intentionally does NOT gate on isPrivate -- matches the original
   // SQL asymmetry (a couple's total spend-by-person is real even if one
   // entry's description is private).
-  const byPayerMap = new Map<string, number>();
-  for (const doc of docs) {
-    const data = doc.data();
-    byPayerMap.set(data.payerId, (byPayerMap.get(data.payerId) ?? 0) + data.amountCents);
-  }
   const byPayer: PayerSummaryRow[] = Array.from(byPayerMap.entries()).map(([payerId, total]) => ({
     payerId,
     total: fromCents(total),
   }));
-
-  const totalCents = docs.reduce((sum, doc) => sum + doc.data().amountCents, 0);
 
   return { byCategory, byPayer, total: fromCents(totalCents) };
 }

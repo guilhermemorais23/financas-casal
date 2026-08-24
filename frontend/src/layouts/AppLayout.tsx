@@ -1,8 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
+import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { useTheme } from "../hooks/useTheme";
+import { currentMonthParam, formatCurrency, monthLongName } from "../utils/format";
+
+interface BudgetSummary {
+  budget: { capAmount: string } | null;
+  spent: number;
+}
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Painel", icon: "🏠" },
@@ -24,11 +31,20 @@ const BOTTOM_NAV_ITEMS = [
 ];
 
 export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
   const location = useLocation();
   const isOnNewTransaction = location.pathname === "/transactions/new";
+
+  useEffect(() => {
+    if (!token) return;
+    // Decorative sidebar widget -- a failed fetch just hides it, no error UI.
+    apiRequest<BudgetSummary>(`/budgets/current?month=${currentMonthParam()}`, { token })
+      .then(setBudgetSummary)
+      .catch(() => setBudgetSummary(null));
+  }, [token]);
 
   useEffect(() => {
     document.body.style.overflow = isNavOpen ? "hidden" : "";
@@ -79,6 +95,9 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
             </NavLink>
           ))}
         </nav>
+
+        {budgetSummary && <SidebarSpending summary={budgetSummary} />}
+
         <div className="app-sidebar-footer">
           <span className="app-sidebar-user">{user?.displayName}</span>
           <button
@@ -112,6 +131,32 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       {!isOnNewTransaction && (
         <Link to="/transactions/new" className="global-fab" aria-label="Nova despesa" title="Nova despesa">
           +
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function SidebarSpending({ summary }: { summary: BudgetSummary }) {
+  const cap = summary.budget ? Number(summary.budget.capAmount) : null;
+  const rawPercent = cap ? (summary.spent / cap) * 100 : 0;
+  const percent = Math.min(100, rawPercent);
+  const severity = rawPercent >= 100 ? "over" : rawPercent >= 80 ? "warning" : "";
+
+  return (
+    <div className="app-sidebar-spending">
+      <p className="app-sidebar-spending-label">Gasto em {monthLongName(currentMonthParam())}</p>
+      <p className="app-sidebar-spending-value">{formatCurrency(summary.spent)}</p>
+      {cap ? (
+        <>
+          <div className="progress-track thin">
+            <div className={`progress-fill${severity ? ` ${severity}` : ""}`} style={{ width: `${percent}%` }} />
+          </div>
+          <p className="app-sidebar-spending-cap">de {formatCurrency(cap)}</p>
+        </>
+      ) : (
+        <Link to="/account" className="app-sidebar-spending-cap link">
+          Definir orçamento
         </Link>
       )}
     </div>
