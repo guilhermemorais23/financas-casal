@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
@@ -92,21 +92,41 @@ export function ReportsPage() {
     }
   }
 
-  const visibleTransactions = (transactions ?? []).filter((tx) => {
-    if (!selectedCategoryId) return true;
-    if (selectedCategoryId === "none") return tx.categoryId === null;
-    return tx.categoryId === selectedCategoryId;
-  });
-  const transactionGroups = groupByDay(visibleTransactions);
+  const visibleTransactions = useMemo(
+    () =>
+      (transactions ?? []).filter((tx) => {
+        if (!selectedCategoryId) return true;
+        if (selectedCategoryId === "none") return tx.categoryId === null;
+        return tx.categoryId === selectedCategoryId;
+      }),
+    [transactions, selectedCategoryId]
+  );
+  const transactionGroups = useMemo(() => groupByDay(visibleTransactions), [visibleTransactions]);
   const selectedCategoryLabel = selectedCategoryId
     ? summary?.byCategory.find((row) => (row.categoryId ?? "none") === selectedCategoryId)
     : null;
-  const incomeTotal = (transactions ?? [])
-    .filter((tx) => tx.transactionType === "income")
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
-  const expenseTotal = (transactions ?? [])
-    .filter((tx) => tx.transactionType === "expense")
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+  const { incomeTotal, expenseTotal } = useMemo(
+    () => ({
+      incomeTotal: (transactions ?? [])
+        .filter((tx) => tx.transactionType === "income")
+        .reduce((sum, tx) => sum + Number(tx.amount), 0),
+      expenseTotal: (transactions ?? [])
+        .filter((tx) => tx.transactionType === "expense")
+        .reduce((sum, tx) => sum + Number(tx.amount), 0),
+    }),
+    [transactions]
+  );
+  const pieSlices = useMemo(
+    () =>
+      (summary?.byCategory ?? []).map((row) => ({
+        id: row.categoryId ?? "none",
+        label: row.categoryName ?? "Sem categoria",
+        emoji: row.categoryEmoji,
+        value: Number(row.total),
+        color: categoryColor(row.categoryId),
+      })),
+    [summary]
+  );
 
   return (
     <AppLayout>
@@ -132,13 +152,7 @@ export function ReportsPage() {
             <p className="empty-state">Nenhuma despesa neste mês.</p>
           ) : (
             <CategoryPieChart
-              slices={(summary?.byCategory ?? []).map((row) => ({
-                id: row.categoryId ?? "none",
-                label: row.categoryName ?? "Sem categoria",
-                emoji: row.categoryEmoji,
-                value: Number(row.total),
-                color: categoryColor(row.categoryId),
-              }))}
+              slices={pieSlices}
               selectedId={selectedCategoryId}
               onSelect={setSelectedCategoryId}
             />

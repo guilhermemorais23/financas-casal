@@ -42,13 +42,15 @@ export interface CreateTransactionInput {
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
   const groupId = await requireGroupId(userId);
 
-  const accounts = await findAccountsByGroupId(groupId);
+  const [accounts, members] = await Promise.all([
+    findAccountsByGroupId(groupId),
+    findMembersByGroupId(groupId),
+  ]);
   const account = accounts.find((a) => a.id === input.accountId);
   if (!account) {
     throw new InvalidAccountError();
   }
 
-  const members = await findMembersByGroupId(groupId);
   if (!members.some((member) => member.id === input.payerId)) {
     throw new InvalidPayerError();
   }

@@ -81,8 +81,18 @@ export async function listDebts(userId: string): Promise<DebtWithInstallments[]>
   const debts = await findDebtsVisibleTo(groupId, userId);
   const installments = await findInstallmentsByDebtIds(debts.map((debt) => debt.id));
 
+  const installmentsByDebtId = new Map<string, DebtInstallmentRow[]>();
+  for (const installment of installments) {
+    const list = installmentsByDebtId.get(installment.debtId);
+    if (list) {
+      list.push(installment);
+    } else {
+      installmentsByDebtId.set(installment.debtId, [installment]);
+    }
+  }
+
   return debts.map((debt) => {
-    const debtInstallments = installments.filter((installment) => installment.debtId === debt.id);
+    const debtInstallments = installmentsByDebtId.get(debt.id) ?? [];
     const paid = debtInstallments.filter((installment) => installment.isPaid);
     const paidAmount = paid.reduce((sum, installment) => sum + Number(installment.amount), 0);
     const totalAmount = Number(debt.totalAmount);
@@ -105,8 +115,7 @@ export async function listDebts(userId: string): Promise<DebtWithInstallments[]>
   });
 }
 
-async function requireManageableDebt(userId: string, debtId: string) {
-  const groupId = await requireGroupId(userId);
+async function requireManageableDebt(userId: string, groupId: string, debtId: string) {
   const debt = await findDebtById(debtId);
   if (!debt || debt.groupId !== groupId) {
     throw new DebtNotFoundError();
@@ -128,7 +137,7 @@ export async function setInstallmentPaidForUser(
   isPaid: boolean
 ) {
   const groupId = await requireGroupId(userId);
-  const debt = await requireManageableDebt(userId, debtId);
+  const debt = await requireManageableDebt(userId, groupId, debtId);
   const installment = await findInstallmentById(debtId, installmentId);
   if (!installment) {
     throw new InstallmentNotFoundError();
@@ -182,7 +191,8 @@ export async function updateInstallmentMonth(
   installmentId: string,
   referenceMonth: string
 ) {
-  await requireManageableDebt(userId, debtId);
+  const groupId = await requireGroupId(userId);
+  await requireManageableDebt(userId, groupId, debtId);
   const installment = await findInstallmentById(debtId, installmentId);
   if (!installment) {
     throw new InstallmentNotFoundError();
@@ -196,7 +206,8 @@ export async function updateInstallmentMonth(
 }
 
 export async function removeDebt(userId: string, debtId: string) {
-  await requireManageableDebt(userId, debtId);
+  const groupId = await requireGroupId(userId);
+  await requireManageableDebt(userId, groupId, debtId);
   await deleteDebt(debtId);
 }
 
@@ -205,6 +216,7 @@ export async function updateDebtForUser(
   debtId: string,
   input: { name: string; description: string | null }
 ) {
-  await requireManageableDebt(userId, debtId);
+  const groupId = await requireGroupId(userId);
+  await requireManageableDebt(userId, groupId, debtId);
   return updateDebt(debtId, input);
 }
