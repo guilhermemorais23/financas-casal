@@ -10,6 +10,7 @@ import {
   createNewInvite,
   getGroupForUser,
   leaveGroup,
+  updateFinancialProfile,
 } from "./groups.service";
 
 function isNonEmptyString(value: unknown): value is string {
@@ -69,6 +70,37 @@ export async function createInviteHandler(req: Request, res: Response) {
   try {
     const inviteToken = await createNewInvite(req.user!.id);
     res.status(201).json({ inviteToken });
+  } catch (err) {
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function updateFinancialProfileHandler(req: Request, res: Response) {
+  const { financialGoal, savingsAmount } = req.body ?? {};
+
+  const updates: { financialGoal?: string | null; savingsAmount?: number | null } = {};
+  if (financialGoal !== undefined) {
+    if (financialGoal !== null && typeof financialGoal !== "string") {
+      res.status(400).json({ error: "financialGoal must be a string or null" });
+      return;
+    }
+    updates.financialGoal = financialGoal === null || financialGoal.trim() === "" ? null : financialGoal.trim();
+  }
+  if (savingsAmount !== undefined) {
+    if (savingsAmount !== null && (typeof savingsAmount !== "number" || !Number.isFinite(savingsAmount) || savingsAmount < 0)) {
+      res.status(400).json({ error: "savingsAmount must be a non-negative number or null" });
+      return;
+    }
+    updates.savingsAmount = savingsAmount;
+  }
+
+  try {
+    const group = await updateFinancialProfile(req.user!.id, updates);
+    res.status(200).json(group);
   } catch (err) {
     if (err instanceof NoGroupError) {
       res.status(404).json({ error: "no group yet" });

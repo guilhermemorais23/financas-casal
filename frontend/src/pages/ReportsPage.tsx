@@ -22,20 +22,6 @@ interface SummaryResponse {
   byCategory: CategorySummaryRow[];
 }
 
-interface InsightContext {
-  totalSpent: string;
-  totalSpentPrevMonth: string;
-  budgetCap: string | null;
-  budgetSpent: number;
-  debtsRemaining: number;
-  goals: { name: string; targetAmount: string; currentAmount: string }[];
-}
-
-interface InsightResponse {
-  text: string;
-  context: InsightContext;
-}
-
 interface TransactionListRow {
   id: string;
   description: string;
@@ -73,9 +59,6 @@ export function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [insight, setInsight] = useState<InsightResponse | null>(null);
-  const [insightLoading, setInsightLoading] = useState(false);
-  const [insightError, setInsightError] = useState<string | null>(null);
 
   async function load(selectedMonth: string) {
     setIsLoading(true);
@@ -103,30 +86,7 @@ export function ReportsPage() {
   useEffect(() => {
     load(month);
     setSelectedCategoryId(null);
-    // A new month means the previous analysis text no longer applies --
-    // clear it instead of leaving a stale answer next to different numbers.
-    setInsight(null);
-    setInsightError(null);
   }, [token, month]);
-
-  async function handleGenerateInsight() {
-    setInsightLoading(true);
-    setInsightError(null);
-    try {
-      const res = await apiRequest<InsightResponse>(`/insights?month=${month}`, { token });
-      setInsight(res);
-    } catch (err) {
-      setInsightError(
-        err instanceof ApiError && err.status === 503
-          ? "Análise por IA ainda não configurada."
-          : err instanceof ApiError
-            ? err.message
-            : "Não foi possível gerar a análise agora."
-      );
-    } finally {
-      setInsightLoading(false);
-    }
-  }
 
   async function handleDelete(id: string) {
     const confirmed = window.confirm("Excluir esse lançamento?");
@@ -196,35 +156,6 @@ export function ReportsPage() {
           ) : (
             <IncomeExpenseDonut income={incomeTotal} expense={expenseTotal} />
           )}
-        </div>
-
-        <div className="card">
-          <p className="card-title">Análise inteligente</p>
-          {insight ? (
-            <>
-              <p className="card-subtitle" style={{ color: "var(--color-text)", whiteSpace: "pre-line" }}>
-                {insight.text}
-              </p>
-              <InsightVisuals context={insight.context} />
-            </>
-          ) : (
-            <p className="card-subtitle">
-              Peça uma leitura completa dos seus gastos, orçamento, dívidas e metas deste mês.
-            </p>
-          )}
-          {insightError && (
-            <p className="alert" role="alert">
-              {insightError}
-            </p>
-          )}
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={handleGenerateInsight}
-            disabled={insightLoading}
-          >
-            {insightLoading ? "Gerando..." : insight ? "Gerar de novo" : "Gerar análise"}
-          </button>
         </div>
 
         <div className="card">
@@ -316,60 +247,5 @@ export function ReportsPage() {
         />
       )}
     </AppLayout>
-  );
-}
-
-// Same visual language as SidebarSpending/IncomeExpenseBars (category-name +
-// value header, thin progress bar) -- the analysis text cites these same
-// numbers, so showing them here backs the prose with something concrete.
-function InsightVisuals({ context }: { context: InsightContext }) {
-  const cap = context.budgetCap ? Number(context.budgetCap) : null;
-  const budgetPercent = cap ? Math.min(100, (context.budgetSpent / cap) * 100) : 0;
-  const hasAnything = cap !== null || context.debtsRemaining > 0 || context.goals.length > 0;
-
-  if (!hasAnything) return null;
-
-  return (
-    <ul className="category-breakdown" style={{ marginTop: "0.75rem" }}>
-      {cap !== null && (
-        <li>
-          <div className="category-row-header">
-            <span className="category-name">Orçamento do mês</span>
-            <span className="value">
-              {formatCurrency(context.budgetSpent)} de {formatCurrency(cap)}
-            </span>
-          </div>
-          <div className="progress-track thin">
-            <div className="progress-fill" style={{ width: `${budgetPercent}%` }} />
-          </div>
-        </li>
-      )}
-      {context.debtsRemaining > 0 && (
-        <li>
-          <div className="category-row-header">
-            <span className="category-name">Dívidas em aberto</span>
-            <span className="value">{formatCurrency(context.debtsRemaining)}</span>
-          </div>
-        </li>
-      )}
-      {context.goals.map((goal) => {
-        const target = Number(goal.targetAmount);
-        const current = Number(goal.currentAmount);
-        const percent = target > 0 ? Math.min(100, (current / target) * 100) : 0;
-        return (
-          <li key={goal.name}>
-            <div className="category-row-header">
-              <span className="category-name">{goal.name}</span>
-              <span className="value">
-                {formatCurrency(current)} de {formatCurrency(target)}
-              </span>
-            </div>
-            <div className="progress-track thin">
-              <div className="progress-fill" style={{ width: `${percent}%` }} />
-            </div>
-          </li>
-        );
-      })}
-    </ul>
   );
 }

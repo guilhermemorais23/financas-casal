@@ -1,6 +1,11 @@
 import type { Request, Response } from "express";
 import { requireGroupId } from "../groups/groups.service";
-import { createTelegramLinkCode, handleTelegramMessage } from "./assistant.service";
+import {
+  answerAssistantMessage,
+  AssistantNotConfiguredError,
+  createTelegramLinkCode,
+  handleTelegramMessage,
+} from "./assistant.service";
 import { downloadTelegramVoice } from "./telegram.client";
 import { logError } from "../../utils/errorLog";
 
@@ -8,6 +13,29 @@ export async function createTelegramLinkCodeHandler(req: Request, res: Response)
   const groupId = await requireGroupId(req.user!.id);
   const code = await createTelegramLinkCode(req.user!.id, groupId);
   res.status(200).json({ code });
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export async function chatHandler(req: Request, res: Response) {
+  const { message } = req.body ?? {};
+  if (!isNonEmptyString(message)) {
+    res.status(400).json({ error: "message is required" });
+    return;
+  }
+
+  try {
+    const reply = await answerAssistantMessage(req.user!.id, message.trim());
+    res.status(200).json({ reply });
+  } catch (err) {
+    if (err instanceof AssistantNotConfiguredError) {
+      res.status(503).json({ error: "assistente ainda não configurado" });
+      return;
+    }
+    throw err;
+  }
 }
 
 interface TelegramUpdate {

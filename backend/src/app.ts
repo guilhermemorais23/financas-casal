@@ -9,7 +9,7 @@ import { categoriesRouter } from "./modules/categories/categories.routes";
 import { debtsRouter } from "./modules/debts/debts.routes";
 import { goalsRouter } from "./modules/goals/goals.routes";
 import { groupsRouter } from "./modules/groups/groups.routes";
-import { insightsRouter } from "./modules/insights/insights.routes";
+import { quotesRouter } from "./modules/quotes/quotes.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
 import { bootstrapHandler, meHandler, updateProfileHandler } from "./modules/users/users.controller";
 import { asyncHandler } from "./middleware/asyncHandler";
@@ -65,9 +65,9 @@ export function createApp() {
   app.use("/api/budgets", budgetsRouter);
   app.use("/api/debts", debtsRouter);
   app.use("/api/cards", cardsRouter);
-  app.use("/api/insights", insightsRouter);
   app.use("/api/assistant", assistantRouter);
   app.use("/api/admin", adminRouter);
+  app.use("/api/quotes", quotesRouter);
 
   app.use(errorHandler);
 

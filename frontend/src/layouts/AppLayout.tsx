@@ -4,6 +4,7 @@ import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { type DailyTrendPoint } from "../components/DailyTrendChart";
+import { GlobalAssistant } from "../components/GlobalAssistant";
 import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
 import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
 import { useTheme } from "../hooks/useTheme";
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { to: "/cards", label: "Cartão conjunto", icon: "🧾" },
   { to: "/goals", label: "Metas", icon: "🎯" },
   { to: "/reports", label: "Relatórios", icon: "📊" },
+  { to: "/investments", label: "Investimentos", icon: "📈" },
   { to: "/account", label: "Conta", icon: "⚙️" },
 ];
 
@@ -211,6 +213,8 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
           +
         </Link>
       )}
+
+      <GlobalAssistant />
     </div>
   );
 }

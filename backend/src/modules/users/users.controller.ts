@@ -13,7 +13,12 @@ function toPublicUser(user: UserRow) {
     displayName: user.displayName,
     groupId: user.groupId,
     photoDataUrl: user.photoDataUrl,
+    phone: user.phone,
   };
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 // A compressed small avatar (client resizes before encoding) comfortably
@@ -54,9 +59,9 @@ export async function meHandler(req: Request, res: Response) {
 }
 
 export async function updateProfileHandler(req: Request, res: Response) {
-  const { displayName, photoDataUrl } = req.body ?? {};
+  const { displayName, photoDataUrl, phone, email } = req.body ?? {};
 
-  const updates: { displayName?: string; photoDataUrl?: string | null } = {};
+  const updates: { displayName?: string; photoDataUrl?: string | null; phone?: string | null; email?: string } = {};
 
   if (displayName !== undefined) {
     if (!isNonEmptyString(displayName)) {
@@ -64,6 +69,26 @@ export async function updateProfileHandler(req: Request, res: Response) {
       return;
     }
     updates.displayName = displayName.trim();
+  }
+
+  if (phone !== undefined) {
+    if (phone !== null && typeof phone !== "string") {
+      res.status(400).json({ error: "phone must be a string or null" });
+      return;
+    }
+    updates.phone = phone === null || phone.trim() === "" ? null : phone.trim();
+  }
+
+  // Firebase Auth owns the credential itself -- this only keeps our own
+  // Firestore copy in sync after the client has already changed it there
+  // (verifyBeforeUpdateEmail sends a confirmation link; we mirror the
+  // intended address immediately rather than tracking that async flow).
+  if (email !== undefined) {
+    if (!isNonEmptyString(email) || !isValidEmail(email)) {
+      res.status(400).json({ error: "email must be a valid email address" });
+      return;
+    }
+    updates.email = email.trim();
   }
 
   if (photoDataUrl !== undefined) {
