@@ -8,6 +8,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DebtsPage } from "./pages/DebtsPage";
 import { GoalsPage } from "./pages/GoalsPage";
 import { GroupSetupPage } from "./pages/GroupSetupPage";
+import { InvestmentsPage } from "./pages/InvestmentsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NewTransactionPage } from "./pages/NewTransactionPage";
 import { ParPage } from "./pages/ParPage";
@@ -100,6 +101,14 @@ function App() {
           element={
             <ProtectedRoute requireGroup>
               <AdminPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/investments"
+          element={
+            <ProtectedRoute requireGroup>
+              <InvestmentsPage />
             </ProtectedRoute>
           }
         />

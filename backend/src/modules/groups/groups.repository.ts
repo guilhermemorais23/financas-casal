@@ -5,6 +5,8 @@ export interface GroupRow {
   id: string;
   nickname: string | null;
   emoji: string | null;
+  financialGoal: string | null;
+  savingsAmount: number | null;
 }
 
 export interface MemberRow {
@@ -29,17 +31,32 @@ export async function createGroup(): Promise<GroupRow> {
   const ref = await groupsCol.add({
     nickname: null,
     emoji: null,
+    financialGoal: null,
+    savingsAmount: null,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return { id: ref.id, nickname: null, emoji: null };
+  return { id: ref.id, nickname: null, emoji: null, financialGoal: null, savingsAmount: null };
 }
 
 export async function findGroupById(groupId: string): Promise<GroupRow | null> {
   const doc = await groupsCol.doc(groupId).get();
   if (!doc.exists) return null;
   const data = doc.data()!;
-  return { id: doc.id, nickname: data.nickname ?? null, emoji: data.emoji ?? null };
+  return {
+    id: doc.id,
+    nickname: data.nickname ?? null,
+    emoji: data.emoji ?? null,
+    financialGoal: data.financialGoal ?? null,
+    savingsAmount: data.savingsAmount ?? null,
+  };
+}
+
+export async function updateGroupFinancialProfile(
+  groupId: string,
+  updates: { financialGoal?: string | null; savingsAmount?: number | null }
+): Promise<void> {
+  await groupsCol.doc(groupId).set({ ...updates, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 
 export async function setUserGroup(userId: string, groupId: string | null): Promise<void> {

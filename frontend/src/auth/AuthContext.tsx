@@ -18,6 +18,7 @@ export interface AuthUser {
   displayName: string;
   groupId: string | null;
   photoDataUrl: string | null;
+  phone: string | null;
 }
 
 interface AuthContextValue {

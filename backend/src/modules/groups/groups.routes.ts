@@ -7,6 +7,7 @@ import {
   createInviteHandler,
   getMyGroupHandler,
   leaveGroupHandler,
+  updateFinancialProfileHandler,
 } from "./groups.controller";
 
 export const groupsRouter = Router();
@@ -18,3 +19,4 @@ groupsRouter.post("/accept", asyncHandler(acceptInviteHandler));
 groupsRouter.get("/me", asyncHandler(getMyGroupHandler));
 groupsRouter.post("/invite", asyncHandler(createInviteHandler));
 groupsRouter.post("/leave", asyncHandler(leaveGroupHandler));
+groupsRouter.patch("/financial-profile", asyncHandler(updateFinancialProfileHandler));

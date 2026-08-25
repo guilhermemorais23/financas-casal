@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
-import { createTelegramLinkCodeHandler, telegramWebhookHandler } from "./assistant.controller";
+import { chatHandler, createTelegramLinkCodeHandler, telegramWebhookHandler } from "./assistant.controller";
 
 export const assistantRouter = Router();
 
@@ -10,3 +10,4 @@ export const assistantRouter = Router();
 assistantRouter.post("/telegram/webhook", asyncHandler(telegramWebhookHandler));
 
 assistantRouter.post("/telegram/link-code", requireAuth, asyncHandler(createTelegramLinkCodeHandler));
+assistantRouter.post("/chat", requireAuth, asyncHandler(chatHandler));
