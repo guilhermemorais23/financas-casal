@@ -49,6 +49,12 @@ export function createApp() {
   app.use(express.json({ limit: "1mb" }));
   app.use("/api", apiLimiter);
 
+  // Unauthenticated on purpose -- this is what the keep-alive cron pings.
+  // /api/me always answers 401 when hit without a token, which cron-job.org
+  // (and similar services) count as a failed execution; enough of those in
+  // a row auto-disables the cronjob even though the ping was doing its job.
+  app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
+
   app.get("/api/me", requireAuth, asyncHandler(meHandler));
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));
   app.patch("/api/me", requireAuth, asyncHandler(updateProfileHandler));
