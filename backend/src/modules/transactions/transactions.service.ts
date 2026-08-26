@@ -105,6 +105,16 @@ export async function listTransactions(
   return findTransactionsVisibleTo(groupId, userId, limit, range, accountId);
 }
 
+// Same visibility rules as the normal list -- export never leaks a
+// groupmate's private personal transaction either. 10k is far above what
+// any group would have in a single month; a hard cap just protects the
+// export from growing unbounded if someone ever calls it without a month.
+export async function exportTransactionsForUser(userId: string, monthParam?: string) {
+  const groupId = await requireGroupId(userId);
+  const range = monthParam ? parseMonthRange(monthParam) : undefined;
+  return findTransactionsVisibleTo(groupId, userId, 10000, range);
+}
+
 // Pairwise "who owes whom" across every member pair with a shared-expense
 // debt. Not currently surfaced in any UI page.
 export async function getBalance(userId: string) {

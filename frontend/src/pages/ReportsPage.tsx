@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { apiRequest, ApiError } from "../api/client";
+import { apiDownload, apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { IncomeExpenseDonut } from "../components/IncomeExpenseDonut";
+import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay } from "../utils/format";
@@ -36,6 +37,8 @@ interface TransactionListRow {
 
 export function ReportsPage() {
   const { user, token } = useAuth();
+  const { showToast } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
   const cacheKey = (name: string, forMonth: string) => `reports:${name}:${forMonth}:${user?.id ?? "anon"}`;
 
   // Same URL-backed month as DashboardPage, so AppLayout's sidebar widgets
@@ -87,6 +90,19 @@ export function ReportsPage() {
     load(month);
     setSelectedCategoryId(null);
   }, [token, month]);
+
+  async function handleExport() {
+    setIsExporting(true);
+    setError(null);
+    try {
+      await apiDownload(`/transactions/export?month=${month}`, token, `par-transacoes-${month}.csv`);
+      showToast("CSV baixado");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível exportar");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   async function handleDelete(id: string) {
     const confirmed = window.confirm("Excluir esse lançamento?");
@@ -146,7 +162,18 @@ export function ReportsPage() {
         {isLoading && <p className="refresh-note">Atualizando...</p>}
         <div className="section-header">
           <h1>Relatórios</h1>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleExport}
+              disabled={isExporting || !transactions || transactions.length === 0}
+              title="Baixar os lançamentos deste mês em CSV"
+            >
+              {isExporting ? "Baixando..." : "⬇ CSV"}
+            </button>
+          </div>
         </div>
 
         <div className="card">

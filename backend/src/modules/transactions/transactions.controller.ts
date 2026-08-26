@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { NoGroupError } from "../groups/groups.service";
+import { toCsv } from "../../utils/csv";
 import {
   InvalidAccountError,
   InvalidCategoryError,
@@ -9,6 +10,7 @@ import {
   UnsupportedSplitTypeError,
   createTransaction,
   deleteTransactionForUser,
+  exportTransactionsForUser,
   getBalance,
   getDailySeriesForUser,
   getMonthlySummaryForUser,
@@ -141,6 +143,42 @@ export async function getDailySeriesHandler(req: Request, res: Response) {
   try {
     const points = await getDailySeriesForUser(req.user!.id, month, scope);
     res.status(200).json(points);
+  } catch (err) {
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
+      return;
+    }
+    if (err instanceof InvalidMonthError) {
+      res.status(400).json({ error: "invalid month" });
+      return;
+    }
+    throw err;
+  }
+}
+
+const CSV_HEADER = ["Data", "Descricao", "Categoria", "Tipo", "Valor", "Conta", "Privado"];
+
+export async function exportTransactionsHandler(req: Request, res: Response) {
+  const month = typeof req.query.month === "string" ? req.query.month : undefined;
+
+  try {
+    const transactions = await exportTransactionsForUser(req.user!.id, month);
+    const rows = transactions.map((tx) => [
+      tx.occurredAt,
+      tx.description,
+      tx.categoryName ?? "Sem categoria",
+      tx.transactionType === "income" ? "Receita" : "Despesa",
+      tx.amount,
+      tx.accountType === "joint" ? "Conjunta" : "Pessoal",
+      tx.isPrivate ? "Sim" : "Nao",
+    ]);
+    const csv = toCsv([CSV_HEADER, ...rows]);
+    const filename = `par-transacoes-${month ?? "todos"}.csv`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // UTF-8 BOM so Excel (which otherwise guesses Latin-1) shows acentos right.
+    res.status(200).send("﻿" + csv);
   } catch (err) {
     if (err instanceof NoGroupError) {
       res.status(404).json({ error: "no group yet" });
