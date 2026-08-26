@@ -33,6 +33,7 @@ interface TransactionListRow {
   categoryName: string | null;
   categoryEmoji: string | null;
   isPrivate: boolean;
+  recurringGroupId: string | null;
 }
 
 export function ReportsPage() {
@@ -115,6 +116,22 @@ export function ReportsPage() {
       await load(month);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleCancelRecurring(id: string) {
+    const confirmed = window.confirm("Cancelar essa recorrência? Este lançamento e os dos próximos meses somem.");
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    setError(null);
+    try {
+      await apiRequest(`/transactions/${id}/recurring`, { method: "DELETE", token });
+      await load(month);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível cancelar a recorrência");
     } finally {
       setDeletingId(null);
     }
@@ -237,6 +254,7 @@ export function ReportsPage() {
                       <span className="transaction-desc">
                         {tx.description}
                         {tx.isPrivate && <span className="badge private-badge">privado</span>}
+                        {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
                       </span>
                       <span className="transaction-meta">{tx.categoryName ?? "Sem categoria"}</span>
                     </div>
@@ -248,6 +266,17 @@ export function ReportsPage() {
                       <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                         ✎
                       </button>
+                      {tx.recurringGroupId && (
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          title="Cancelar recorrência"
+                          disabled={deletingId === tx.id}
+                          onClick={() => handleCancelRecurring(tx.id)}
+                        >
+                          🔁🚫
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn-icon"

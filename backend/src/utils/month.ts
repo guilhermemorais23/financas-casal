@@ -30,6 +30,21 @@ export function monthToDate(monthParam: string): string {
   return `${monthParam}-01`;
 }
 
+// "YYYY-MM-DD" + N months (N can be 0). Keeps the same day-of-month when
+// possible; clamps to the target month's last day otherwise (e.g. Jan 31 + 1
+// month -> Feb 28/29), same rule most banks/card issuers use for recurring
+// charges. Used to generate a recurring transaction's future occurrences.
+export function addMonthsToDate(dateParam: string, count: number): string {
+  const [year, month, day] = dateParam.split("-").map(Number);
+  // Day 0 of the *following* target month == the last day of the target
+  // month itself, which is what clamps an overflowing day (day 31 in a
+  // 30-day month) down automatically instead of rolling into the next one.
+  const lastDayOfTargetMonth = new Date(Date.UTC(year, month - 1 + count + 1, 0)).getUTCDate();
+  const clampedDay = Math.min(day, lastDayOfTargetMonth);
+  const date = new Date(Date.UTC(year, month - 1 + count, clampedDay));
+  return date.toISOString().slice(0, 10);
+}
+
 export interface MonthRange {
   periodMonth: string;
   monthStart: string;

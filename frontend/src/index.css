@@ -1795,7 +1795,8 @@ input:focus {
   color: var(--success-text);
 }
 
-.private-badge {
+.private-badge,
+.recurring-badge {
   font-size: 0.65rem;
   padding: 0.1rem 0.4rem;
 }
@@ -2016,6 +2017,12 @@ input:focus {
 
 .field-row .field {
   flex: 1;
+}
+
+.field-hint {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  margin: 0.4rem 0 0;
 }
 
 select {

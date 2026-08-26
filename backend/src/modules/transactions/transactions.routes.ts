@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import {
+  cancelRecurringHandler,
   createTransactionHandler,
   deleteTransactionHandler,
   exportTransactionsHandler,
@@ -23,4 +24,5 @@ transactionsRouter.get("/summary", asyncHandler(getSummaryHandler));
 transactionsRouter.get("/daily-series", asyncHandler(getDailySeriesHandler));
 transactionsRouter.get("/export", asyncHandler(exportTransactionsHandler));
 transactionsRouter.patch("/:id", asyncHandler(updateTransactionHandler));
+transactionsRouter.delete("/:id/recurring", asyncHandler(cancelRecurringHandler));
 transactionsRouter.delete("/:id", asyncHandler(deleteTransactionHandler));

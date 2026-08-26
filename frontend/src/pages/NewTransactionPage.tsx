@@ -43,6 +43,8 @@ export function NewTransactionPage() {
   const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [splitType, setSplitType] = useState<"none" | "equal">("none");
   const [isPrivate, setIsPrivate] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringMonths, setRecurringMonths] = useState("12");
 
   const isIncome = transactionType === "income";
 
@@ -107,8 +109,13 @@ export function NewTransactionPage() {
     setError(null);
 
     const parsedAmount = Number(amount.replace(",", "."));
+    const parsedMonths = Number(recurringMonths);
     if (!description.trim() || !accountId || !payerId || !occurredAt || !(parsedAmount > 0)) {
       setError("Preencha descrição, valor, conta e pagador.");
+      return;
+    }
+    if (isRecurring && (!Number.isInteger(parsedMonths) || parsedMonths < 2 || parsedMonths > 36)) {
+      setError("A repetição precisa ser entre 2 e 36 meses.");
       return;
     }
 
@@ -127,9 +134,16 @@ export function NewTransactionPage() {
           occurredAt,
           splitType: isIncome ? "none" : splitType,
           isPrivate: isIncome ? false : isPrivate,
+          recurringMonths: isRecurring ? parsedMonths : null,
         },
       });
-      showToast(isIncome ? "Receita salva" : "Despesa salva");
+      showToast(
+        isRecurring
+          ? `${isIncome ? "Receita" : "Despesa"} recorrente salva (${parsedMonths} meses)`
+          : isIncome
+            ? "Receita salva"
+            : "Despesa salva"
+      );
       navigate("/dashboard");
     } catch (err) {
       setError(
@@ -262,6 +276,29 @@ export function NewTransactionPage() {
               ))}
             </select>
           </div>
+
+          <label className="checkbox-field">
+            <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
+            {isIncome ? "Entrada recorrente (salário...)" : "Despesa recorrente (assinatura, aluguel...)"}
+          </label>
+          {isRecurring && (
+            <div className="field">
+              <label htmlFor="recurringMonths">Repetir por quantos meses</label>
+              <input
+                id="recurringMonths"
+                type="number"
+                inputMode="numeric"
+                min={2}
+                max={36}
+                value={recurringMonths}
+                onChange={(e) => setRecurringMonths(e.target.value)}
+              />
+              <p className="field-hint">
+                Lança {description.trim() ? `"${description.trim()}"` : "esse valor"} todo mês, a partir de{" "}
+                {occurredAt ? new Date(`${occurredAt}T00:00:00`).toLocaleDateString("pt-BR") : "hoje"}, já de uma vez.
+              </p>
+            </div>
+          )}
 
           {!isIncome && (
             <>

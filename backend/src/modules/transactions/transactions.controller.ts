@@ -6,8 +6,10 @@ import {
   InvalidCategoryError,
   InvalidMonthError,
   InvalidPayerError,
+  InvalidRecurrenceError,
   TransactionNotFoundError,
   UnsupportedSplitTypeError,
+  cancelRecurringForUser,
   createTransaction,
   deleteTransactionForUser,
   exportTransactionsForUser,
@@ -34,6 +36,7 @@ export async function createTransactionHandler(req: Request, res: Response) {
     occurredAt,
     isPrivate,
     splitType,
+    recurringMonths,
   } = req.body ?? {};
 
   if (
@@ -43,7 +46,8 @@ export async function createTransactionHandler(req: Request, res: Response) {
     !isNonEmptyString(occurredAt) ||
     typeof amount !== "number" ||
     amount <= 0 ||
-    (transactionType !== undefined && transactionType !== "expense" && transactionType !== "income")
+    (transactionType !== undefined && transactionType !== "expense" && transactionType !== "income") ||
+    (recurringMonths !== undefined && recurringMonths !== null && typeof recurringMonths !== "number")
   ) {
     res.status(400).json({
       error: "accountId, payerId, description, amount and occurredAt are required",
@@ -62,6 +66,7 @@ export async function createTransactionHandler(req: Request, res: Response) {
       occurredAt,
       isPrivate: Boolean(isPrivate),
       splitType: (splitType as SplitType) ?? "none",
+      recurring: typeof recurringMonths === "number" ? { months: recurringMonths } : undefined,
     });
     res.status(201).json(transaction);
   } catch (err) {
@@ -73,7 +78,8 @@ export async function createTransactionHandler(req: Request, res: Response) {
       err instanceof InvalidAccountError ||
       err instanceof InvalidPayerError ||
       err instanceof InvalidCategoryError ||
-      err instanceof UnsupportedSplitTypeError
+      err instanceof UnsupportedSplitTypeError ||
+      err instanceof InvalidRecurrenceError
     ) {
       res.status(400).json({ error: err.constructor.name });
       return;
@@ -232,6 +238,21 @@ export async function deleteTransactionHandler(req: Request, res: Response) {
   try {
     await deleteTransactionForUser(req.user!.id, req.params.id);
     res.status(204).send();
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
+      res.status(404).json({ error: "transaction not found" });
+      return;
+    }
+    throw err;
+  }
+}
+
+// Cancels a recurring series from this occurrence onward (this one + every
+// future one); past occurrences stay in the ledger untouched.
+export async function cancelRecurringHandler(req: Request, res: Response) {
+  try {
+    const result = await cancelRecurringForUser(req.user!.id, req.params.id);
+    res.status(200).json(result);
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
       res.status(404).json({ error: "transaction not found" });

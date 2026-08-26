@@ -21,6 +21,14 @@ export interface TransactionRow {
   occurredAt: string;
   isPrivate: boolean;
   splitType: SplitType;
+  // Set only on transactions generated as part of a recurring series (a
+  // subscription, rent, salary...). recurringGroupId is the id of the first
+  // occurrence in the series (shared by every occurrence, including that
+  // first one); recurringIndex/recurringTotal locate it within the series
+  // (e.g. 3 of 12). Plain one-off transactions leave all three null.
+  recurringGroupId: string | null;
+  recurringIndex: number | null;
+  recurringTotal: number | null;
 }
 
 export interface TransactionListRow extends TransactionRow {
@@ -47,6 +55,9 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
     occurredAt: data.occurredAt,
     isPrivate: data.isPrivate,
     splitType: data.splitType,
+    recurringGroupId: data.recurringGroupId ?? null,
+    recurringIndex: data.recurringIndex ?? null,
+    recurringTotal: data.recurringTotal ?? null,
   };
 }
 
@@ -55,7 +66,7 @@ async function loadCategoriesMap(groupId: string): Promise<Map<string, { name: s
   return new Map(categories.map((c) => [c.id, { name: c.name, emoji: c.emoji }]));
 }
 
-export async function insertTransaction(input: {
+export interface NewTransactionInput {
   groupId: string;
   accountId: string;
   accountType: "personal" | "joint";
@@ -69,26 +80,72 @@ export async function insertTransaction(input: {
   occurredAt: string;
   isPrivate: boolean;
   splitType: SplitType;
-}): Promise<TransactionRow> {
-  const ref = await transactionsCol.add({
-    groupId: input.groupId,
-    accountId: input.accountId,
-    accountType: input.accountType,
-    accountOwnerId: input.accountOwnerId,
-    categoryId: input.categoryId,
-    payerId: input.payerId,
-    createdBy: input.createdBy,
-    description: input.description,
-    amountCents: toCents(input.amount),
-    transactionType: input.transactionType,
-    occurredAt: input.occurredAt,
-    isPrivate: input.isPrivate,
-    splitType: input.splitType,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
+}
+
+export async function insertTransaction(input: NewTransactionInput): Promise<TransactionRow> {
+  const [row] = await insertTransactionSeries(input, [input.occurredAt]);
+  return row;
+}
+
+// Writes every occurrence of a recurring series (or, with a single-element
+// `occurredAtDates`, one plain transaction -- insertTransaction above is
+// exactly that case) in one batch. Doc refs are allocated up front so the
+// first occurrence's id is known before the write, which is what every
+// occurrence (including that first one) stores as recurringGroupId -- the
+// handle later used to find/cancel "this and every future occurrence".
+export async function insertTransactionSeries(
+  base: Omit<NewTransactionInput, "occurredAt">,
+  occurredAtDates: string[]
+): Promise<TransactionRow[]> {
+  const refs = occurredAtDates.map(() => transactionsCol.doc());
+  const isRecurring = occurredAtDates.length > 1;
+  const recurringGroupId = isRecurring ? refs[0].id : null;
+  const amountCents = toCents(base.amount);
+
+  const batch = db.batch();
+  refs.forEach((ref, index) => {
+    batch.set(ref, {
+      groupId: base.groupId,
+      accountId: base.accountId,
+      accountType: base.accountType,
+      accountOwnerId: base.accountOwnerId,
+      categoryId: base.categoryId,
+      payerId: base.payerId,
+      createdBy: base.createdBy,
+      description: base.description,
+      amountCents,
+      transactionType: base.transactionType,
+      occurredAt: occurredAtDates[index],
+      isPrivate: base.isPrivate,
+      splitType: base.splitType,
+      recurringGroupId,
+      recurringIndex: isRecurring ? index + 1 : null,
+      recurringTotal: isRecurring ? occurredAtDates.length : null,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
-  const doc = await ref.get();
-  return toTransactionRow(doc);
+  await batch.commit();
+
+  const docs = await Promise.all(refs.map((ref) => ref.get()));
+  return docs.map(toTransactionRow);
+}
+
+// Every occurrence sharing a recurringGroupId -- a single equality filter,
+// no composite index needed. The caller (cancelRecurringForUser) filters
+// down to "this one and the future ones" in memory; a series tops out at
+// MAX_RECURRENCE_MONTHS (36) rows, cheap either way.
+export async function findRecurringSeries(recurringGroupId: string): Promise<TransactionRow[]> {
+  const snapshot = await transactionsCol.where("recurringGroupId", "==", recurringGroupId).get();
+  return snapshot.docs.map(toTransactionRow);
+}
+
+export async function deleteTransactionsBatch(transactionIds: string[]): Promise<void> {
+  if (transactionIds.length === 0) return;
+  await Promise.all(transactionIds.map((id) => deleteSplitsForTransaction(id)));
+  const batch = db.batch();
+  transactionIds.forEach((id) => batch.delete(transactionsCol.doc(id)));
+  await batch.commit();
 }
 
 // Doc ID = userId within the subcollection -- matches SQL's

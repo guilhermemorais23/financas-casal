@@ -1,11 +1,13 @@
 import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { parseMonthRange } from "../../utils/month";
+import { addMonthsToDate, parseMonthRange } from "../../utils/month";
 import { splitEvenly } from "../../utils/money";
 import {
   deleteSplitsForTransaction,
   deleteTransaction,
+  deleteTransactionsBatch,
+  findRecurringSeries,
   findTransactionById,
   findTransactionsVisibleTo,
   getBalanceRows,
@@ -13,6 +15,7 @@ import {
   getMonthlySummary,
   insertSplits,
   insertTransaction,
+  insertTransactionSeries,
   updateTransaction,
   type SplitType,
   type SummaryScope,
@@ -25,8 +28,16 @@ export class InvalidPayerError extends Error {}
 export class InvalidCategoryError extends Error {}
 export class UnsupportedSplitTypeError extends Error {}
 export class TransactionNotFoundError extends Error {}
+export class InvalidRecurrenceError extends Error {}
 
 const SUPPORTED_SPLIT_TYPES: SplitType[] = ["none", "equal"];
+
+// A recurring series is generated whole at creation time (no cron): 2
+// occurrences is the smallest thing worth calling "recurring" at all, 36
+// (3 years of a subscription/rent) is a sane upper bound so nobody fat-fingers
+// a 4-digit month count into a Firestore batch write.
+export const MIN_RECURRENCE_MONTHS = 2;
+export const MAX_RECURRENCE_MONTHS = 36;
 
 export interface CreateTransactionInput {
   accountId: string;
@@ -38,6 +49,10 @@ export interface CreateTransactionInput {
   occurredAt: string;
   isPrivate: boolean;
   splitType: SplitType;
+  // When set, generates `months` occurrences (this one plus months-1 more,
+  // one per month, same day-of-month clamped to shorter months) in one go
+  // instead of just this single transaction.
+  recurring?: { months: number };
 }
 
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
@@ -64,34 +79,50 @@ export async function createTransaction(userId: string, input: CreateTransaction
     throw new UnsupportedSplitTypeError();
   }
 
-  const transaction = await insertTransaction({
-    groupId,
-    accountId: account.id,
-    accountType: account.type,
-    accountOwnerId: account.ownerUserId,
-    categoryId: input.categoryId,
-    payerId: input.payerId,
-    createdBy: userId,
-    description: input.description,
-    amount: input.amount,
-    transactionType: input.transactionType,
-    occurredAt: input.occurredAt,
-    isPrivate: input.isPrivate,
-    splitType: input.splitType,
-  });
+  let occurredAtDates = [input.occurredAt];
+  if (input.recurring) {
+    const { months } = input.recurring;
+    if (!Number.isInteger(months) || months < MIN_RECURRENCE_MONTHS || months > MAX_RECURRENCE_MONTHS) {
+      throw new InvalidRecurrenceError();
+    }
+    occurredAtDates = Array.from({ length: months }, (_, index) => addMonthsToDate(input.occurredAt, index));
+  }
+
+  const transactions = await insertTransactionSeries(
+    {
+      groupId,
+      accountId: account.id,
+      accountType: account.type,
+      accountOwnerId: account.ownerUserId,
+      categoryId: input.categoryId,
+      payerId: input.payerId,
+      createdBy: userId,
+      description: input.description,
+      amount: input.amount,
+      transactionType: input.transactionType,
+      isPrivate: input.isPrivate,
+      splitType: input.splitType,
+    },
+    occurredAtDates
+  );
 
   // Splits model who owes whom on a shared expense; income has no such debt.
-  // Divides evenly across however many members the group actually has.
+  // Divides evenly across however many members the group actually has. Every
+  // occurrence of a recurring series gets its own splits, same as a one-off.
   if (input.transactionType === "expense" && input.splitType === "equal" && members.length > 1) {
     const shares = splitEvenly(input.amount, members.length);
-    await insertSplits(
-      groupId,
-      transaction.id,
-      members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
+    await Promise.all(
+      transactions.map((transaction) =>
+        insertSplits(
+          groupId,
+          transaction.id,
+          members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
+        )
+      )
     );
   }
 
-  return transaction;
+  return transactions[0];
 }
 
 export async function listTransactions(
@@ -164,6 +195,29 @@ export async function deleteTransactionForUser(userId: string, transactionId: st
     throw new TransactionNotFoundError();
   }
   await deleteTransaction(transactionId);
+}
+
+// "Cancel this subscription/rent/salary" -- deletes this occurrence and
+// every later one in the same recurring series, leaving past occurrences
+// (already-happened months) untouched in the ledger.
+export async function cancelRecurringForUser(userId: string, transactionId: string) {
+  const groupId = await requireGroupId(userId);
+  const transaction = await findTransactionById(transactionId);
+  if (
+    !transaction ||
+    transaction.groupId !== groupId ||
+    !transaction.recurringGroupId ||
+    !canManageTransaction(userId, transaction)
+  ) {
+    throw new TransactionNotFoundError();
+  }
+
+  const series = await findRecurringSeries(transaction.recurringGroupId);
+  const idsToDelete = series
+    .filter((occurrence) => occurrence.occurredAt >= transaction.occurredAt)
+    .map((occurrence) => occurrence.id);
+  await deleteTransactionsBatch(idsToDelete);
+  return { cancelledCount: idsToDelete.length };
 }
 
 export interface UpdateTransactionInput {
