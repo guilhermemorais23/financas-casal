@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { to: "/transactions/new", label: "Nova despesa", icon: "➕" },
   { to: "/debts", label: "Dívidas", icon: "💳" },
   { to: "/cards", label: "Cartão conjunto", icon: "🧾" },
+  { to: "/shopping", label: "Lista de compras", icon: "🛒" },
   { to: "/goals", label: "Metas", icon: "🎯" },
   { to: "/reports", label: "Relatórios", icon: "📊" },
   { to: "/investments", label: "Investimentos", icon: "📈" },

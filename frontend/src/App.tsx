@@ -15,6 +15,7 @@ import { NewTransactionPage } from "./pages/NewTransactionPage";
 import { ParPage } from "./pages/ParPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { ShoppingListPage } from "./pages/ShoppingListPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 
 function App() {
@@ -111,6 +112,14 @@ function App() {
             element={
               <ProtectedRoute requireGroup>
                 <InvestmentsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/shopping"
+            element={
+              <ProtectedRoute requireGroup>
+                <ShoppingListPage />
               </ProtectedRoute>
             }
           />
