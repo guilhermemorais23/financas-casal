@@ -58,7 +58,8 @@ function statementMonthFor(purchaseDate: string, closingDay: number): string {
   return day <= closingDay ? monthParam : addMonths(monthParam, 1);
 }
 
-function currentStatementMonth(closingDay: number): string {
+// Exported for the same reason as dueDateFor below.
+export function currentStatementMonth(closingDay: number): string {
   return statementMonthFor(new Date().toISOString().slice(0, 10), closingDay);
 }
 
@@ -66,7 +67,9 @@ function currentStatementMonth(closingDay: number): string {
 // 28th, due the 5th of the following month) but a same-month cycle is
 // possible too (closes the 5th, due the 12th) -- compare the two days to
 // know which month the due date actually falls in.
-function dueDateFor(statementMonth: string, closingDay: number, dueDay: number): string {
+// Exported: the reminders job (outside any per-user request) needs this
+// same due-date math to know when a card's current statement is coming due.
+export function dueDateFor(statementMonth: string, closingDay: number, dueDay: number): string {
   const targetMonth = dueDay > closingDay ? statementMonth : addMonths(statementMonth, 1);
   return `${targetMonth}-${String(dueDay).padStart(2, "0")}`;
 }

@@ -97,6 +97,16 @@ export async function findCardsVisibleTo(groupId: string, userId: string): Promi
   return [...jointSnap.docs, ...ownSnap.docs].map(toCardRow).sort((a, b) => (a.id < b.id ? 1 : -1));
 }
 
+// Every card in the group regardless of owner -- unlike findCardsVisibleTo
+// this isn't scoped to "what one user can see" (a single equality filter,
+// no new index). Used by the reminders job, which runs outside any one
+// user's request and decides per-card who to email based on ownerUserId
+// itself (null -> everyone in the group, set -> just that owner).
+export async function findCardsByGroupId(groupId: string): Promise<CardRow[]> {
+  const snapshot = await cardsCol.where("groupId", "==", groupId).get();
+  return snapshot.docs.map(toCardRow);
+}
+
 export async function findCardById(cardId: string): Promise<CardRow | null> {
   const doc = await cardsCol.doc(cardId).get();
   if (!doc.exists) return null;

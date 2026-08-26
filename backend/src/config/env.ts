@@ -21,4 +21,9 @@ export const env = {
   // Optional: no key means the welcome email is skipped (logged, not thrown).
   resendApiKey: process.env.RESEND_API_KEY,
   resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "PAR. <onboarding@resend.dev>",
+  // Shared secret for POST /api/reminders/run -- an external daily cron
+  // (same cron-job.org setup already used for the health-check keep-alive)
+  // calls it with this as the x-cron-secret header. Unset means the route
+  // refuses every call, same "off by default" posture as a missing Resend key.
+  cronSecret: process.env.CRON_SECRET,
 };

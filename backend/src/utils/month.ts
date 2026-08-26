@@ -45,6 +45,15 @@ export function addMonthsToDate(dateParam: string, count: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+// Whole days from one "YYYY-MM-DD" to another (positive when `toDate` is
+// later). Used by the reminders job to know how many days are left until a
+// card statement's due date.
+export function daysBetween(fromDate: string, toDate: string): number {
+  const from = new Date(`${fromDate}T00:00:00Z`).getTime();
+  const to = new Date(`${toDate}T00:00:00Z`).getTime();
+  return Math.round((to - from) / 86_400_000);
+}
+
 export interface MonthRange {
   periodMonth: string;
   monthStart: string;

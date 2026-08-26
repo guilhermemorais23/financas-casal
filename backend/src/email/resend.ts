@@ -37,3 +37,34 @@ export async function sendWelcomeEmail(to: string, displayName: string): Promise
     console.error("Failed to send welcome email to", to, err);
   }
 }
+
+// Same best-effort contract as sendWelcomeEmail: a missing key or a failed
+// send is logged, never thrown -- a reminder is a courtesy, not something
+// that should ever break the daily cron run for every other group.
+export async function sendReminderEmail(to: string, subject: string, bodyHtml: string): Promise<void> {
+  if (!resend) {
+    console.warn("RESEND_API_KEY not set — skipping reminder email to", to);
+    return;
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: env.resendFromEmail,
+      to,
+      subject,
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+          ${bodyHtml}
+          <p style="margin-top: 24px; font-size: 12px; color: #888;">PAR. — finanças em grupo, sem atrito.</p>
+        </div>
+      `,
+    });
+    if (error) {
+      console.error("Resend rejected reminder email to", to, error);
+    } else {
+      console.log("Reminder email sent to", to, "id=", data?.id);
+    }
+  } catch (err) {
+    console.error("Failed to send reminder email to", to, err);
+  }
+}
