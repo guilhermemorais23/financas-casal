@@ -235,3 +235,19 @@ export async function answerAssistantMessage(userId: string, message: string): P
   const groupId = await requireGroupId(userId);
   return processAssistantMessage(userId, groupId, message, undefined);
 }
+
+// Opens the in-app chat widget with something to say instead of a blank
+// box -- one specific, grounded observation plus an invitation to go
+// deeper, so the assistant reads as paying attention rather than waiting.
+export async function generateGreeting(userId: string): Promise<string> {
+  const groupId = await requireGroupId(userId);
+  const financeContext = await buildFinanceContext(userId, groupId);
+
+  const prompt = `Você é o assistente financeiro do app PAR. (finanças de casal). Você está iniciando a conversa -- a pessoa ainda não escreveu nada, só abriu o chat.
+
+${financeContext.text}
+
+Escreva uma única mensagem curta (1-2 frases, sem emojis, sem saudação genérica tipo "olá") puxando assunto com base em algo real dos dados acima: a categoria que mais pesou, uma dívida em aberto, o progresso de uma meta, ou -- se faltar objetivo financeiro e reserva -- pergunte isso. Termine com uma pergunta curta convidando a pessoa a continuar. Responda só com o texto da mensagem, sem JSON, sem aspas.`;
+
+  return askGemini(prompt);
+}

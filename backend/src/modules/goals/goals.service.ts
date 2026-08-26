@@ -13,6 +13,7 @@ export class InvalidContributionError extends Error {}
 export interface CreateGoalInput {
   name: string;
   emoji: string | null;
+  photoDataUrl: string | null;
   targetAmount: number;
   deadline: string | null;
 }
@@ -23,6 +24,7 @@ export async function createGoal(userId: string, input: CreateGoalInput) {
     groupId,
     name: input.name,
     emoji: input.emoji,
+    photoDataUrl: input.photoDataUrl,
     targetAmount: input.targetAmount,
     deadline: input.deadline,
   });

@@ -5,39 +5,9 @@ import { apiRequest, ApiError } from "../api/client";
 import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
 import { firebaseAuth } from "../firebase";
+import { compressToSquareDataUrl } from "../utils/imageCompression";
 
 const AVATAR_SIZE = 160;
-
-// Resizes/crops to a small square and re-encodes as JPEG so the resulting
-// data URL comfortably clears the backend's size cap regardless of how big
-// the original photo was -- no server-side image processing needed.
-function compressToAvatarDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error);
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("Não foi possível ler a imagem"));
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = AVATAR_SIZE;
-        canvas.height = AVATAR_SIZE;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Canvas indisponível"));
-          return;
-        }
-        const side = Math.min(img.width, img.height);
-        const sx = (img.width - side) / 2;
-        const sy = (img.height - side) / 2;
-        ctx.drawImage(img, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 export function ProfileSettingsModal({ onClose }: { onClose: () => void }) {
   const { user, token, refreshUser } = useAuth();
@@ -60,7 +30,7 @@ export function ProfileSettingsModal({ onClose }: { onClose: () => void }) {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await compressToAvatarDataUrl(file);
+      const dataUrl = await compressToSquareDataUrl(file, AVATAR_SIZE);
       setPhotoDataUrl(dataUrl);
     } catch {
       setError("Não foi possível processar essa imagem.");

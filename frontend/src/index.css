@@ -1082,6 +1082,10 @@ input:focus {
   flex-shrink: 0;
 }
 
+.circular-progress circle:last-child {
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.16, 0.84, 0.44, 1), stroke 0.6s ease;
+}
+
 .circular-progress-center {
   position: absolute;
   inset: 0;
@@ -1435,7 +1439,7 @@ input:focus {
   height: 100%;
   background: var(--olive-500);
   border-radius: 999px;
-  transition: width 0.2s, background-color 0.2s;
+  transition: width 0.6s cubic-bezier(0.16, 0.84, 0.44, 1), background-color 0.6s ease;
 }
 
 .progress-fill.tone-accent {
@@ -1515,6 +1519,36 @@ input:focus {
 
 .stat-delta.neutral {
   color: var(--color-text-muted);
+}
+
+/* Dashboard -- accumulated spending line chart ---------------------------- */
+
+.accumulated-chart {
+  margin-top: 0.5rem;
+}
+
+.accumulated-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.accumulated-chart-axis-label {
+  font-size: 10px;
+  fill: var(--color-text-muted);
+}
+
+.accumulated-chart-tooltip {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.accumulated-chart-tooltip strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Investments -- quotes line chart ---------------------------------------- */
@@ -1688,6 +1722,44 @@ input:focus {
   padding: 0.1rem 0.4rem;
 }
 
+.dashed-add-card {
+  width: 100%;
+  min-height: 96px;
+  background: var(--color-primary-soft);
+  border: 2px dashed color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.dashed-add-card:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-primary-soft));
+  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+}
+
+.dashed-add-card-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--color-primary);
+}
+
+.goal-card-cover {
+  display: block;
+  width: calc(100% + 3rem);
+  height: 140px;
+  margin: -1.5rem -1.5rem 1rem;
+  border-radius: var(--radius) var(--radius) 0 0;
+  object-fit: cover;
+}
+
 .soon-badge {
   font-size: 0.7rem;
   font-weight: 700;
@@ -1747,50 +1819,15 @@ input:focus {
   }
 }
 
-/* Global assistant widget -- mirrors .global-fab but on the opposite
-   corner, so "nova despesa" and "assistente" never compete for the same
-   spot. -------------------------------------------------------------- */
-
-.assistant-fab {
-  position: fixed;
-  bottom: 1.5rem;
-  left: 1.5rem;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  background: var(--olive-500);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.6rem;
-  line-height: 1;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--olive-500) 40%, transparent);
-  z-index: 45;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.assistant-fab:hover {
-  transform: scale(1.06);
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--olive-500) 50%, transparent);
-}
-
-@media (max-width: 720px) {
-  .assistant-fab {
-    bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
-    left: 1.1rem;
-    width: 50px;
-    height: 50px;
-    font-size: 1.4rem;
-  }
-}
+/* Global assistant widget -- opened from a button in the sidebar footer
+   (next to the theme toggle), not a floating FAB, so it never competes
+   with the "nova despesa" + button for the same corner. ---------------- */
 
 .assistant-panel {
   position: fixed;
-  bottom: calc(1.5rem + 64px);
-  left: 1.5rem;
+  bottom: 1.5rem;
+  /* Past the 220px sidebar on desktop, where it's always visible. */
+  left: calc(220px + 1.5rem);
   width: 340px;
   max-width: calc(100vw - 2rem);
   height: 460px;
@@ -1807,7 +1844,7 @@ input:focus {
 
 @media (max-width: 720px) {
   .assistant-panel {
-    bottom: calc(4.75rem + 58px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
     left: 0.75rem;
   }
 }
@@ -1880,6 +1917,12 @@ input:focus {
 
 .assistant-input-row input {
   flex: 1;
+  min-width: 0;
+}
+
+.assistant-input-row .btn {
+  width: auto;
+  flex-shrink: 0;
 }
 
 /* Forms ----------------------------------------------------------------------- */

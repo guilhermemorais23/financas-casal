@@ -7,6 +7,7 @@ export interface GoalRow {
   groupId: string;
   name: string;
   emoji: string | null;
+  photoDataUrl: string | null;
   targetAmount: string;
   currentAmount: string;
   deadline: string | null;
@@ -22,6 +23,7 @@ function toGoalRow(doc: FirebaseFirestore.DocumentSnapshot): GoalRow {
     groupId: data.groupId,
     name: data.name,
     emoji: data.emoji ?? null,
+    photoDataUrl: data.photoDataUrl ?? null,
     targetAmount: fromCents(data.targetAmountCents),
     currentAmount: fromCents(data.currentAmountCents),
     deadline: data.deadline ?? null,
@@ -33,6 +35,7 @@ export async function insertGoal(input: {
   groupId: string;
   name: string;
   emoji: string | null;
+  photoDataUrl: string | null;
   targetAmount: number;
   deadline: string | null;
 }): Promise<GoalRow> {
@@ -40,6 +43,7 @@ export async function insertGoal(input: {
     groupId: input.groupId,
     name: input.name,
     emoji: input.emoji,
+    photoDataUrl: input.photoDataUrl,
     targetAmountCents: toCents(input.targetAmount),
     currentAmountCents: 0,
     deadline: input.deadline,

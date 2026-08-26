@@ -2,6 +2,8 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { AccumulatedSpendingChart, type DailyTrendPoint } from "../components/AccumulatedSpendingChart";
+import { AnimatedNumber } from "../components/AnimatedNumber";
 import { CircularProgress } from "../components/CircularProgress";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
@@ -105,6 +107,7 @@ export function DashboardPage() {
     () => readCache(monthKey("personalPrevMonthTx")) ?? []
   );
   const [recent, setRecent] = useState<TransactionListRow[]>(() => readCache(monthKey("recent")) ?? []);
+  const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[]>(() => readCache(monthKey("dailyTrend")) ?? []);
   const [debts, setDebts] = useState<DebtRow[]>(() => readCache(staticKey("debts")) ?? []);
   const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(monthKey("summary")));
   const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(monthKey("budget")));
@@ -136,6 +139,9 @@ export function DashboardPage() {
         { token }
       );
       const budgetPromise = apiRequest<BudgetResponse>(`/budgets/current?month=${selectedMonth}`, { token });
+      const dailyTrendPromise = apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${selectedMonth}`, {
+        token,
+      });
 
       const knownPersonalAccountId = group?.accounts.find(
         (account) => account.type === "personal" && account.ownerUserId === user?.id
@@ -154,7 +160,7 @@ export function DashboardPage() {
         );
       }
 
-      const [groupRes, personalMonthRes, personalPrevMonthRes, recentRes, debtsRes, summaryRes, budgetRes] =
+      const [groupRes, personalMonthRes, personalPrevMonthRes, recentRes, debtsRes, summaryRes, budgetRes, dailyTrendRes] =
         await Promise.all([
           groupPromise,
           personalTx(selectedMonth),
@@ -163,6 +169,7 @@ export function DashboardPage() {
           debtsPromise,
           summaryPromise,
           budgetPromise,
+          dailyTrendPromise,
         ]);
 
       setGroup(groupRes);
@@ -172,6 +179,7 @@ export function DashboardPage() {
       setDebts(debtsRes);
       setSummary(summaryRes);
       setBudget(budgetRes);
+      setDailyTrend(dailyTrendRes);
       writeCache(sKey("group"), groupRes);
       writeCache(mKey("personalMonthTx"), personalMonthRes);
       writeCache(mKey("personalPrevMonthTx"), personalPrevMonthRes);
@@ -179,6 +187,7 @@ export function DashboardPage() {
       writeCache(sKey("debts"), debtsRes);
       writeCache(mKey("summary"), summaryRes);
       writeCache(mKey("budget"), budgetRes);
+      writeCache(mKey("dailyTrend"), dailyTrendRes);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
     } finally {
@@ -274,7 +283,9 @@ export function DashboardPage() {
           <span className="stat-card-circle" />
           <span className="stat-card-circle stat-card-circle-2" />
           <p className="label">Você tem no mês</p>
-          <p className="value">{formatCurrency(income - expense)}</p>
+          <p className="value">
+            <AnimatedNumber value={income - expense} />
+          </p>
         </div>
 
         <div className="stat-row wrap">
@@ -299,6 +310,23 @@ export function DashboardPage() {
             )}
           </div>
         </div>
+
+        {(cap !== null || totalDebtRemaining > 0) && (
+          <div className="stat-row wrap">
+            {cap !== null && (
+              <div className="stat-box">
+                <p className="label">Orçamento usado</p>
+                <p className="value-sm">{Math.round(budgetRawPercent)}%</p>
+              </div>
+            )}
+            {totalDebtRemaining > 0 && (
+              <div className="stat-box">
+                <p className="label">Dívidas em aberto</p>
+                <p className="value-sm">{formatCurrency(totalDebtRemaining)}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="dashboard-grid">
           <div className="dashboard-col">
@@ -418,6 +446,16 @@ export function DashboardPage() {
           </div>
 
           <div className="dashboard-col">
+            {dailyTrend.length > 0 && (
+              <div className="card">
+                <p className="card-title">Gastos acumulados</p>
+                <p className="card-subtitle">
+                  {monthLongName(month)} · {user?.displayName?.split(" ")[0]}
+                </p>
+                <AccumulatedSpendingChart points={dailyTrend} />
+              </div>
+            )}
+
             <div className="card">
               <div className="section-header">
                 <p className="card-title">Extrato do mês</p>

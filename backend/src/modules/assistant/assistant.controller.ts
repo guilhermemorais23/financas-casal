@@ -4,6 +4,7 @@ import {
   answerAssistantMessage,
   AssistantNotConfiguredError,
   createTelegramLinkCode,
+  generateGreeting,
   handleTelegramMessage,
 } from "./assistant.service";
 import { downloadTelegramVoice } from "./telegram.client";
@@ -29,6 +30,19 @@ export async function chatHandler(req: Request, res: Response) {
   try {
     const reply = await answerAssistantMessage(req.user!.id, message.trim());
     res.status(200).json({ reply });
+  } catch (err) {
+    if (err instanceof AssistantNotConfiguredError) {
+      res.status(503).json({ error: "assistente ainda não configurado" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function greetingHandler(req: Request, res: Response) {
+  try {
+    const text = await generateGreeting(req.user!.id);
+    res.status(200).json({ text });
   } catch (err) {
     if (err instanceof AssistantNotConfiguredError) {
       res.status(503).json({ error: "assistente ainda não configurado" });

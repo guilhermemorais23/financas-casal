@@ -47,6 +47,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const { theme, toggle } = useTheme();
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isAdminNavOpen, setIsAdminNavOpen] = useState(false);
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
   const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[] | null>(null);
@@ -180,6 +181,17 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
             <button
               type="button"
               className="theme-toggle"
+              onClick={() => {
+                setIsAssistantOpen((open) => !open);
+                setIsNavOpen(false);
+              }}
+              title="Assistente PAR."
+            >
+              💬
+            </button>
+            <button
+              type="button"
+              className="theme-toggle"
               onClick={toggle}
               title={theme === "dark" ? "Tema claro" : "Tema escuro"}
             >
@@ -214,7 +226,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         </Link>
       )}
 
-      <GlobalAssistant />
+      <GlobalAssistant isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
     </div>
   );
 }
