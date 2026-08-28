@@ -522,7 +522,10 @@ export function CardsPage() {
             💞 Cartões do grupo
           </p>
           {jointCards.length === 0 ? (
-            <p className="empty-state">Nenhum cartão conjunto ainda.</p>
+            <div className="empty-state-friendly">
+              <span className="empty-state-emoji">🧾</span>
+              <p>Nenhum cartão do casal cadastrado ainda.</p>
+            </div>
           ) : (
             <div className="page-stack">{jointCards.map(renderCard)}</div>
           )}
@@ -533,7 +536,10 @@ export function CardsPage() {
             👤 Seus cartões pessoais
           </p>
           {personalCards.length === 0 ? (
-            <p className="empty-state">Nenhum cartão pessoal ainda.</p>
+            <div className="empty-state-friendly">
+              <span className="empty-state-emoji">💳</span>
+              <p>Nenhum cartão pessoal cadastrado ainda.</p>
+            </div>
           ) : (
             <div className="page-stack">{personalCards.map(renderCard)}</div>
           )}

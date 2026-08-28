@@ -2,12 +2,14 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmojiPicker } from "./EmojiPicker";
+import { useToast } from "./ToastProvider";
 import { compressToSquareDataUrl } from "../utils/imageCompression";
 
 const PHOTO_SIZE = 240;
 
 export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { token } = useAuth();
+  const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState("");
@@ -53,6 +55,7 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
       });
       onCreated();
       onClose();
+      showToast("Meta criada");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar a meta");
     } finally {

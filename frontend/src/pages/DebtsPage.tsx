@@ -320,7 +320,10 @@ export function DebtsPage() {
             💞 Dívidas do grupo
           </p>
           {jointDebts.length === 0 ? (
-            <p className="empty-state">Nenhuma dívida conjunta ainda.</p>
+            <div className="empty-state-friendly">
+              <span className="empty-state-emoji">🎉</span>
+              <p>Sem dívidas do casal — tudo em dia!</p>
+            </div>
           ) : (
             <div className="page-stack">{jointDebts.map(renderDebtCard)}</div>
           )}
@@ -331,7 +334,10 @@ export function DebtsPage() {
             👤 Suas dívidas pessoais
           </p>
           {personalDebts.length === 0 ? (
-            <p className="empty-state">Nenhuma dívida pessoal ainda.</p>
+            <div className="empty-state-friendly">
+              <span className="empty-state-emoji">✨</span>
+              <p>Nenhuma dívida pessoal — respira aliviado.</p>
+            </div>
           ) : (
             <div className="page-stack">{personalDebts.map(renderDebtCard)}</div>
           )}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmojiPicker } from "../components/EmojiPicker";
+import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 
 interface AccountRow {
@@ -27,6 +28,7 @@ interface CategoryRow {
 export function NewTransactionPage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -127,6 +129,7 @@ export function NewTransactionPage() {
           isPrivate: isIncome ? false : isPrivate,
         },
       });
+      showToast(isIncome ? "Receita salva" : "Despesa salva");
       navigate("/dashboard");
     } catch (err) {
       setError(
