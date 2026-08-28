@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
@@ -30,12 +31,24 @@ interface BudgetResponse {
   spent: number;
 }
 
+interface CategoryBudgetRow {
+  categoryId: string;
+  categoryName: string;
+  categoryEmoji: string | null;
+  capAmount: string | null;
+  spent: number;
+}
+
 export function AccountPage() {
   const { user, token, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [group, setGroup] = useState<GroupResponse | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
   const [capInput, setCapInput] = useState("");
+  const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgetRow[] | null>(null);
+  const [categoryCapInputs, setCategoryCapInputs] = useState<Record<string, string>>({});
+  const [savingCategoryId, setSavingCategoryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -47,13 +60,18 @@ export function AccountPage() {
   const month = currentMonthParam();
 
   async function load() {
-    const [groupRes, budgetRes] = await Promise.all([
+    const [groupRes, budgetRes, categoryBudgetsRes] = await Promise.all([
       apiRequest<GroupResponse>("/groups/me", { token }),
       apiRequest<BudgetResponse>(`/budgets/current?month=${month}`, { token }),
+      apiRequest<CategoryBudgetRow[]>(`/budgets/categories?month=${month}`, { token }),
     ]);
     setGroup(groupRes);
     setBudget(budgetRes);
     setCapInput(budgetRes.budget ? budgetRes.budget.capAmount : "");
+    setCategoryBudgets(categoryBudgetsRes);
+    setCategoryCapInputs(
+      Object.fromEntries(categoryBudgetsRes.map((row) => [row.categoryId, row.capAmount ?? ""]))
+    );
   }
 
   useEffect(() => {
@@ -81,6 +99,32 @@ export function AccountPage() {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar o orçamento");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleSaveCategoryBudget(categoryId: string) {
+    if (savingCategoryId) return;
+    setError(null);
+    const raw = (categoryCapInputs[categoryId] ?? "").trim();
+    const capAmount = raw === "" ? null : Number(raw.replace(",", "."));
+    if (capAmount !== null && !(capAmount > 0)) {
+      setError("Informe um valor válido para o teto da categoria, ou deixe em branco pra remover.");
+      return;
+    }
+
+    setSavingCategoryId(categoryId);
+    try {
+      await apiRequest(`/budgets/categories/${categoryId}?month=${month}`, {
+        method: "PUT",
+        token,
+        body: { capAmount },
+      });
+      await load();
+      showToast(capAmount === null ? "Teto da categoria removido" : "Teto da categoria salvo");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar o teto da categoria");
+    } finally {
+      setSavingCategoryId(null);
     }
   }
 
@@ -232,6 +276,47 @@ export function AccountPage() {
               {isSaving ? "Salvando..." : "Salvar orçamento"}
             </button>
           </form>
+        </div>
+
+        <div className="card">
+          <p className="card-title">Orçamento por categoria</p>
+          <p className="card-subtitle">Defina um teto pra cada categoria. Deixe em branco pra não acompanhar.</p>
+          {error && (
+            <p className="alert" role="alert">
+              {error}
+            </p>
+          )}
+          {categoryBudgets && categoryBudgets.length === 0 && (
+            <p className="empty-state">Crie categorias em "Nova despesa" pra poder definir tetos aqui.</p>
+          )}
+          {categoryBudgets?.map((row) => (
+            <div key={row.categoryId} className="category-budget-row">
+              <span className="category-budget-emoji">{row.categoryEmoji ?? "✨"}</span>
+              <div className="category-budget-info">
+                <span className="category-budget-name">{row.categoryName}</span>
+                <span className="category-budget-spent">gasto: {formatCurrency(row.spent)}</span>
+              </div>
+              <input
+                className="category-budget-input"
+                inputMode="decimal"
+                placeholder="sem teto"
+                aria-label={`Teto de ${row.categoryName}`}
+                value={categoryCapInputs[row.categoryId] ?? ""}
+                onChange={(e) =>
+                  setCategoryCapInputs((prev) => ({ ...prev, [row.categoryId]: e.target.value }))
+                }
+              />
+              <button
+                type="button"
+                className="btn-icon"
+                title={`Salvar teto de ${row.categoryName}`}
+                onClick={() => handleSaveCategoryBudget(row.categoryId)}
+                disabled={savingCategoryId === row.categoryId}
+              >
+                {savingCategoryId === row.categoryId ? "..." : "✓"}
+              </button>
+            </div>
+          ))}
         </div>
 
         <div className="card">

@@ -58,6 +58,56 @@ export async function upsertGroupBudget(input: {
   return toBudgetRow(doc);
 }
 
+// Deterministic doc gets in parallel, one per category -- avoids a Firestore
+// composite-index requirement that a `.where(groupId).where(periodMonth)`
+// query would need, and a group's category count is small enough that N
+// parallel .get()s cost nothing.
+export async function findCategoryBudgets(
+  groupId: string,
+  periodMonth: string,
+  categoryIds: string[]
+): Promise<Map<string, BudgetRow>> {
+  const docs = await Promise.all(
+    categoryIds.map((categoryId) => budgetsCol.doc(budgetDocId(groupId, periodMonth, categoryId)).get())
+  );
+  const result = new Map<string, BudgetRow>();
+  docs.forEach((doc, index) => {
+    if (doc.exists) result.set(categoryIds[index], toBudgetRow(doc));
+  });
+  return result;
+}
+
+export async function upsertCategoryBudget(input: {
+  groupId: string;
+  periodMonth: string;
+  categoryId: string;
+  capAmount: number;
+}): Promise<BudgetRow> {
+  const ref = budgetsCol.doc(budgetDocId(input.groupId, input.periodMonth, input.categoryId));
+  const existing = await ref.get();
+  await ref.set(
+    {
+      groupId: input.groupId,
+      periodMonth: input.periodMonth,
+      capAmountCents: toCents(input.capAmount),
+      categoryId: input.categoryId,
+      updatedAt: FieldValue.serverTimestamp(),
+      ...(existing.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+    },
+    { merge: true }
+  );
+  const doc = await ref.get();
+  return toBudgetRow(doc);
+}
+
+export async function deleteCategoryBudget(
+  groupId: string,
+  periodMonth: string,
+  categoryId: string
+): Promise<void> {
+  await budgetsCol.doc(budgetDocId(groupId, periodMonth, categoryId)).delete();
+}
+
 export async function getMonthlyExpenseTotal(
   groupId: string,
   monthStart: string,
