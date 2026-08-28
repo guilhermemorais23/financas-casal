@@ -4,6 +4,8 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AccumulatedSpendingChart, type DailyTrendPoint } from "../components/AccumulatedSpendingChart";
 import { AnimatedNumber } from "../components/AnimatedNumber";
+import { DashboardSkeleton } from "../components/Skeleton";
+import { EmptyState } from "../components/EmptyState";
 import { CircularProgress } from "../components/CircularProgress";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
@@ -250,7 +252,7 @@ export function DashboardPage() {
 
   if (error && !group) {
     return (
-      <AppLayout>
+      <AppLayout wide>
         <p className="alert" role="alert">
           {error}
         </p>
@@ -260,8 +262,8 @@ export function DashboardPage() {
 
   if (!group) {
     return (
-      <AppLayout>
-        <p className="loading-page">Carregando...</p>
+      <AppLayout wide>
+        <DashboardSkeleton />
       </AppLayout>
     );
   }
@@ -414,10 +416,7 @@ export function DashboardPage() {
                 </Link>
               </div>
               {activeDebts.length === 0 ? (
-                <div className="empty-state-friendly">
-                  <span className="empty-state-emoji">🎉</span>
-                  <p>Nenhuma dívida pendente!</p>
-                </div>
+                <EmptyState icon="🎉">Nenhuma dívida pendente!</EmptyState>
               ) : (
                 <>
                   <p className="value-sm danger-text">{formatCurrency(totalDebtRemaining)}</p>

@@ -586,6 +586,84 @@ input:focus {
   color: var(--color-text-muted);
 }
 
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, var(--color-border) 25%, var(--color-bg-soft) 50%, var(--color-border) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* Toast confirmations -- a save action gets a brief, dismissable "it
+   worked" instead of just closing silently. --------------------------- */
+
+.toast-stack {
+  position: fixed;
+  top: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 80;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 12px 28px -14px rgba(23, 26, 22, 0.35);
+  animation: toast-in 0.25s ease, toast-out 0.25s ease 2.35s;
+  animation-fill-mode: forwards;
+}
+
+.toast-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-good);
+  flex-shrink: 0;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
 /* App shell with sidebar navigation ---------------------------------------- */
 
 .app-shell-nav {

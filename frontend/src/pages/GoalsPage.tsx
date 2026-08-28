@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { NewGoalModal } from "../components/NewGoalModal";
+import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, parseLocalDate } from "../utils/format";
 
@@ -18,10 +19,12 @@ interface GoalRow {
 
 export function GoalsPage() {
   const { token } = useAuth();
+  const { showToast } = useToast();
   const [goals, setGoals] = useState<GoalRow[] | null>(null);
   const [contributions, setContributions] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [contributingId, setContributingId] = useState<string | null>(null);
 
   async function loadGoals() {
     const result = await apiRequest<GoalRow[]>("/goals", { token });
@@ -33,10 +36,12 @@ export function GoalsPage() {
   }, [token]);
 
   async function handleContribute(goalId: string) {
+    if (contributingId) return;
     const raw = contributions[goalId];
     const amount = Number((raw ?? "").replace(",", "."));
     if (!(amount > 0)) return;
 
+    setContributingId(goalId);
     try {
       await apiRequest(`/goals/${goalId}/contribute`, {
         method: "POST",
@@ -45,8 +50,11 @@ export function GoalsPage() {
       });
       setContributions((prev) => ({ ...prev, [goalId]: "" }));
       await loadGoals();
+      showToast("Valor adicionado à meta");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível contribuir");
+    } finally {
+      setContributingId(null);
     }
   }
 
@@ -117,8 +125,13 @@ export function GoalsPage() {
                       setContributions((prev) => ({ ...prev, [goal.id]: e.target.value }))
                     }
                   />
-                  <button type="button" className="btn btn-outline" onClick={() => handleContribute(goal.id)}>
-                    Adicionar
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => handleContribute(goal.id)}
+                    disabled={contributingId === goal.id}
+                  >
+                    {contributingId === goal.id ? "Adicionando..." : "Adicionar"}
                   </button>
                 </div>
               )}
