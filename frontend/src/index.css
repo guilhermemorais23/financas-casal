@@ -2108,6 +2108,93 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+.category-gauge-bar-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--gridline);
+  overflow: hidden;
+}
+
+.category-gauge-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.category-gauge-bar-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.category-gauge-bar-label.good {
+  color: var(--success-text);
+}
+
+.category-gauge-bar-label.warning {
+  color: var(--status-warning);
+}
+
+.category-gauge-bar-label.over {
+  color: var(--status-critical);
+}
+
+.category-gauge-no-cap {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.category-budget-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--gridline);
+}
+
+.category-budget-row:first-of-type {
+  border-top: none;
+}
+
+.category-budget-emoji {
+  font-size: 1.15rem;
+  width: 1.5rem;
+  text-align: center;
+}
+
+.category-budget-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.category-budget-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.category-budget-spent {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.category-budget-input {
+  width: 6.5rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--page-plane);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .category-row-header {
   display: flex;
   align-items: center;

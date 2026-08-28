@@ -78,6 +78,11 @@ interface BudgetResponse {
   spent: number;
 }
 
+interface CategoryBudgetRow {
+  categoryId: string;
+  capAmount: string | null;
+}
+
 function sumByType(rows: TransactionListRow[], type: "income" | "expense") {
   return rows.filter((tx) => tx.transactionType === type).reduce((sum, tx) => sum + Number(tx.amount), 0);
 }
@@ -113,6 +118,9 @@ export function DashboardPage() {
   const [debts, setDebts] = useState<DebtRow[]>(() => readCache(staticKey("debts")) ?? []);
   const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(monthKey("summary")));
   const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(monthKey("budget")));
+  const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgetRow[]>(
+    () => readCache(monthKey("categoryBudgets")) ?? []
+  );
   const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
@@ -141,6 +149,10 @@ export function DashboardPage() {
         { token }
       );
       const budgetPromise = apiRequest<BudgetResponse>(`/budgets/current?month=${selectedMonth}`, { token });
+      const categoryBudgetsPromise = apiRequest<CategoryBudgetRow[]>(
+        `/budgets/categories?month=${selectedMonth}`,
+        { token }
+      );
       const dailyTrendPromise = apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${selectedMonth}`, {
         token,
       });
@@ -162,17 +174,27 @@ export function DashboardPage() {
         );
       }
 
-      const [groupRes, personalMonthRes, personalPrevMonthRes, recentRes, debtsRes, summaryRes, budgetRes, dailyTrendRes] =
-        await Promise.all([
-          groupPromise,
-          personalTx(selectedMonth),
-          personalTx(prevMonth),
-          recentPromise,
-          debtsPromise,
-          summaryPromise,
-          budgetPromise,
-          dailyTrendPromise,
-        ]);
+      const [
+        groupRes,
+        personalMonthRes,
+        personalPrevMonthRes,
+        recentRes,
+        debtsRes,
+        summaryRes,
+        budgetRes,
+        categoryBudgetsRes,
+        dailyTrendRes,
+      ] = await Promise.all([
+        groupPromise,
+        personalTx(selectedMonth),
+        personalTx(prevMonth),
+        recentPromise,
+        debtsPromise,
+        summaryPromise,
+        budgetPromise,
+        categoryBudgetsPromise,
+        dailyTrendPromise,
+      ]);
 
       setGroup(groupRes);
       setPersonalMonthTx(personalMonthRes);
@@ -181,6 +203,7 @@ export function DashboardPage() {
       setDebts(debtsRes);
       setSummary(summaryRes);
       setBudget(budgetRes);
+      setCategoryBudgets(categoryBudgetsRes);
       setDailyTrend(dailyTrendRes);
       writeCache(sKey("group"), groupRes);
       writeCache(mKey("personalMonthTx"), personalMonthRes);
@@ -189,6 +212,7 @@ export function DashboardPage() {
       writeCache(sKey("debts"), debtsRes);
       writeCache(mKey("summary"), summaryRes);
       writeCache(mKey("budget"), budgetRes);
+      writeCache(mKey("categoryBudgets"), categoryBudgetsRes);
       writeCache(mKey("dailyTrend"), dailyTrendRes);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
@@ -241,6 +265,14 @@ export function DashboardPage() {
     const top = summary?.byCategory.slice(0, 4) ?? [];
     return { topCategories: top, topCategoriesTotal: top.reduce((sum, row) => sum + Number(row.total), 0) };
   }, [summary]);
+
+  const categoryCapById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of categoryBudgets) {
+      if (row.capAmount !== null) map.set(row.categoryId, Number(row.capAmount));
+    }
+    return map;
+  }, [categoryBudgets]);
 
   const cap = budget?.budget ? Number(budget.budget.capAmount) : null;
   const spent = budget?.spent ?? 0;
@@ -394,6 +426,9 @@ export function DashboardPage() {
                     const percent =
                       topCategoriesTotal > 0 ? Math.round((value / topCategoriesTotal) * 100) : 0;
                     const color = categoryColor(row.categoryId);
+                    const categoryCap = row.categoryId ? categoryCapById.get(row.categoryId) : undefined;
+                    const capRawPercent = categoryCap ? (value / categoryCap) * 100 : 0;
+                    const capSeverity = capRawPercent >= 100 ? "over" : capRawPercent >= 80 ? "warning" : "good";
                     return (
                       <div className="category-gauge-item" key={row.categoryId ?? "none"}>
                         <CircularProgress percent={percent} size={72} strokeWidth={7} color={color}>
@@ -401,6 +436,29 @@ export function DashboardPage() {
                         </CircularProgress>
                         <span className="category-gauge-name">{row.categoryName ?? "Sem categoria"}</span>
                         <span className="category-gauge-amount">{formatCurrency(value)}</span>
+                        {categoryCap ? (
+                          <>
+                            <div className="category-gauge-bar-track">
+                              <div
+                                className="category-gauge-bar-fill"
+                                style={{
+                                  width: `${Math.min(100, capRawPercent)}%`,
+                                  background:
+                                    capSeverity === "over"
+                                      ? "var(--status-critical)"
+                                      : capSeverity === "warning"
+                                        ? "var(--status-warning)"
+                                        : "var(--success-text)",
+                                }}
+                              />
+                            </div>
+                            <span className={`category-gauge-bar-label ${capSeverity}`}>
+                              {Math.round(capRawPercent)}% de {formatCurrency(categoryCap)}
+                            </span>
+                          </>
+                        ) : (
+                          row.categoryId && <span className="category-gauge-no-cap">sem teto definido</span>
+                        )}
                       </div>
                     );
                   })}
