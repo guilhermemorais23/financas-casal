@@ -12,6 +12,10 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 let nextId = 1;
+// Kept in sync by hand with the CSS `.toast` animation timing in index.css
+// (0.25s fade-in + 2.35s hold + 0.25s fade-out = 2.6s) -- if one changes,
+// change the other, or the toast either gets yanked mid-fade or lingers
+// invisible-but-mounted after its fade-out finishes.
 const TOAST_DURATION_MS = 2600;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -30,10 +34,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="toast-stack">
+      <div className="toast-stack" role="status" aria-live="polite">
         {toasts.map((toast) => (
           <p key={toast.id} className="toast">
-            <span className="toast-dot" />
+            <span className="toast-dot" aria-hidden="true" />
             {toast.message}
           </p>
         ))}

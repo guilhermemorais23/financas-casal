@@ -3,6 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EditDebtModal } from "../components/EditDebtModal";
 import { EditInstallmentModal } from "../components/EditInstallmentModal";
+import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
 import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
@@ -51,9 +52,16 @@ export function DebtsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function load() {
-    const result = await apiRequest<DebtRow[]>("/debts", { token });
-    setDebts(result);
-    writeCache(cacheKey, result);
+    try {
+      const result = await apiRequest<DebtRow[]>("/debts", { token });
+      setDebts(result);
+      writeCache(cacheKey, result);
+    } catch (err) {
+      // Leaves `debts` as whatever it was (cached or null) -- the empty-
+      // state sections below only render once `debts` is non-null, so a
+      // failed load never gets mistaken for "confirmed no debts".
+      setError(err instanceof ApiError ? err.message : "Não foi possível carregar as dívidas");
+    }
   }
 
   useEffect(() => {
@@ -319,11 +327,8 @@ export function DebtsPage() {
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
             💞 Dívidas do grupo
           </p>
-          {jointDebts.length === 0 ? (
-            <div className="empty-state-friendly">
-              <span className="empty-state-emoji">🎉</span>
-              <p>Sem dívidas do casal — tudo em dia!</p>
-            </div>
+          {debts === null ? null : jointDebts.length === 0 ? (
+            <EmptyState icon="🎉">Sem dívidas do casal — tudo em dia!</EmptyState>
           ) : (
             <div className="page-stack">{jointDebts.map(renderDebtCard)}</div>
           )}
@@ -333,11 +338,8 @@ export function DebtsPage() {
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
             👤 Suas dívidas pessoais
           </p>
-          {personalDebts.length === 0 ? (
-            <div className="empty-state-friendly">
-              <span className="empty-state-emoji">✨</span>
-              <p>Nenhuma dívida pessoal — respira aliviado.</p>
-            </div>
+          {debts === null ? null : personalDebts.length === 0 ? (
+            <EmptyState icon="✨">Nenhuma dívida pessoal — respira aliviado.</EmptyState>
           ) : (
             <div className="page-stack">{personalDebts.map(renderDebtCard)}</div>
           )}

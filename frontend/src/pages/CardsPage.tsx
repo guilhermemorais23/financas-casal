@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
 import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
@@ -79,9 +80,16 @@ export function CardsPage() {
   const [isAddingPurchase, setIsAddingPurchase] = useState(false);
 
   async function loadCards() {
-    const result = await apiRequest<CardRow[]>("/cards", { token });
-    setCards(result);
-    writeCache(cacheKey, result);
+    try {
+      const result = await apiRequest<CardRow[]>("/cards", { token });
+      setCards(result);
+      writeCache(cacheKey, result);
+    } catch (err) {
+      // Leaves `cards` as whatever it was (cached or null) -- the empty-
+      // state sections below only render once `cards` is non-null, so a
+      // failed load never gets mistaken for "confirmed no cards".
+      setError(err instanceof ApiError ? err.message : "Não foi possível carregar os cartões");
+    }
   }
 
   useEffect(() => {
@@ -521,11 +529,8 @@ export function CardsPage() {
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
             💞 Cartões do grupo
           </p>
-          {jointCards.length === 0 ? (
-            <div className="empty-state-friendly">
-              <span className="empty-state-emoji">🧾</span>
-              <p>Nenhum cartão do casal cadastrado ainda.</p>
-            </div>
+          {cards === null ? null : jointCards.length === 0 ? (
+            <EmptyState icon="🧾">Nenhum cartão do casal cadastrado ainda.</EmptyState>
           ) : (
             <div className="page-stack">{jointCards.map(renderCard)}</div>
           )}
@@ -535,11 +540,8 @@ export function CardsPage() {
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
             👤 Seus cartões pessoais
           </p>
-          {personalCards.length === 0 ? (
-            <div className="empty-state-friendly">
-              <span className="empty-state-emoji">💳</span>
-              <p>Nenhum cartão pessoal cadastrado ainda.</p>
-            </div>
+          {cards === null ? null : personalCards.length === 0 ? (
+            <EmptyState icon="💳">Nenhum cartão pessoal cadastrado ainda.</EmptyState>
           ) : (
             <div className="page-stack">{personalCards.map(renderCard)}</div>
           )}
