@@ -355,6 +355,120 @@ button {
   background: var(--color-primary-soft);
 }
 
+.month-picker {
+  position: relative;
+  display: inline-block;
+}
+
+.month-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.month-picker-trigger:hover {
+  background: var(--color-bg-soft);
+}
+
+.month-picker-caret {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+}
+
+.month-picker-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 20;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 0.75rem;
+  width: 220px;
+}
+
+.month-picker-year-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.month-picker-year-nav {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+}
+
+.month-picker-year-nav:hover {
+  background: var(--color-bg-soft);
+}
+
+.month-picker-year-label {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.month-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+}
+
+.month-picker-month {
+  border: none;
+  background: none;
+  border-radius: 6px;
+  padding: 0.55rem 0;
+  font-size: 0.85rem;
+  text-transform: capitalize;
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.month-picker-month:hover {
+  background: var(--color-bg-soft);
+}
+
+.month-picker-month.selected {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.month-picker-today {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border: none;
+  border-top: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.month-picker-today:hover {
+  color: var(--color-primary-dark);
+}
+
 input {
   padding: 0.7rem 1.1rem;
   border: 1px solid transparent;

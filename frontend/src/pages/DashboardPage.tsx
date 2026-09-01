@@ -9,6 +9,7 @@ import { EmptyState } from "../components/EmptyState";
 import { CircularProgress } from "../components/CircularProgress";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
+import { MonthPicker } from "../components/MonthPicker";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import {
@@ -192,7 +193,13 @@ export function DashboardPage() {
       // round trip. Runs after the visible month is done and on an idle
       // tick so it never competes with what's actually on screen.
       const prevMonth = previousMonthParam(selectedMonth);
-      const neighborMonths = [prevMonth, previousMonthParam(prevMonth), nextMonthParam(selectedMonth)];
+      const nextMonth = nextMonthParam(selectedMonth);
+      const neighborMonths = [
+        prevMonth,
+        previousMonthParam(prevMonth),
+        nextMonth,
+        nextMonthParam(nextMonth),
+      ];
       idle(() => {
         neighborMonths.forEach((neighborMonth) => prefetchMonth(neighborMonth));
       });
@@ -325,7 +332,7 @@ export function DashboardPage() {
             <p className="card-subtitle">{monthLabel}</p>
             <FinancialHealthBadge monthlyIncome={income} monthlyExpense={expense} />
           </div>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          <MonthPicker value={month} onChange={setMonth} />
         </div>
 
         <div className="stat-card wide">
