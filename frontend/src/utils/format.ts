@@ -13,6 +13,12 @@ export function previousMonthParam(monthParam: string = currentMonthParam()): st
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+export function nextMonthParam(monthParam: string = currentMonthParam()): string {
+  const [year, month] = monthParam.split("-").map(Number);
+  const date = new Date(year, month, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 // Tolerates a missing/malformed month string instead of throwing -- a
 // render crash here has no error boundary to catch it and blanks the whole
 // page, so this degrades to a placeholder instead.

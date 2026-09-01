@@ -16,6 +16,7 @@ import {
   formatCurrency,
   groupByDay,
   monthLongName,
+  nextMonthParam,
   percentChange,
   previousMonthParam,
 } from "../utils/format";
@@ -215,10 +216,64 @@ export function DashboardPage() {
       writeCache(mKey("budget"), budgetRes);
       writeCache(mKey("categoryBudgets"), categoryBudgetsRes);
       writeCache(mKey("dailyTrend"), dailyTrendRes);
+      // personalPrevMonthRes IS prevMonth's own personalMonthTx -- stash it
+      // under that month's key too so prefetchMonth below can skip re-fetching it.
+      writeCache(`dashboard:personalMonthTx:${prevMonth}:${user?.id ?? "anon"}`, personalPrevMonthRes);
+
+      // Warm the cache for the months someone is likely to check next
+      // (back and forth around whatever month they're on) so switching to
+      // one of them later reads from cache instantly instead of waiting on
+      // a fresh round trip. Runs after the visible month is done and on an
+      // idle tick so it never competes with what's actually on screen.
+      const personalAccountId = groupRes.accounts.find(
+        (account) => account.type === "personal" && account.ownerUserId === user?.id
+      )?.id;
+      const neighborMonths = [prevMonth, previousMonthParam(prevMonth), nextMonthParam(selectedMonth)];
+      const idle = (cb: () => void) =>
+        typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(cb) : setTimeout(cb, 300);
+      idle(() => {
+        neighborMonths.forEach((neighborMonth) => prefetchMonth(neighborMonth, personalAccountId));
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  // Best-effort background warm-up for a month not currently on screen --
+  // same requests `load` makes, minus personalMonthTx when we already have
+  // it (see above), writing only to cache (no setState, no error surfaced).
+  // Skips months already cached so re-visiting the same couple of months
+  // doesn't refire this on every mount.
+  async function prefetchMonth(targetMonth: string, personalAccountId: string | undefined) {
+    const mKey = (name: string) => `dashboard:${name}:${targetMonth}:${user?.id ?? "anon"}`;
+    if (readCache(mKey("summary"))) return;
+
+    try {
+      const [recentRes, summaryRes, budgetRes, categoryBudgetsRes, dailyTrendRes, personalRes] = await Promise.all([
+        apiRequest<TransactionListRow[]>(`/transactions?limit=8&month=${targetMonth}`, { token }),
+        apiRequest<SummaryResponse>(`/transactions/summary?month=${targetMonth}&scope=visible`, { token }),
+        apiRequest<BudgetResponse>(`/budgets/current?month=${targetMonth}`, { token }),
+        apiRequest<CategoryBudgetRow[]>(`/budgets/categories?month=${targetMonth}`, { token }),
+        apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${targetMonth}`, { token }),
+        readCache<TransactionListRow[]>(mKey("personalMonthTx")) ??
+          (personalAccountId
+            ? apiRequest<TransactionListRow[]>(
+                `/transactions?limit=100&month=${targetMonth}&accountId=${personalAccountId}`,
+                { token }
+              )
+            : Promise.resolve([])),
+      ]);
+      writeCache(mKey("recent"), recentRes);
+      writeCache(mKey("summary"), summaryRes);
+      writeCache(mKey("budget"), budgetRes);
+      writeCache(mKey("categoryBudgets"), categoryBudgetsRes);
+      writeCache(mKey("dailyTrend"), dailyTrendRes);
+      writeCache(mKey("personalMonthTx"), personalRes);
+    } catch {
+      // A failed prefetch just means that month loads from the network like
+      // normal, the same as before this existed -- never worth surfacing.
     }
   }
 
