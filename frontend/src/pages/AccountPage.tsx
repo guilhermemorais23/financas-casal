@@ -56,6 +56,8 @@ export function AccountPage() {
   const [isLeaving, setIsLeaving] = useState(false);
   const [telegramCode, setTelegramCode] = useState<string | null>(null);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  const [whatsappCode, setWhatsappCode] = useState<string | null>(null);
+  const [isGeneratingWhatsappCode, setIsGeneratingWhatsappCode] = useState(false);
 
   const month = currentMonthParam();
 
@@ -167,16 +169,36 @@ export function AccountPage() {
     }
   }
 
+  // The link-code endpoint is channel-agnostic (it's just "a code tied to
+  // this user+group", redeemed by whichever bot/webhook it's sent to first)
+  // -- Telegram and WhatsApp share the exact same call, just displayed in
+  // their own card with their own loading state.
+  async function generateLinkCode(): Promise<string> {
+    const res = await apiRequest<{ code: string }>("/assistant/telegram/link-code", { method: "POST", token });
+    return res.code;
+  }
+
   async function handleGenerateTelegramCode() {
     setError(null);
     setIsGeneratingCode(true);
     try {
-      const res = await apiRequest<{ code: string }>("/assistant/telegram/link-code", { method: "POST", token });
-      setTelegramCode(res.code);
+      setTelegramCode(await generateLinkCode());
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível gerar o código");
     } finally {
       setIsGeneratingCode(false);
+    }
+  }
+
+  async function handleGenerateWhatsappCode() {
+    setError(null);
+    setIsGeneratingWhatsappCode(true);
+    try {
+      setWhatsappCode(await generateLinkCode());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível gerar o código");
+    } finally {
+      setIsGeneratingWhatsappCode(false);
     }
   }
 
@@ -320,14 +342,29 @@ export function AccountPage() {
         </div>
 
         <div className="card">
-          <div className="section-header">
-            <p className="card-title">Assistente (WhatsApp)</p>
-            <span className="soon-badge">Em breve</span>
-          </div>
+          <p className="card-title">Assistente (WhatsApp)</p>
           <p className="card-subtitle">
-            Estamos preparando o assistente por WhatsApp -- por enquanto, use o Telegram abaixo pra lançar gastos e
-            tirar dúvidas por mensagem.
+            Ainda em fase de teste (número de teste da Meta) -- fale seus gastos ou pergunte sobre suas finanças por
+            lá. Gere um código aqui e envie ele pro número de teste que aparece no seu WhatsApp Business.
           </p>
+          {whatsappCode && (
+            <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.1rem" }}>
+              {whatsappCode}
+            </p>
+          )}
+          {error && (
+            <p className="alert" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={handleGenerateWhatsappCode}
+            disabled={isGeneratingWhatsappCode}
+          >
+            {isGeneratingWhatsappCode ? "Gerando..." : whatsappCode ? "Gerar novo código" : "Gerar código"}
+          </button>
         </div>
 
         <div className="card">

@@ -1,6 +1,15 @@
 import { GoogleGenerativeAI, type Part } from "@google/generative-ai";
-import { consumeLinkCode, findLinkByChatId, saveLink, saveLinkCode } from "./assistant.repository";
-import { sendTelegramMessage, type TelegramAudio } from "./telegram.client";
+import {
+  consumeLinkCode,
+  findLinkByChatId,
+  findWhatsappLinkByWaId,
+  saveLink,
+  saveLinkCode,
+  saveWhatsappLink,
+} from "./assistant.repository";
+import type { AudioPayload } from "./assistant.types";
+import { sendTelegramMessage } from "./telegram.client";
+import { sendWhatsappMessage } from "./whatsapp.client";
 import { getCurrentBudget } from "../budgets/budgets.service";
 import { findVisibleCategories } from "../categories/categories.repository";
 import { listDebts } from "../debts/debts.service";
@@ -89,7 +98,7 @@ Metas de economia: ${goalsText}.`;
   return { text, financialGoal, savingsAmount };
 }
 
-async function askGemini(prompt: string, audio?: TelegramAudio): Promise<string> {
+async function askGemini(prompt: string, audio?: AudioPayload): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new AssistantNotConfiguredError();
 
@@ -111,14 +120,14 @@ function parseAssistantReply(raw: string): AssistantReply | null {
   }
 }
 
-// Shared by every channel (Telegram, the in-app chat widget) -- same
-// grounding, same intent schema, same behavior. Only how the reply gets
-// delivered differs per caller.
+// Shared by every channel (Telegram, WhatsApp, the in-app chat widget) --
+// same grounding, same intent schema, same behavior. Only how the reply
+// gets delivered differs per caller.
 async function processAssistantMessage(
   userId: string,
   groupId: string,
   text: string | undefined,
-  audio: TelegramAudio | undefined
+  audio: AudioPayload | undefined
 ): Promise<string> {
   const [accounts, categories, financeContext] = await Promise.all([
     findAccountsByGroupId(groupId),
@@ -187,7 +196,7 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
   return parsed.reply || "Prontinho.";
 }
 
-async function handleLinking(chatId: string, text: string | undefined): Promise<void> {
+async function handleTelegramLinking(chatId: string, text: string | undefined): Promise<void> {
   const code = text?.trim().toUpperCase();
   const redeemed = code ? await consumeLinkCode(code) : null;
 
@@ -209,11 +218,11 @@ async function handleLinking(chatId: string, text: string | undefined): Promise<
 export async function handleTelegramMessage(
   chatId: string,
   text: string | undefined,
-  audio: TelegramAudio | undefined
+  audio: AudioPayload | undefined
 ): Promise<void> {
   const link = await findLinkByChatId(chatId);
   if (!link) {
-    await handleLinking(chatId, text);
+    await handleTelegramLinking(chatId, text);
     return;
   }
 
@@ -223,6 +232,52 @@ export async function handleTelegramMessage(
   } catch (err) {
     if (err instanceof AssistantNotConfiguredError) {
       await sendTelegramMessage(chatId, "O assistente de IA ainda não foi configurado no servidor.");
+      return;
+    }
+    throw err;
+  }
+}
+
+// Same idea as handleTelegramLinking/handleTelegramMessage above, just
+// talking to the WhatsApp Cloud API instead -- consumeLinkCode is shared,
+// so the same "Gerar código" button in Conta works to link either channel,
+// whichever one the code actually gets sent to.
+async function handleWhatsappLinking(waId: string, text: string | undefined): Promise<void> {
+  const code = text?.trim().toUpperCase();
+  const redeemed = code ? await consumeLinkCode(code) : null;
+
+  if (redeemed) {
+    await saveWhatsappLink(waId, redeemed.userId, redeemed.groupId);
+    await sendWhatsappMessage(
+      waId,
+      "Conta vinculada! Agora você pode me contar seus gastos (\"gastei 50 no mercado\") ou perguntar sobre suas finanças por aqui."
+    );
+    return;
+  }
+
+  await sendWhatsappMessage(
+    waId,
+    "Ainda não te conheço. No app PAR., vá em Conta → assistente e gere um código, depois me envie ele aqui."
+  );
+}
+
+export async function handleWhatsappMessage(
+  waId: string,
+  text: string | undefined,
+  audio: AudioPayload | undefined
+): Promise<void> {
+  const link = await findWhatsappLinkByWaId(waId);
+  if (!link) {
+    await handleWhatsappLinking(waId, text);
+    return;
+  }
+
+  try {
+    const reply = await processAssistantMessage(link.userId, link.groupId, text, audio);
+    await sendWhatsappMessage(waId, reply);
+  } catch (err) {
+    if (err instanceof AssistantNotConfiguredError) {
+      await sendWhatsappMessage(waId, "O assistente de IA ainda não foi configurado no servidor.");
       return;
     }
     throw err;
