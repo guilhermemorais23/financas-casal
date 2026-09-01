@@ -120,33 +120,38 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
             </NavLink>
           ))}
 
-          <button
-            type="button"
-            className={`app-nav-link app-nav-link-expandable${location.pathname === "/admin" ? " active" : ""}`}
-            onClick={() => setIsAdminNavOpen((open) => !open)}
-            aria-expanded={isAdminNavOpen}
-          >
-            <span className="app-nav-icon">🛠️</span>
-            Admin
-            <span className={`app-nav-chevron${isAdminNavOpen ? " open" : ""}`}>▾</span>
-          </button>
-          {isAdminNavOpen && (
-            <div className="app-nav-submenu">
-              {ADMIN_SUBLINKS.map((sublink) => (
-                <Link
-                  key={sublink.section}
-                  to={`/admin?section=${sublink.section}`}
-                  className={`app-nav-sublink${
-                    location.pathname === "/admin" && (searchParams.get("section") ?? "overview") === sublink.section
-                      ? " active"
-                      : ""
-                  }`}
-                  onClick={() => setIsNavOpen(false)}
-                >
-                  {sublink.label}
-                </Link>
-              ))}
-            </div>
+          {user?.isAdmin && (
+            <>
+              <button
+                type="button"
+                className={`app-nav-link app-nav-link-expandable${location.pathname === "/admin" ? " active" : ""}`}
+                onClick={() => setIsAdminNavOpen((open) => !open)}
+                aria-expanded={isAdminNavOpen}
+              >
+                <span className="app-nav-icon">🛠️</span>
+                Admin
+                <span className={`app-nav-chevron${isAdminNavOpen ? " open" : ""}`}>▾</span>
+              </button>
+              {isAdminNavOpen && (
+                <div className="app-nav-submenu">
+                  {ADMIN_SUBLINKS.map((sublink) => (
+                    <Link
+                      key={sublink.section}
+                      to={`/admin?section=${sublink.section}`}
+                      className={`app-nav-sublink${
+                        location.pathname === "/admin" &&
+                        (searchParams.get("section") ?? "overview") === sublink.section
+                          ? " active"
+                          : ""
+                      }`}
+                      onClick={() => setIsNavOpen(false)}
+                    >
+                      {sublink.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </nav>
 
