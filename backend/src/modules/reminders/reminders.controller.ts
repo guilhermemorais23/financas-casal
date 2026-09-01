@@ -6,7 +6,7 @@ import { runDueReminders } from "./reminders.service";
 // same one already used for the /api/health keep-alive ping) calls this with
 // no signed-in user, so it's gated by a shared secret header instead.
 // CRON_SECRET unset means the route is unreachable, same "off by default"
-// posture as a missing RESEND_API_KEY.
+// posture as missing Gmail SMTP credentials (see email/mailer.ts).
 export async function runRemindersHandler(req: Request, res: Response) {
   if (!env.cronSecret || req.header("x-cron-secret") !== env.cronSecret) {
     res.status(401).json({ error: "unauthorized" });

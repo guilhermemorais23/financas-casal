@@ -18,9 +18,15 @@ function required(name: string): string {
 export const env = {
   firebaseProjectId: required("FIREBASE_PROJECT_ID"),
   port: Number(process.env.PORT ?? 4000),
-  // Optional: no key means the welcome email is skipped (logged, not thrown).
-  resendApiKey: process.env.RESEND_API_KEY,
-  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "PAR. <onboarding@resend.dev>",
+  // Optional: no credentials means email sending is skipped (logged, not
+  // thrown). Sends via Gmail's own SMTP using a personal account + an App
+  // Password (not the account's real password -- generated under Google
+  // Account > Security > 2-Step Verification > App passwords, only
+  // available once 2FA is on). A temporary stand-in for a proper
+  // transactional provider (Resend, etc.) on a verified custom domain --
+  // that needs a domain this project doesn't have yet.
+  gmailUser: process.env.GMAIL_USER,
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD,
   // Shared secret for POST /api/reminders/run -- an external daily cron
   // (same cron-job.org setup already used for the health-check keep-alive)
   // calls it with this as the x-cron-secret header. Unset means the route

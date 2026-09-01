@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { isAdminEmail } from "../admin/admin.service";
 import { logAccess, type AccessEvent } from "../../utils/accessLog";
-import { sendWelcomeEmail } from "../../email/resend";
+import { sendWelcomeEmail } from "../../email/mailer";
 import { findUserById, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
 
 function isNonEmptyString(value: unknown): value is string {
