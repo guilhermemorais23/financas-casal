@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { isAdminEmail } from "../admin/admin.service";
+import { logAccess, type AccessEvent } from "../../utils/accessLog";
 import { sendWelcomeEmail } from "../../email/resend";
 import { findUserById, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
 
@@ -54,6 +55,18 @@ export async function bootstrapHandler(req: Request, res: Response) {
   }
 
   res.status(200).json(toPublicUser(user));
+}
+
+// Called explicitly by the frontend right after a real sign-in (login,
+// Google sign-in, or register) -- NOT from the silent token-refresh path
+// (onIdTokenChanged fires roughly hourly and would otherwise flood this as
+// "logins"). Purely for the Admin > Logs "who's coming in" view; carries no
+// password or token, just who and when.
+export async function logLoginEventHandler(req: Request, res: Response) {
+  const { event } = req.body ?? {};
+  const validEvent: AccessEvent = event === "register" ? "register" : "login";
+  logAccess(validEvent, { userId: req.user!.id, email: req.user!.email });
+  res.status(204).send();
 }
 
 export async function meHandler(req: Request, res: Response) {
