@@ -85,6 +85,18 @@ interface CategoryBudgetRow {
   capAmount: string | null;
 }
 
+interface DashboardResponse {
+  group: GroupResponse;
+  recent: TransactionListRow[];
+  debts: DebtRow[];
+  summary: SummaryResponse;
+  budget: BudgetResponse;
+  categoryBudgets: CategoryBudgetRow[];
+  dailyTrend: DailyTrendPoint[];
+  personalMonthTx: TransactionListRow[];
+  personalPrevMonthTx: TransactionListRow[];
+}
+
 function sumByType(rows: TransactionListRow[], type: "income" | "expense") {
   return rows.filter((tx) => tx.transactionType === type).reduce((sum, tx) => sum + Number(tx.amount), 0);
 }
@@ -128,111 +140,61 @@ export function DashboardPage() {
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  async function load(selectedMonth: string) {
-    setError(null);
-    const prevMonth = previousMonthParam(selectedMonth);
+  const idle = (cb: () => void) =>
+    typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(cb) : setTimeout(cb, 300);
+
+  // warmCacheOnly=true is what prefetchMonth uses for a month not on screen
+  // -- writes the cache same as a real load, but never touches component
+  // state (nothing should visibly change just because a background prefetch
+  // finished).
+  function applyDashboard(selectedMonth: string, data: DashboardResponse, warmCacheOnly: boolean) {
     const sKey = (name: string) => `dashboard:${name}:${user?.id ?? "anon"}`;
     const mKey = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
+
+    if (!warmCacheOnly) {
+      setGroup(data.group);
+      setPersonalMonthTx(data.personalMonthTx);
+      setPersonalPrevMonthTx(data.personalPrevMonthTx);
+      setRecent(data.recent);
+      setDebts(data.debts);
+      setSummary(data.summary);
+      setBudget(data.budget);
+      setCategoryBudgets(data.categoryBudgets);
+      setDailyTrend(data.dailyTrend);
+    }
+
+    writeCache(sKey("group"), data.group);
+    writeCache(sKey("debts"), data.debts);
+    writeCache(mKey("personalMonthTx"), data.personalMonthTx);
+    writeCache(mKey("personalPrevMonthTx"), data.personalPrevMonthTx);
+    writeCache(mKey("recent"), data.recent);
+    writeCache(mKey("summary"), data.summary);
+    writeCache(mKey("budget"), data.budget);
+    writeCache(mKey("categoryBudgets"), data.categoryBudgets);
+    writeCache(mKey("dailyTrend"), data.dailyTrend);
+  }
+
+  // One request instead of the 7 separate ones this used to fire (group,
+  // recent, debts, summary, budget, categoryBudgets, dailyTrend, plus 2 more
+  // for personal tx this/prev month) -- each of those paid its own round
+  // trip AND its own Firebase token verification on the backend, on top of
+  // the Firestore reads (which already ran in parallel server-side either
+  // way). GET /api/dashboard bundles the same reads into one response.
+  async function load(selectedMonth: string) {
+    setError(null);
     try {
-      // Fire every request up front, in parallel -- the personal-account
-      // transaction fetches need personalAccount.id, which normally only
-      // comes from /groups/me. But that account rarely changes, so once
-      // we've loaded it once (the `group` already in state, e.g. from a
-      // previous month), reuse it instead of paying a second sequential
-      // round trip on every month switch; only fall back to awaiting a
-      // fresh /groups/me when we don't know the account yet (first load).
-      const groupPromise = apiRequest<GroupResponse>("/groups/me", { token });
-      const recentPromise = apiRequest<TransactionListRow[]>(`/transactions?limit=8&month=${selectedMonth}`, {
-        token,
-      });
-      const debtsPromise = apiRequest<DebtRow[]>("/debts", { token });
-      const summaryPromise = apiRequest<SummaryResponse>(
-        `/transactions/summary?month=${selectedMonth}&scope=visible`,
-        { token }
-      );
-      const budgetPromise = apiRequest<BudgetResponse>(`/budgets/current?month=${selectedMonth}`, { token });
-      const categoryBudgetsPromise = apiRequest<CategoryBudgetRow[]>(
-        `/budgets/categories?month=${selectedMonth}`,
-        { token }
-      );
-      const dailyTrendPromise = apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${selectedMonth}`, {
-        token,
-      });
+      const data = await apiRequest<DashboardResponse>(`/dashboard?month=${selectedMonth}`, { token });
+      applyDashboard(selectedMonth, data, false);
 
-      const knownPersonalAccountId = group?.accounts.find(
-        (account) => account.type === "personal" && account.ownerUserId === user?.id
-      )?.id;
-
-      async function personalTx(forMonth: string): Promise<TransactionListRow[]> {
-        const accountId =
-          knownPersonalAccountId ??
-          (await groupPromise).accounts.find(
-            (account) => account.type === "personal" && account.ownerUserId === user?.id
-          )?.id;
-        if (!accountId) return [];
-        return apiRequest<TransactionListRow[]>(
-          `/transactions?limit=100&month=${forMonth}&accountId=${accountId}`,
-          { token }
-        );
-      }
-
-      const [
-        groupRes,
-        personalMonthRes,
-        personalPrevMonthRes,
-        recentRes,
-        debtsRes,
-        summaryRes,
-        budgetRes,
-        categoryBudgetsRes,
-        dailyTrendRes,
-      ] = await Promise.all([
-        groupPromise,
-        personalTx(selectedMonth),
-        personalTx(prevMonth),
-        recentPromise,
-        debtsPromise,
-        summaryPromise,
-        budgetPromise,
-        categoryBudgetsPromise,
-        dailyTrendPromise,
-      ]);
-
-      setGroup(groupRes);
-      setPersonalMonthTx(personalMonthRes);
-      setPersonalPrevMonthTx(personalPrevMonthRes);
-      setRecent(recentRes);
-      setDebts(debtsRes);
-      setSummary(summaryRes);
-      setBudget(budgetRes);
-      setCategoryBudgets(categoryBudgetsRes);
-      setDailyTrend(dailyTrendRes);
-      writeCache(sKey("group"), groupRes);
-      writeCache(mKey("personalMonthTx"), personalMonthRes);
-      writeCache(mKey("personalPrevMonthTx"), personalPrevMonthRes);
-      writeCache(mKey("recent"), recentRes);
-      writeCache(sKey("debts"), debtsRes);
-      writeCache(mKey("summary"), summaryRes);
-      writeCache(mKey("budget"), budgetRes);
-      writeCache(mKey("categoryBudgets"), categoryBudgetsRes);
-      writeCache(mKey("dailyTrend"), dailyTrendRes);
-      // personalPrevMonthRes IS prevMonth's own personalMonthTx -- stash it
-      // under that month's key too so prefetchMonth below can skip re-fetching it.
-      writeCache(`dashboard:personalMonthTx:${prevMonth}:${user?.id ?? "anon"}`, personalPrevMonthRes);
-
-      // Warm the cache for the months someone is likely to check next
-      // (back and forth around whatever month they're on) so switching to
-      // one of them later reads from cache instantly instead of waiting on
-      // a fresh round trip. Runs after the visible month is done and on an
-      // idle tick so it never competes with what's actually on screen.
-      const personalAccountId = groupRes.accounts.find(
-        (account) => account.type === "personal" && account.ownerUserId === user?.id
-      )?.id;
+      // Warm the cache for the months someone is likely to check next (back
+      // and forth around whatever month they're on) so switching to one of
+      // them later reads from cache instantly instead of waiting on a fresh
+      // round trip. Runs after the visible month is done and on an idle
+      // tick so it never competes with what's actually on screen.
+      const prevMonth = previousMonthParam(selectedMonth);
       const neighborMonths = [prevMonth, previousMonthParam(prevMonth), nextMonthParam(selectedMonth)];
-      const idle = (cb: () => void) =>
-        typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(cb) : setTimeout(cb, 300);
       idle(() => {
-        neighborMonths.forEach((neighborMonth) => prefetchMonth(neighborMonth, personalAccountId));
+        neighborMonths.forEach((neighborMonth) => prefetchMonth(neighborMonth));
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
@@ -242,35 +204,16 @@ export function DashboardPage() {
   }
 
   // Best-effort background warm-up for a month not currently on screen --
-  // same requests `load` makes, minus personalMonthTx when we already have
-  // it (see above), writing only to cache (no setState, no error surfaced).
-  // Skips months already cached so re-visiting the same couple of months
-  // doesn't refire this on every mount.
-  async function prefetchMonth(targetMonth: string, personalAccountId: string | undefined) {
+  // writes only to cache (no setState, no error surfaced). Skips months
+  // already cached so re-visiting the same couple of months doesn't refire
+  // this on every mount.
+  async function prefetchMonth(targetMonth: string) {
     const mKey = (name: string) => `dashboard:${name}:${targetMonth}:${user?.id ?? "anon"}`;
     if (readCache(mKey("summary"))) return;
 
     try {
-      const [recentRes, summaryRes, budgetRes, categoryBudgetsRes, dailyTrendRes, personalRes] = await Promise.all([
-        apiRequest<TransactionListRow[]>(`/transactions?limit=8&month=${targetMonth}`, { token }),
-        apiRequest<SummaryResponse>(`/transactions/summary?month=${targetMonth}&scope=visible`, { token }),
-        apiRequest<BudgetResponse>(`/budgets/current?month=${targetMonth}`, { token }),
-        apiRequest<CategoryBudgetRow[]>(`/budgets/categories?month=${targetMonth}`, { token }),
-        apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${targetMonth}`, { token }),
-        readCache<TransactionListRow[]>(mKey("personalMonthTx")) ??
-          (personalAccountId
-            ? apiRequest<TransactionListRow[]>(
-                `/transactions?limit=100&month=${targetMonth}&accountId=${personalAccountId}`,
-                { token }
-              )
-            : Promise.resolve([])),
-      ]);
-      writeCache(mKey("recent"), recentRes);
-      writeCache(mKey("summary"), summaryRes);
-      writeCache(mKey("budget"), budgetRes);
-      writeCache(mKey("categoryBudgets"), categoryBudgetsRes);
-      writeCache(mKey("dailyTrend"), dailyTrendRes);
-      writeCache(mKey("personalMonthTx"), personalRes);
+      const data = await apiRequest<DashboardResponse>(`/dashboard?month=${targetMonth}`, { token });
+      applyDashboard(targetMonth, data, true);
     } catch {
       // A failed prefetch just means that month loads from the network like
       // normal, the same as before this existed -- never worth surfacing.
