@@ -6,6 +6,7 @@ import { assistantRouter } from "./modules/assistant/assistant.routes";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { cardsRouter } from "./modules/cards/cards.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
+import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { debtsRouter } from "./modules/debts/debts.routes";
 import { goalsRouter } from "./modules/goals/goals.routes";
 import { groupsRouter } from "./modules/groups/groups.routes";
@@ -61,6 +62,7 @@ export function createApp() {
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));
   app.patch("/api/me", requireAuth, asyncHandler(updateProfileHandler));
   app.use("/api/groups", groupsRouter);
+  app.use("/api/dashboard", dashboardRouter);
   app.use("/api/categories", categoriesRouter);
   app.use("/api/transactions", transactionsRouter);
   app.use("/api/goals", goalsRouter);

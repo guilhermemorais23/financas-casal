@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { isAdminEmail } from "../admin/admin.service";
 import { sendWelcomeEmail } from "../../email/resend";
 import { findUserById, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
 
@@ -6,6 +7,11 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+// isAdmin here is what the frontend uses to decide whether to even show the
+// Admin nav item -- the backend route itself still re-checks ADMIN_EMAILS
+// independently (admin.controller.ts), so this is purely a UX gate (nobody
+// who isn't allowed in ever sees "Admin" in the sidebar), not the security
+// boundary.
 function toPublicUser(user: UserRow) {
   return {
     id: user.id,
@@ -14,6 +20,7 @@ function toPublicUser(user: UserRow) {
     groupId: user.groupId,
     photoDataUrl: user.photoDataUrl,
     phone: user.phone,
+    isAdmin: isAdminEmail(user.email),
   };
 }
 

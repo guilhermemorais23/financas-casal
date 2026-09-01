@@ -14,8 +14,12 @@ function adminEmails(): string[] {
     .filter(Boolean);
 }
 
+export function isAdminEmail(email: string): boolean {
+  return adminEmails().includes(email.toLowerCase());
+}
+
 export function requireAdminEmail(email: string): void {
-  if (!adminEmails().includes(email.toLowerCase())) {
+  if (!isAdminEmail(email)) {
     throw new NotAdminError();
   }
 }

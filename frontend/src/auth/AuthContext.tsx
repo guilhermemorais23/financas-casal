@@ -19,6 +19,10 @@ export interface AuthUser {
   groupId: string | null;
   photoDataUrl: string | null;
   phone: string | null;
+  // Backend-decided (ADMIN_EMAILS) -- drives whether the Admin nav item
+  // shows up at all. The route itself re-checks independently, so this
+  // never needs to be trusted as the actual security boundary.
+  isAdmin: boolean;
 }
 
 interface AuthContextValue {
