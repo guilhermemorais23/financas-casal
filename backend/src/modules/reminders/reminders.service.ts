@@ -1,7 +1,7 @@
 import { findCardsByGroupId, findStatement } from "../cards/cards.repository";
 import { currentStatementMonth, dueDateFor } from "../cards/cards.service";
 import { findGroupBudget, getMonthlyExpenseTotal } from "../budgets/budgets.repository";
-import { sendReminderEmail } from "../../email/resend";
+import { sendReminderEmail } from "../../email/mailer";
 import { daysBetween, parseMonthRange } from "../../utils/month";
 import {
   findAllGroupIds,

@@ -51,6 +51,15 @@ async function fetchProfile(idToken: string): Promise<AuthUser> {
   return apiRequest<AuthUser>("/me", { token: idToken });
 }
 
+// Best-effort, fire-and-forget -- purely feeds the Admin > Logs "who's
+// coming in" view, must never hold up or fail an actual sign-in. Called
+// explicitly from login/loginWithGoogle/register only, not from the silent
+// token-refresh listener below (that fires roughly hourly and isn't a
+// "someone logged in" event).
+function logLoginEvent(idToken: string, event: "login" | "register"): void {
+  apiRequest("/me/login-event", { method: "POST", token: idToken, body: { event } }).catch(() => {});
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -101,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await fetchProfile(idToken);
     setToken(idToken);
     setUser(profile);
+    logLoginEvent(idToken, "login");
   }, []);
 
   const loginWithGoogle = useCallback(async () => {
@@ -109,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await bootstrapProfile(idToken, credential.user.displayName ?? credential.user.email ?? "");
     setToken(idToken);
     setUser(profile);
+    logLoginEvent(idToken, "login");
   }, []);
 
   const register = useCallback(async (email: string, password: string, displayName: string) => {
@@ -118,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await bootstrapProfile(idToken, displayName);
     setToken(idToken);
     setUser(profile);
+    logLoginEvent(idToken, "register");
   }, []);
 
   const logout = useCallback(async () => {

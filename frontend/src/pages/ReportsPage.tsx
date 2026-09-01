@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { IncomeExpenseDonut } from "../components/IncomeExpenseDonut";
+import { MonthPicker } from "../components/MonthPicker";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
@@ -180,7 +181,7 @@ export function ReportsPage() {
         <div className="section-header">
           <h1>Relatórios</h1>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+            <MonthPicker value={month} onChange={setMonth} />
             <button
               type="button"
               className="btn btn-ghost"

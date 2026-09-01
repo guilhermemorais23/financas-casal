@@ -431,10 +431,16 @@ async function fetchDocsForDailySeries(
   });
 }
 
-// Cumulative income/expense per day, from the 1st of the month through
-// today (or through the month's last day, for a past month) -- one point
-// per calendar day so the line has no gaps, carrying the running total
-// forward on days with no transactions.
+// Cumulative income/expense per day, from the 1st through the last day of
+// the month -- one point per calendar day so the line has no gaps, carrying
+// the running total forward on days with no transactions. Always walks the
+// whole month, not just up to today: someone who pre-dates a transaction
+// later in the current month (a salary or a bill they already know is
+// coming on the 5th, entered on the 1st) expects it to count right away --
+// stopping at "today" used to silently drop it from every dailyTrend-derived
+// widget (the sidebar's Entrada x Saída, the accumulated chart) until the
+// calendar caught up to that date, even though the month total elsewhere on
+// the same page already included it.
 export async function getDailySeries(
   groupId: string,
   requestingUserId: string,
@@ -457,9 +463,7 @@ export async function getDailySeries(
     byDay.set(data.occurredAt, entry);
   }
 
-  const monthEndDate = new Date(`${monthEnd}T00:00:00Z`);
-  const todayDate = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
-  const lastDate = todayDate < monthEndDate ? todayDate : new Date(monthEndDate.getTime() - 86_400_000);
+  const lastDate = new Date(new Date(`${monthEnd}T00:00:00Z`).getTime() - 86_400_000);
 
   const points: DailySeriesPoint[] = [];
   let cumIncomeCents = 0;

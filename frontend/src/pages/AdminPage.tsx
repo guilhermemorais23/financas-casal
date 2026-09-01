@@ -13,6 +13,13 @@ interface ErrorLogEntry {
   createdAt: number;
 }
 
+interface AccessLogEntry {
+  id: string;
+  event: "login" | "register";
+  email: string;
+  createdAt: number;
+}
+
 interface AdminOverview {
   totalUsers: number;
   totalGroups: number;
@@ -21,6 +28,7 @@ interface AdminOverview {
   telegramLinked: number;
   whatsappLinked: number;
   recentErrors: ErrorLogEntry[];
+  recentAccess: AccessLogEntry[];
 }
 
 function relativeTime(timestamp: number): string {
@@ -157,27 +165,53 @@ export function AdminPage() {
         )}
 
         {section === "logs" && (
-          <div className="card">
-            <p className="card-title">Logs{overview.recentErrors.length > 0 ? ` (${overview.recentErrors.length})` : ""}</p>
-            {overview.recentErrors.length === 0 ? (
-              <p className="empty-state">Nenhum erro registrado.</p>
-            ) : (
-              <ul className="transaction-list">
-                {overview.recentErrors.map((entry) => (
-                  <li key={entry.id} className="transaction-row">
-                    <div className="transaction-info">
-                      <span className="transaction-desc">{entry.message}</span>
-                      <span className="transaction-meta">
-                        {entry.source}
-                        {entry.method && entry.path ? ` · ${entry.method} ${entry.path}` : ""} ·{" "}
-                        {relativeTime(entry.createdAt)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <>
+            <div className="card">
+              <p className="card-title">
+                Acessos{overview.recentAccess.length > 0 ? ` (${overview.recentAccess.length})` : ""}
+              </p>
+              {overview.recentAccess.length === 0 ? (
+                <p className="empty-state">Nenhum acesso registrado ainda.</p>
+              ) : (
+                <ul className="transaction-list">
+                  {overview.recentAccess.map((entry) => (
+                    <li key={entry.id} className="transaction-row">
+                      <div className="transaction-info">
+                        <span className="transaction-desc">{entry.email}</span>
+                        <span className="transaction-meta">
+                          {entry.event === "register" ? "criou a conta" : "entrou"} · {relativeTime(entry.createdAt)}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="card">
+              <p className="card-title">
+                Erros{overview.recentErrors.length > 0 ? ` (${overview.recentErrors.length})` : ""}
+              </p>
+              {overview.recentErrors.length === 0 ? (
+                <p className="empty-state">Nenhum erro registrado.</p>
+              ) : (
+                <ul className="transaction-list">
+                  {overview.recentErrors.map((entry) => (
+                    <li key={entry.id} className="transaction-row">
+                      <div className="transaction-info">
+                        <span className="transaction-desc">{entry.message}</span>
+                        <span className="transaction-meta">
+                          {entry.source}
+                          {entry.method && entry.path ? ` · ${entry.method} ${entry.path}` : ""} ·{" "}
+                          {relativeTime(entry.createdAt)}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
         )}
       </div>
     </AppLayout>

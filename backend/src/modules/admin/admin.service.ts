@@ -1,4 +1,5 @@
 import { db } from "../../db/firestore";
+import { listRecentAccess, type AccessLogEntry } from "../../utils/accessLog";
 import { listRecentErrors, type ErrorLogEntry } from "../../utils/errorLog";
 
 export class NotAdminError extends Error {}
@@ -32,6 +33,7 @@ export interface AdminOverview {
   telegramLinked: number;
   whatsappLinked: number;
   recentErrors: ErrorLogEntry[];
+  recentAccess: AccessLogEntry[];
 }
 
 // "Casal completo" (paired) vs "sozinho" (solo) isn't a stored flag -- it's
@@ -39,13 +41,15 @@ export interface AdminOverview {
 // groupId field (not full user docs) keeps this cheap even as the user
 // count grows.
 export async function getAdminOverview(): Promise<AdminOverview> {
-  const [userCountSnap, groupCountSnap, telegramCountSnap, userGroupIds, recentErrors] = await Promise.all([
-    usersCol.count().get(),
-    groupsCol.count().get(),
-    telegramLinksCol.count().get(),
-    usersCol.select("groupId").get(),
-    listRecentErrors(20),
-  ]);
+  const [userCountSnap, groupCountSnap, telegramCountSnap, userGroupIds, recentErrors, recentAccess] =
+    await Promise.all([
+      usersCol.count().get(),
+      groupsCol.count().get(),
+      telegramLinksCol.count().get(),
+      usersCol.select("groupId").get(),
+      listRecentErrors(20),
+      listRecentAccess(20),
+    ]);
 
   const membersByGroup = new Map<string, number>();
   for (const doc of userGroupIds.docs) {
@@ -71,5 +75,6 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     // frontend chart doesn't need a follow-up change when it exists.
     whatsappLinked: 0,
     recentErrors,
+    recentAccess,
   };
 }
