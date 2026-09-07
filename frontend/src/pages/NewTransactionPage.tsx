@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { EmojiPicker } from "../components/EmojiPicker";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
+import { formatCurrency } from "../utils/format";
 
 interface AccountRow {
   id: string;
@@ -47,6 +48,13 @@ export function NewTransactionPage() {
   const [recurringMonths, setRecurringMonths] = useState("12");
 
   const isIncome = transactionType === "income";
+  // Live preview only -- the real split (with exact-cent remainder handling)
+  // is computed server-side in splitEvenly() when the transaction is saved.
+  const parsedAmountPreview = Number(amount.replace(",", "."));
+  const perPersonAmount =
+    splitType === "equal" && members.length > 0 && parsedAmountPreview > 0
+      ? parsedAmountPreview / members.length
+      : null;
 
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -312,6 +320,15 @@ export function NewTransactionPage() {
                   <option value="none">Não dividir</option>
                   <option value="equal">Dividir igualmente entre o grupo</option>
                 </select>
+                {splitType === "equal" && (
+                  <p className="field-hint">
+                    {members.length > 1
+                      ? `${members.length} pessoas no grupo${
+                          perPersonAmount !== null ? ` — ${formatCurrency(perPersonAmount)} cada` : ""
+                        }.`
+                      : "Só tem você no grupo por enquanto — convide alguém pra dividir de verdade."}
+                  </p>
+                )}
               </div>
 
               <label className="checkbox-field">
