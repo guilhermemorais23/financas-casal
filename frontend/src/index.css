@@ -1,14 +1,14 @@
 :root {
-  /* Surfaces & ink -- clean white ground with a cool sage-grey ink instead
-     of the previous warm coffee tint. */
-  --surface: #ffffff;
-  --page-plane: #f2f4ef;
-  --ink-primary: #171a16;
-  --ink-secondary: #5b6358;
-  --ink-muted: #8d958a;
-  --gridline: #e2e6dd;
-  --baseline: #c7ccc1;
-  --border: rgba(23, 26, 22, 0.08);
+  /* Surfaces & ink -- off-white ground (not stark white) with an
+     indigo-biased ink instead of the previous cool sage-grey. */
+  --surface: #fbfaf8;
+  --page-plane: #efece5;
+  --ink-primary: #191933;
+  --ink-secondary: #62637e;
+  --ink-muted: #9495ae;
+  --gridline: #e6e2d8;
+  --baseline: #c9c4b5;
+  --border: rgba(25, 25, 51, 0.08);
 
   /* Categorical slots, fixed order (CVD-validated, never cycled) */
   --series-1: #2a78d6; /* blue   */
@@ -38,44 +38,44 @@
   --status-critical: #d03b3b;
   --success-text: #006300;
 
-  /* Brand palette (sage + rose + gold, on white) -- decoupled from the
+  /* Brand palette (purple + blue, on off-white) -- decoupled from the
      --series-* categorical chart colors on purpose, so re-theming the
      brand never touches the validated chart palette. Variable names kept
      from the previous coffee/peach/olive theme so every usage site below
      picks up the new palette without needing to be touched individually. */
-  --coffee-100: #e8f2ec;
-  --coffee-300: #7fb69a;
-  --coffee-500: #3f7d5c;
-  --coffee-600: #316348;
-  --coffee-700: #234634;
-  --coffee-900: #14261c;
-  --cream: #f7faf5;
-  --peach: #d98aa0;
-  --peach-dark: #b8465f;
+  --coffee-100: #ece9fc;
+  --coffee-300: #b3a4f5;
+  --coffee-500: #6d54ec;
+  --coffee-600: #5a3fdb;
+  --coffee-700: #452fac;
+  --coffee-900: #241a52;
+  --cream: #f8f6f2;
+  --peach: #3e79f7;
+  --peach-dark: #2b5fe0;
 
-  /* Gold -- the second brand accent (Par's partner identity color,
-     shared/group progress bars) kept distinct from the sage primary so
+  /* Blue -- the second brand accent (Par's partner identity color,
+     shared/group progress bars) kept distinct from the purple primary so
      "your stuff" vs "shared stuff" reads at a glance. */
-  --olive-100: #f7f0da;
-  --olive-500: #c9962c;
-  --olive-600: #a67b23;
-  --olive-700: #7d5d1a;
+  --olive-100: #e4ecfe;
+  --olive-500: #3e79f7;
+  --olive-600: #2b5fe0;
+  --olive-700: #1f47ab;
 
   /* Person identity slots (Você / parceiro) -- brand-matched, decoupled
      from the CVD-safe --series-* chart palette on purpose. */
   --person-1: var(--coffee-500);
   --person-2: var(--olive-500);
 
-  /* Card/input surfaces -- white cards on the faint sage-grey page plane,
-     so a card reads as "lifted" from thin contrast + a hairline border
-     instead of a filled warm tone. */
-  --tan-card: #ffffff;
-  --tan-input: #eef1ea;
-  --tan-track: #e3e8dd;
+  /* Card/input surfaces -- off-white cards on the faint warm-grey page
+     plane, so a card reads as "lifted" from thin contrast + a hairline
+     border instead of a filled tone. */
+  --tan-card: #fbfaf8;
+  --tan-input: #f1eee6;
+  --tan-track: #e7e2d7;
 
-  /* App aliases -- primary is sage (buttons/FAB/active nav); rose is
-     reserved for the "peach" accent slots (badges, warm highlights) so the
-     two stay visually distinct. */
+  /* App aliases -- primary is purple (buttons/FAB/active nav); blue is
+     reserved for the "peach" accent slots (badges, secondary highlights) so
+     the two stay visually distinct. */
   --color-primary: var(--coffee-500);
   --color-primary-dark: var(--coffee-600);
   --color-primary-soft: var(--coffee-100);
@@ -100,13 +100,13 @@
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --surface: #141713;
-    --page-plane: #0d0f0c;
+    --surface: #191a2e;
+    --page-plane: #101122;
     --ink-primary: #ffffff;
-    --ink-secondary: #c3c7bd;
-    --ink-muted: #8f948a;
-    --gridline: #292c26;
-    --baseline: #3a3d37;
+    --ink-secondary: #c3c5db;
+    --ink-muted: #8a8ba8;
+    --gridline: #2c2d47;
+    --baseline: #3d3e5c;
     --border: rgba(255, 255, 255, 0.1);
 
     --series-1: #3987e5;
@@ -120,24 +120,24 @@
 
     --success-text: var(--status-good);
     --color-primary-dark: var(--coffee-300);
-    --color-primary-soft: rgba(127, 182, 154, 0.18);
+    --color-primary-soft: rgba(179, 164, 245, 0.18);
     --color-danger-bg: rgba(230, 103, 103, 0.15);
 
-    --tan-card: #1a201b;
-    --tan-input: #212a22;
-    --tan-track: #2c3a2e;
+    --tan-card: #1c1d33;
+    --tan-input: #23253f;
+    --tan-track: #2d2f4d;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface: #141713;
-  --page-plane: #0d0f0c;
+  --surface: #191a2e;
+  --page-plane: #101122;
   --ink-primary: #ffffff;
-  --ink-secondary: #c3c7bd;
-  --ink-muted: #8f948a;
-  --gridline: #292c26;
-  --baseline: #3a3d37;
+  --ink-secondary: #c3c5db;
+  --ink-muted: #8a8ba8;
+  --gridline: #2c2d47;
+  --baseline: #3d3e5c;
   --border: rgba(255, 255, 255, 0.1);
 
   --series-1: #3987e5;
@@ -151,12 +151,12 @@
 
   --success-text: var(--status-good);
   --color-primary-dark: var(--coffee-300);
-  --color-primary-soft: rgba(127, 182, 154, 0.18);
+  --color-primary-soft: rgba(179, 164, 245, 0.18);
   --color-danger-bg: rgba(230, 103, 103, 0.15);
 
-  --tan-card: #1a201b;
-  --tan-input: #212a22;
-  --tan-track: #2c3a2e;
+  --tan-card: #1c1d33;
+  --tan-input: #23253f;
+  --tan-track: #2d2f4d;
 }
 
 * {
@@ -576,11 +576,11 @@ input:focus {
 .btn-outline-light {
   background: transparent;
   color: var(--cream);
-  border-color: rgba(247, 239, 229, 0.5);
+  border-color: rgba(248, 246, 242, 0.5);
 }
 
 .btn-outline-light:hover:not(:disabled) {
-  background: rgba(247, 239, 229, 0.12);
+  background: rgba(248, 246, 242, 0.12);
 }
 
 .btn-google-icon {
@@ -644,7 +644,7 @@ input:focus {
 
 .onboarding-screen {
   min-height: 100vh;
-  background: linear-gradient(160deg, var(--coffee-500), var(--coffee-900));
+  background: linear-gradient(135deg, var(--coffee-500), var(--olive-700) 140%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2436,7 +2436,9 @@ select {
 .stat-card {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(160deg, var(--coffee-600), var(--coffee-900));
+  /* Purple-to-blue duotone (was a single-hue coffee gradient) -- matches
+     the two-color mockup approved for the rebrand. */
+  background: linear-gradient(135deg, var(--coffee-600), var(--olive-600) 140%);
   color: var(--cream);
   border-radius: var(--radius);
   padding: 1.75rem;
@@ -2456,7 +2458,7 @@ select {
   width: 5.5rem;
   height: 5.5rem;
   border-radius: 50%;
-  background: rgba(247, 239, 229, 0.14);
+  background: rgba(248, 246, 242, 0.14);
 }
 
 .stat-card-circle.stat-card-circle-2 {
@@ -2464,16 +2466,16 @@ select {
   right: 3rem;
   width: 2.75rem;
   height: 2.75rem;
-  background: rgba(232, 168, 124, 0.28);
+  background: rgba(147, 179, 251, 0.28);
 }
 
 :root[data-theme="dark"] .stat-card {
-  background: linear-gradient(160deg, var(--coffee-700), #000000);
+  background: linear-gradient(135deg, var(--coffee-700), #0a0b1c);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) .stat-card {
-    background: linear-gradient(160deg, var(--coffee-700), #000000);
+    background: linear-gradient(135deg, var(--coffee-700), #0a0b1c);
   }
 }
 
