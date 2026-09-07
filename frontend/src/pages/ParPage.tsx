@@ -152,16 +152,22 @@ export function ParPage() {
     }
   }
 
+  // Optimistic: flips the pill instantly, reloads in the background (only
+  // to catch up the "Divisões em aberto" card) rather than waiting on that
+  // reload before the click shows any effect.
   async function handleToggleSettled(tx: TransactionListRow) {
+    const nextSettled = !tx.isSettled;
+    setTransactions((current) => current?.map((row) => (row.id === tx.id ? { ...row, isSettled: nextSettled } : row)) ?? current);
     setError(null);
     try {
       await apiRequest(`/transactions/${tx.id}/settle`, {
         method: "PATCH",
         token,
-        body: { isSettled: !tx.isSettled },
+        body: { isSettled: nextSettled },
       });
-      await load();
+      load();
     } catch (err) {
+      setTransactions((current) => current?.map((row) => (row.id === tx.id ? { ...row, isSettled: tx.isSettled } : row)) ?? current);
       setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a divisão");
     }
   }

@@ -298,17 +298,24 @@ export function DashboardPage() {
 
   // Toggles a split expense between "aberto" (nobody's paid their share
   // back yet) and "pago" (settled outside the app -- a Pix, cash...). Pure
-  // status flag, never touches the transaction's amount.
+  // status flag, never touches the transaction's amount. Optimistic: the
+  // pill flips instantly instead of waiting on the round trip + a full
+  // reload, which is what made it feel slow. load() still runs afterward,
+  // just in the background, to catch up the "Divisões em aberto" total on
+  // the Par card -- it doesn't block or delay what the click itself changed.
   async function handleToggleSettled(tx: TransactionListRow) {
+    const nextSettled = !tx.isSettled;
+    setRecent((current) => current.map((row) => (row.id === tx.id ? { ...row, isSettled: nextSettled } : row)));
     setError(null);
     try {
       await apiRequest(`/transactions/${tx.id}/settle`, {
         method: "PATCH",
         token,
-        body: { isSettled: !tx.isSettled },
+        body: { isSettled: nextSettled },
       });
-      await load(month);
+      load(month);
     } catch (err) {
+      setRecent((current) => current.map((row) => (row.id === tx.id ? { ...row, isSettled: tx.isSettled } : row)));
       setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a divisão");
     }
   }
