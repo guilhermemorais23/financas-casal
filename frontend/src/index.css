@@ -1918,20 +1918,40 @@ input:focus {
 .split-status-pill {
   display: inline-flex;
   align-items: center;
+  gap: 0.3rem;
   margin-left: 0.4rem;
-  padding: 0.05rem 0.45rem;
-  border: none;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--status-warning) 45%, transparent);
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 600;
   cursor: pointer;
   color: var(--status-warning);
   background: color-mix(in srgb, var(--status-warning) 16%, var(--color-bg));
+  transition: filter 0.1s ease;
+}
+
+/* A little "toque pra mudar" hint -- without this the pill just reads as a
+   static status label, which is exactly what confused the first person who
+   used it (nothing else about a colored badge says "click me"). */
+.split-status-pill::after {
+  content: "↻";
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.split-status-pill:hover {
+  filter: brightness(0.95);
+}
+
+.split-status-pill:active {
+  filter: brightness(0.88);
 }
 
 .split-status-pill.settled {
   color: var(--status-good);
   background: color-mix(in srgb, var(--status-good) 14%, var(--color-bg));
+  border-color: color-mix(in srgb, var(--status-good) 45%, transparent);
 }
 
 .dashed-add-card {
