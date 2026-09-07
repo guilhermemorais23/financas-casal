@@ -61,12 +61,23 @@ interface BudgetResponse {
   spent: number;
 }
 
+interface BalanceRow {
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+}
+
+interface BalanceResponse {
+  balances: BalanceRow[];
+}
+
 export function ParPage() {
   const { user, token } = useAuth();
   const cacheKey = (name: string) => `par:${name}:${user?.id ?? "anon"}`;
 
   const [group, setGroup] = useState<GroupResponse | null>(() => readCache(cacheKey("group")));
   const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(cacheKey("summary")));
+  const [balance, setBalance] = useState<BalanceResponse | null>(() => readCache(cacheKey("balance")));
   const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(cacheKey("budget")));
   const [transactions, setTransactions] = useState<TransactionListRow[] | null>(() =>
     readCache(cacheKey("transactions"))
@@ -89,6 +100,7 @@ export function ParPage() {
 
     const groupPromise = apiRequest<GroupResponse>("/groups/me", { token });
     const summaryPromise = apiRequest<SummaryResponse>(`/transactions/summary?month=${month}`, { token });
+    const balancePromise = apiRequest<BalanceResponse>("/transactions/balance", { token });
     const budgetPromise = apiRequest<BudgetResponse>(`/budgets/current?month=${month}`, { token });
 
     async function jointTransactions(): Promise<TransactionListRow[]> {
@@ -97,19 +109,22 @@ export function ParPage() {
       return apiRequest<TransactionListRow[]>(`/transactions?limit=50&accountId=${jointAccountId}`, { token });
     }
 
-    const [groupRes, summaryRes, budgetRes, txRes] = await Promise.all([
+    const [groupRes, summaryRes, balanceRes, budgetRes, txRes] = await Promise.all([
       groupPromise,
       summaryPromise,
+      balancePromise,
       budgetPromise,
       jointTransactions(),
     ]);
 
     setGroup(groupRes);
     setSummary(summaryRes);
+    setBalance(balanceRes);
     setBudget(budgetRes);
     setTransactions(txRes);
     writeCache(cacheKey("group"), groupRes);
     writeCache(cacheKey("summary"), summaryRes);
+    writeCache(cacheKey("balance"), balanceRes);
     writeCache(cacheKey("budget"), budgetRes);
     writeCache(cacheKey("transactions"), txRes);
     setIsLoading(false);
@@ -215,6 +230,30 @@ export function ParPage() {
             </div>
           ))}
         </div>
+
+        {orderedMembers.length > 1 && (
+          <div className="card">
+            <p className="card-title">Quem deve quem</p>
+            <p className="card-subtitle">
+              Soma de tudo que foi dividido igualmente e ainda não foi acertado (não é só deste mês).
+            </p>
+            {!balance || balance.balances.length === 0 ? (
+              <p className="empty-state">Vocês estão quites -- ninguém deve nada por enquanto.</p>
+            ) : (
+              <ul className="member-list">
+                {balance.balances.map((row) => (
+                  <li key={`${row.fromUserId}_${row.toUserId}`} className="member-row">
+                    {row.fromUserId === user?.id
+                      ? `Você deve ${formatCurrency(row.amount)} pra ${memberName(row.toUserId)}`
+                      : row.toUserId === user?.id
+                        ? `${memberName(row.fromUserId)} te deve ${formatCurrency(row.amount)}`
+                        : `${memberName(row.fromUserId)} deve ${formatCurrency(row.amount)} pra ${memberName(row.toUserId)}`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <div className="card budget-card">
           <div className="budget-header">

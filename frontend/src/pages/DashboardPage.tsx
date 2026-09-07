@@ -85,6 +85,16 @@ interface JointSummaryResponse {
   byPayer: PayerSummaryRow[];
 }
 
+interface BalanceRow {
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+}
+
+interface BalanceResponse {
+  balances: BalanceRow[];
+}
+
 interface BudgetResponse {
   budget: { capAmount: string } | null;
   spent: number;
@@ -101,6 +111,7 @@ interface DashboardResponse {
   debts: DebtRow[];
   summary: SummaryResponse;
   jointSummary: JointSummaryResponse;
+  balance: BalanceResponse;
   budget: BudgetResponse;
   categoryBudgets: CategoryBudgetRow[];
   dailyTrend: DailyTrendPoint[];
@@ -145,6 +156,9 @@ export function DashboardPage() {
   const [jointSummary, setJointSummary] = useState<JointSummaryResponse | null>(() =>
     readCache(monthKey("jointSummary"))
   );
+  // Lifetime, not per-month (see dashboard.service.ts) -- cached under the
+  // static key, same as group/debts.
+  const [balance, setBalance] = useState<BalanceResponse | null>(() => readCache(staticKey("balance")));
   const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(monthKey("budget")));
   const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgetRow[]>(
     () => readCache(monthKey("categoryBudgets")) ?? []
@@ -173,6 +187,7 @@ export function DashboardPage() {
       setDebts(data.debts);
       setSummary(data.summary);
       setJointSummary(data.jointSummary);
+      setBalance(data.balance);
       setBudget(data.budget);
       setCategoryBudgets(data.categoryBudgets);
       setDailyTrend(data.dailyTrend);
@@ -180,6 +195,7 @@ export function DashboardPage() {
 
     writeCache(sKey("group"), data.group);
     writeCache(sKey("debts"), data.debts);
+    writeCache(sKey("balance"), data.balance);
     writeCache(mKey("personalMonthTx"), data.personalMonthTx);
     writeCache(mKey("personalPrevMonthTx"), data.personalPrevMonthTx);
     writeCache(mKey("recent"), data.recent);
@@ -329,6 +345,8 @@ export function DashboardPage() {
   }, [group, user]);
   const jointSpentByUser = (memberId: string) =>
     Number(jointSummary?.byPayer.find((row) => row.payerId === memberId)?.total ?? 0);
+  const memberName = (memberId: string) =>
+    memberId === user?.id ? "Você" : (group?.members.find((member) => member.id === memberId)?.displayName ?? "Alguém do grupo");
 
   if (error && !group) {
     return (
@@ -488,6 +506,19 @@ export function DashboardPage() {
                     </div>
                   ))}
                 </div>
+                {balance && balance.balances.length > 0 && (
+                  <p className="card-subtitle" style={{ marginTop: "0.75rem" }}>
+                    {balance.balances
+                      .map((row) =>
+                        row.fromUserId === user?.id
+                          ? `Você deve ${formatCurrency(row.amount)} pra ${memberName(row.toUserId)}`
+                          : row.toUserId === user?.id
+                            ? `${memberName(row.fromUserId)} te deve ${formatCurrency(row.amount)}`
+                            : `${memberName(row.fromUserId)} deve ${formatCurrency(row.amount)} pra ${memberName(row.toUserId)}`
+                      )
+                      .join(" · ")}
+                  </p>
+                )}
               </div>
             )}
 

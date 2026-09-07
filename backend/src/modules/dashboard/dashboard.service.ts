@@ -1,7 +1,12 @@
 import { getGroupForUser } from "../groups/groups.service";
 import { listDebts } from "../debts/debts.service";
 import { getCategoryBudgets, getCurrentBudget } from "../budgets/budgets.service";
-import { getDailySeriesForUser, getMonthlySummaryForUser, listTransactions } from "../transactions/transactions.service";
+import {
+  getBalance,
+  getDailySeriesForUser,
+  getMonthlySummaryForUser,
+  listTransactions,
+} from "../transactions/transactions.service";
 import { addMonths, parseMonthRange } from "../../utils/month";
 
 export { InvalidMonthError } from "../../utils/month";
@@ -29,7 +34,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     (account) => account.type === "personal" && account.ownerUserId === userId
   )?.id;
 
-  const [recent, debts, summary, jointSummary, budget, categoryBudgets, dailyTrend, personalMonthTx, personalPrevMonthTx] =
+  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, personalMonthTx, personalPrevMonthTx] =
     await Promise.all([
       listTransactions(userId, 8, month),
       listDebts(userId),
@@ -39,6 +44,12 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
       // `summary` above mixes in the requester's own personal spending too,
       // which isn't what "quanto cada um pôs na conta conjunta" means).
       getMonthlySummaryForUser(userId, month, "joint"),
+      // Lifetime running "quem deve quem" from every equal-split expense
+      // ever made (not scoped to this month -- there's no settle-up action
+      // yet, so it accumulates like a running tab until someone pays back
+      // outside the app and it's manually reconciled). Existed in the
+      // backend for a while with no UI surfacing it at all.
+      getBalance(userId),
       getCurrentBudget(userId, month),
       getCategoryBudgets(userId, month),
       getDailySeriesForUser(userId, month, "visible"),
@@ -52,6 +63,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     debts,
     summary,
     jointSummary,
+    balance,
     budget,
     categoryBudgets,
     dailyTrend,
