@@ -7,6 +7,7 @@ export class NotAdminError extends Error {}
 const usersCol = db.collection("users");
 const groupsCol = db.collection("groups");
 const telegramLinksCol = db.collection("telegramLinks");
+const whatsappLinksCol = db.collection("whatsappLinks");
 
 function adminEmails(): string[] {
   return (process.env.ADMIN_EMAILS ?? "")
@@ -41,11 +42,12 @@ export interface AdminOverview {
 // groupId field (not full user docs) keeps this cheap even as the user
 // count grows.
 export async function getAdminOverview(): Promise<AdminOverview> {
-  const [userCountSnap, groupCountSnap, telegramCountSnap, userGroupIds, recentErrors, recentAccess] =
+  const [userCountSnap, groupCountSnap, telegramCountSnap, whatsappCountSnap, userGroupIds, recentErrors, recentAccess] =
     await Promise.all([
       usersCol.count().get(),
       groupsCol.count().get(),
       telegramLinksCol.count().get(),
+      whatsappLinksCol.count().get(),
       usersCol.select("groupId").get(),
       listRecentErrors(20),
       listRecentAccess(20),
@@ -71,9 +73,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     pairedGroups,
     soloGroups,
     telegramLinked: telegramCountSnap.data().count,
-    // No WhatsApp integration yet -- kept in the response shape so the
-    // frontend chart doesn't need a follow-up change when it exists.
-    whatsappLinked: 0,
+    whatsappLinked: whatsappCountSnap.data().count,
     recentErrors,
     recentAccess,
   };

@@ -1,3 +1,5 @@
+import type { AudioPayload } from "./assistant.types";
+
 export class TelegramNotConfiguredError extends Error {}
 
 const TELEGRAM_API = "https://api.telegram.org";
@@ -16,14 +18,9 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
   });
 }
 
-export interface TelegramAudio {
-  mimeType: string;
-  base64: string;
-}
-
 // Telegram voice notes are opus-encoded .oga files -- Gemini accepts
 // "audio/ogg" directly, so no local transcoding/transcription step needed.
-export async function downloadTelegramVoice(fileId: string): Promise<TelegramAudio> {
+export async function downloadTelegramVoice(fileId: string): Promise<AudioPayload> {
   const token = botToken();
   const infoRes = await fetch(`${TELEGRAM_API}/bot${token}/getFile?file_id=${fileId}`);
   const info = (await infoRes.json()) as { result?: { file_path?: string } };
