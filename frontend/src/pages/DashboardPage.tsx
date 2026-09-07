@@ -10,6 +10,7 @@ import { CircularProgress } from "../components/CircularProgress";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { MonthPicker } from "../components/MonthPicker";
+import { SplitStatusPill } from "../components/SplitStatusPill";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, tint } from "../utils/categoryColor";
 import {
@@ -296,28 +297,11 @@ export function DashboardPage() {
     }
   }
 
-  // Toggles a split expense between "aberto" (nobody's paid their share
-  // back yet) and "pago" (settled outside the app -- a Pix, cash...). Pure
-  // status flag, never touches the transaction's amount. Optimistic: the
-  // pill flips instantly instead of waiting on the round trip + a full
-  // reload, which is what made it feel slow. load() still runs afterward,
-  // just in the background, to catch up the "Divisões em aberto" total on
-  // the Par card -- it doesn't block or delay what the click itself changed.
-  async function handleToggleSettled(tx: TransactionListRow) {
-    const nextSettled = !tx.isSettled;
-    setRecent((current) => current.map((row) => (row.id === tx.id ? { ...row, isSettled: nextSettled } : row)));
-    setError(null);
-    try {
-      await apiRequest(`/transactions/${tx.id}/settle`, {
-        method: "PATCH",
-        token,
-        body: { isSettled: nextSettled },
-      });
-      load(month);
-    } catch (err) {
-      setRecent((current) => current.map((row) => (row.id === tx.id ? { ...row, isSettled: tx.isSettled } : row)));
-      setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a divisão");
-    }
+  // Local list update SplitStatusPill drives directly (optimistic flip,
+  // reverted again if its request fails) -- see that component for the
+  // actual settle/reopen calls.
+  function setRecentSettled(transactionId: string, nextSettled: boolean) {
+    setRecent((current) => current.map((row) => (row.id === transactionId ? { ...row, isSettled: nextSettled } : row)));
   }
 
   // Derived values below must stay above any conditional `return` -- they're
@@ -682,14 +666,15 @@ export function DashboardPage() {
                             <span className="transaction-meta">
                               {tx.categoryName ?? "Sem categoria"}
                               {tx.splitType === "equal" && (
-                                <button
-                                  type="button"
-                                  className={`split-status-pill${tx.isSettled ? " settled" : ""}`}
-                                  onClick={() => handleToggleSettled(tx)}
-                                  title="Marcar como pago/em aberto"
-                                >
-                                  {tx.isSettled ? "✓ Pago" : "Em aberto"}
-                                </button>
+                                <SplitStatusPill
+                                  token={token}
+                                  transactionId={tx.id}
+                                  totalAmount={Number(tx.amount)}
+                                  isSettled={tx.isSettled}
+                                  onOptimisticChange={(next) => setRecentSettled(tx.id, next)}
+                                  onSettled={() => load(month)}
+                                  onError={(message) => setError(message)}
+                                />
                               )}
                             </span>
                           </div>

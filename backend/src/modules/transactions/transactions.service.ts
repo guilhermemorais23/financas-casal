@@ -199,12 +199,21 @@ export async function deleteTransactionForUser(userId: string, transactionId: st
 }
 
 export class NotSplitError extends Error {}
+export class InvalidSettlementAmountError extends Error {}
 
-// "Marcar como pago/em aberto" -- purely a manual status flag for a split
-// expense (e.g. the other person sent the Pix for their half), independent
-// of the transaction's amount or its real effect on the account balance.
-// Once marked settled, it stops counting toward getBalance below.
-export async function setSplitSettledForUser(userId: string, transactionId: string, isSettled: boolean) {
+// "Marcar como pago" -- unlike a plain status flag, this actually books the
+// money: creates a real income transaction for whatever the other member(s)
+// paid back (a Pix, cash...) on the same account the original expense hit,
+// so the Painel/saldo reflects it too, not just a "not owed anymore" label.
+// Same linked-transaction pattern as debts/cards/shopping: settlementTransactionId
+// on the original expense points at it, and reopening ("em aberto" again)
+// deletes it -- the split status and that income entry always move together.
+export async function setSplitSettledForUser(
+  userId: string,
+  transactionId: string,
+  isSettled: boolean,
+  amount?: number
+) {
   const groupId = await requireGroupId(userId);
   const transaction = await findTransactionById(transactionId);
   if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
@@ -213,7 +222,33 @@ export async function setSplitSettledForUser(userId: string, transactionId: stri
   if (transaction.splitType === "none") {
     throw new NotSplitError();
   }
-  return setTransactionSettled(transactionId, isSettled);
+
+  if (isSettled) {
+    if (typeof amount !== "number" || amount <= 0) {
+      throw new InvalidSettlementAmountError();
+    }
+    const settlementTx = await insertTransaction({
+      groupId: transaction.groupId,
+      accountId: transaction.accountId,
+      accountType: transaction.accountType,
+      accountOwnerId: transaction.accountOwnerId,
+      categoryId: null,
+      payerId: userId,
+      createdBy: userId,
+      description: `Reembolso: ${transaction.description}`,
+      amount,
+      transactionType: "income",
+      occurredAt: new Date().toISOString().slice(0, 10),
+      isPrivate: false,
+      splitType: "none",
+    });
+    return setTransactionSettled(transactionId, true, settlementTx.id);
+  }
+
+  if (transaction.settlementTransactionId) {
+    await deleteTransaction(transaction.settlementTransactionId);
+  }
+  return setTransactionSettled(transactionId, false, null);
 }
 
 // "Cancel this subscription/rent/salary" -- deletes this occurrence and
