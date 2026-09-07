@@ -16,6 +16,7 @@ import {
   insertSplits,
   insertTransaction,
   insertTransactionSeries,
+  setTransactionSettled,
   updateTransaction,
   type SplitType,
   type SummaryScope,
@@ -195,6 +196,24 @@ export async function deleteTransactionForUser(userId: string, transactionId: st
     throw new TransactionNotFoundError();
   }
   await deleteTransaction(transactionId);
+}
+
+export class NotSplitError extends Error {}
+
+// "Marcar como pago/em aberto" -- purely a manual status flag for a split
+// expense (e.g. the other person sent the Pix for their half), independent
+// of the transaction's amount or its real effect on the account balance.
+// Once marked settled, it stops counting toward getBalance below.
+export async function setSplitSettledForUser(userId: string, transactionId: string, isSettled: boolean) {
+  const groupId = await requireGroupId(userId);
+  const transaction = await findTransactionById(transactionId);
+  if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
+    throw new TransactionNotFoundError();
+  }
+  if (transaction.splitType === "none") {
+    throw new NotSplitError();
+  }
+  return setTransactionSettled(transactionId, isSettled);
 }
 
 // "Cancel this subscription/rent/salary" -- deletes this occurrence and

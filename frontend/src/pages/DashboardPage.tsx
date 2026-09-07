@@ -52,6 +52,8 @@ interface TransactionListRow {
   categoryName: string | null;
   categoryEmoji: string | null;
   recurringGroupId: string | null;
+  splitType: "none" | "equal";
+  isSettled: boolean;
 }
 
 interface DebtRow {
@@ -294,6 +296,23 @@ export function DashboardPage() {
     }
   }
 
+  // Toggles a split expense between "aberto" (nobody's paid their share
+  // back yet) and "pago" (settled outside the app -- a Pix, cash...). Pure
+  // status flag, never touches the transaction's amount.
+  async function handleToggleSettled(tx: TransactionListRow) {
+    setError(null);
+    try {
+      await apiRequest(`/transactions/${tx.id}/settle`, {
+        method: "PATCH",
+        token,
+        body: { isSettled: !tx.isSettled },
+      });
+      await load(month);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a divisão");
+    }
+  }
+
   // Derived values below must stay above any conditional `return` -- they're
   // hooks (useMemo), and hook calls can't be conditional. Cheap arithmetic
   // (percentChange, budget math) stays as plain consts; the array-heavy work
@@ -508,13 +527,14 @@ export function DashboardPage() {
                 </div>
                 {balance && balance.balances.length > 0 && (
                   <p className="card-subtitle" style={{ marginTop: "0.75rem" }}>
+                    Divisões em aberto:{" "}
                     {balance.balances
                       .map((row) =>
                         row.fromUserId === user?.id
-                          ? `Você deve ${formatCurrency(row.amount)} pra ${memberName(row.toUserId)}`
+                          ? `${formatCurrency(row.amount)} a pagar pra ${memberName(row.toUserId)}`
                           : row.toUserId === user?.id
-                            ? `${memberName(row.fromUserId)} te deve ${formatCurrency(row.amount)}`
-                            : `${memberName(row.fromUserId)} deve ${formatCurrency(row.amount)} pra ${memberName(row.toUserId)}`
+                            ? `${formatCurrency(row.amount)} a receber de ${memberName(row.fromUserId)}`
+                            : `${formatCurrency(row.amount)} entre ${memberName(row.fromUserId)} e ${memberName(row.toUserId)}`
                       )
                       .join(" · ")}
                   </p>
@@ -652,7 +672,19 @@ export function DashboardPage() {
                               {tx.description}
                               {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
                             </span>
-                            <span className="transaction-meta">{tx.categoryName ?? "Sem categoria"}</span>
+                            <span className="transaction-meta">
+                              {tx.categoryName ?? "Sem categoria"}
+                              {tx.splitType === "equal" && (
+                                <button
+                                  type="button"
+                                  className={`split-status-pill${tx.isSettled ? " settled" : ""}`}
+                                  onClick={() => handleToggleSettled(tx)}
+                                  title="Marcar como pago/em aberto"
+                                >
+                                  {tx.isSettled ? "✓ Pago" : "Em aberto"}
+                                </button>
+                              )}
+                            </span>
                           </div>
                           <span className={`transaction-amount ${tx.transactionType}`}>
                             {tx.transactionType === "income" ? "+" : "-"}

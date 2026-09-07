@@ -37,6 +37,8 @@ interface TransactionListRow {
   categoryId: string | null;
   categoryName: string | null;
   categoryEmoji: string | null;
+  splitType: "none" | "equal";
+  isSettled: boolean;
 }
 
 interface PayerSummaryRow {
@@ -150,6 +152,20 @@ export function ParPage() {
     }
   }
 
+  async function handleToggleSettled(tx: TransactionListRow) {
+    setError(null);
+    try {
+      await apiRequest(`/transactions/${tx.id}/settle`, {
+        method: "PATCH",
+        token,
+        body: { isSettled: !tx.isSettled },
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a divisão");
+    }
+  }
+
   if (!group) {
     return (
       <AppLayout>
@@ -233,21 +249,22 @@ export function ParPage() {
 
         {orderedMembers.length > 1 && (
           <div className="card">
-            <p className="card-title">Quem deve quem</p>
+            <p className="card-title">Divisões em aberto</p>
             <p className="card-subtitle">
-              Soma de tudo que foi dividido igualmente e ainda não foi acertado (não é só deste mês).
+              Soma do que ainda está marcado "Em aberto" no extrato (não é só deste mês -- marque cada
+              lançamento como pago assim que acertarem, no Pix ou como for).
             </p>
             {!balance || balance.balances.length === 0 ? (
-              <p className="empty-state">Vocês estão quites -- ninguém deve nada por enquanto.</p>
+              <p className="empty-state">Tudo em dia -- nenhuma divisão em aberto no momento.</p>
             ) : (
               <ul className="member-list">
                 {balance.balances.map((row) => (
                   <li key={`${row.fromUserId}_${row.toUserId}`} className="member-row">
                     {row.fromUserId === user?.id
-                      ? `Você deve ${formatCurrency(row.amount)} pra ${memberName(row.toUserId)}`
+                      ? `${formatCurrency(row.amount)} a pagar pra ${memberName(row.toUserId)}`
                       : row.toUserId === user?.id
-                        ? `${memberName(row.fromUserId)} te deve ${formatCurrency(row.amount)}`
-                        : `${memberName(row.fromUserId)} deve ${formatCurrency(row.amount)} pra ${memberName(row.toUserId)}`}
+                        ? `${formatCurrency(row.amount)} a receber de ${memberName(row.fromUserId)}`
+                        : `${formatCurrency(row.amount)} entre ${memberName(row.fromUserId)} e ${memberName(row.toUserId)}`}
                   </li>
                 ))}
               </ul>
@@ -342,6 +359,16 @@ export function ParPage() {
                   <span className="transaction-meta">
                     {memberName(tx.payerId)} · {tx.categoryName ?? "Sem categoria"} ·{" "}
                     {parseLocalDate(tx.occurredAt).toLocaleDateString("pt-BR")}
+                    {tx.splitType === "equal" && (
+                      <button
+                        type="button"
+                        className={`split-status-pill${tx.isSettled ? " settled" : ""}`}
+                        onClick={() => handleToggleSettled(tx)}
+                        title="Marcar como pago/em aberto"
+                      >
+                        {tx.isSettled ? "✓ Pago" : "Em aberto"}
+                      </button>
+                    )}
                   </span>
                 </div>
                 <span className={`transaction-amount ${tx.transactionType}`}>

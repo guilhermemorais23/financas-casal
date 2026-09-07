@@ -1915,6 +1915,25 @@ input:focus {
   padding: 0.1rem 0.4rem;
 }
 
+.split-status-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 16%, var(--color-bg));
+}
+
+.split-status-pill.settled {
+  color: var(--status-good);
+  background: color-mix(in srgb, var(--status-good) 14%, var(--color-bg));
+}
+
 .dashed-add-card {
   width: 100%;
   min-height: 96px;
