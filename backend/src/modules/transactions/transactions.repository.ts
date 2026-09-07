@@ -507,32 +507,46 @@ export interface BalanceRow {
 
 // "Who owes whom", computed fresh from transactions+splits (was a SQL VIEW;
 // this is the same derivation, just done in Node since Firestore has no
-// server-side aggregation). Not currently surfaced in any UI.
+// server-side aggregation).
+//
+// Deliberately avoids db.collectionGroup("splits") -- that needs a
+// COLLECTION_GROUP field-index override (splits.groupId) that isn't
+// auto-created and can take a while to build after being deployed the
+// first time a query actually needs it, which is exactly what happened the
+// first time this got wired into a real screen: production 500s until the
+// index finished. Reading each relevant transaction's own splits
+// subcollection instead needs no index at all (a subcollection get() is
+// always COLLECTION-scoped to its one parent doc) -- N reads instead of 1,
+// but N here is "unsettled equal-split expenses in the group", nowhere
+// near a scale where that matters for a couple/small-group app.
 export async function getBalanceRows(groupId: string): Promise<BalanceRow[]> {
   const txSnapshot = await transactionsCol
     .where("groupId", "==", groupId)
     .where("transactionType", "==", "expense")
-    .select("payerId", "isSettled")
+    .select("payerId", "splitType", "isSettled")
     .get();
-  // A transaction someone already marked "pago" (settled outside the app --
-  // a Pix, cash...) stops counting here entirely, same as if it never had a
-  // split -- payerByTx simply won't have an entry for it, so its splits get
-  // skipped below.
-  const payerByTx = new Map(
-    txSnapshot.docs.filter((doc) => !doc.data().isSettled).map((doc) => [doc.id, doc.data().payerId as string])
-  );
-  if (payerByTx.size === 0) return [];
 
-  const splitsSnapshot = await db.collectionGroup("splits").where("groupId", "==", groupId).get();
+  // A transaction someone already marked "pago" (settled outside the app --
+  // a Pix, cash...), or one that was never split in the first place, has
+  // nothing left to contribute here.
+  const relevantDocs = txSnapshot.docs.filter((doc) => {
+    const data = doc.data();
+    return data.splitType && data.splitType !== "none" && !data.isSettled;
+  });
+  if (relevantDocs.length === 0) return [];
+
+  const splitsSnapshots = await Promise.all(relevantDocs.map((doc) => doc.ref.collection("splits").get()));
 
   const pairTotals = new Map<string, number>();
-  for (const doc of splitsSnapshot.docs) {
-    const data = doc.data();
-    const paidBy = payerByTx.get(data.transactionId);
-    if (!paidBy || data.userId === paidBy) continue;
-    const key = `${paidBy}__${data.userId}`;
-    pairTotals.set(key, (pairTotals.get(key) ?? 0) + data.shareAmountCents);
-  }
+  relevantDocs.forEach((doc, index) => {
+    const paidBy = doc.data().payerId as string;
+    for (const splitDoc of splitsSnapshots[index].docs) {
+      const data = splitDoc.data();
+      if (data.userId === paidBy) continue;
+      const key = `${paidBy}__${data.userId}`;
+      pairTotals.set(key, (pairTotals.get(key) ?? 0) + data.shareAmountCents);
+    }
+  });
 
   return Array.from(pairTotals.entries()).map(([key, cents]) => {
     const [paidBy, owedBy] = key.split("__");
