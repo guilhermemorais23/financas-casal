@@ -4,8 +4,8 @@
   "description": "Finanças em grupo, sem atrito.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f2f4ef",
-  "theme_color": "#3f7d5c",
+  "background_color": "#efece5",
+  "theme_color": "#6d54ec",
   "orientation": "portrait",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
