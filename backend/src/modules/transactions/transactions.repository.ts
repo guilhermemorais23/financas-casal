@@ -29,6 +29,12 @@ export interface TransactionRow {
   recurringGroupId: string | null;
   recurringIndex: number | null;
   recurringTotal: number | null;
+  // Only meaningful when splitType !== "none" -- whether the other
+  // member(s)' share has actually been settled up outside the app (a Pix,
+  // cash...). Purely a manual status flag toggled from the extrato; it
+  // doesn't touch amountCents or the transaction's real effect on the
+  // account balance either way.
+  isSettled: boolean;
 }
 
 export interface TransactionListRow extends TransactionRow {
@@ -58,6 +64,7 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
     recurringGroupId: data.recurringGroupId ?? null,
     recurringIndex: data.recurringIndex ?? null,
     recurringTotal: data.recurringTotal ?? null,
+    isSettled: data.isSettled ?? false,
   };
 }
 
@@ -121,6 +128,7 @@ export async function insertTransactionSeries(
       recurringGroupId,
       recurringIndex: isRecurring ? index + 1 : null,
       recurringTotal: isRecurring ? occurredAtDates.length : null,
+      isSettled: false,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -129,6 +137,13 @@ export async function insertTransactionSeries(
 
   const docs = await Promise.all(refs.map((ref) => ref.get()));
   return docs.map(toTransactionRow);
+}
+
+export async function setTransactionSettled(transactionId: string, isSettled: boolean): Promise<TransactionRow> {
+  const ref = transactionsCol.doc(transactionId);
+  await ref.update({ isSettled, updatedAt: FieldValue.serverTimestamp() });
+  const doc = await ref.get();
+  return toTransactionRow(doc);
 }
 
 // Every occurrence sharing a recurringGroupId -- a single equality filter,
@@ -497,9 +512,15 @@ export async function getBalanceRows(groupId: string): Promise<BalanceRow[]> {
   const txSnapshot = await transactionsCol
     .where("groupId", "==", groupId)
     .where("transactionType", "==", "expense")
-    .select("payerId")
+    .select("payerId", "isSettled")
     .get();
-  const payerByTx = new Map(txSnapshot.docs.map((doc) => [doc.id, doc.data().payerId as string]));
+  // A transaction someone already marked "pago" (settled outside the app --
+  // a Pix, cash...) stops counting here entirely, same as if it never had a
+  // split -- payerByTx simply won't have an entry for it, so its splits get
+  // skipped below.
+  const payerByTx = new Map(
+    txSnapshot.docs.filter((doc) => !doc.data().isSettled).map((doc) => [doc.id, doc.data().payerId as string])
+  );
   if (payerByTx.size === 0) return [];
 
   const splitsSnapshot = await db.collectionGroup("splits").where("groupId", "==", groupId).get();

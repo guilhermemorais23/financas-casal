@@ -52,6 +52,8 @@ interface TransactionListRow {
   categoryName: string | null;
   categoryEmoji: string | null;
   recurringGroupId: string | null;
+  splitType: "none" | "equal";
+  isSettled: boolean;
 }
 
 interface DebtRow {
@@ -85,6 +87,16 @@ interface JointSummaryResponse {
   byPayer: PayerSummaryRow[];
 }
 
+interface BalanceRow {
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+}
+
+interface BalanceResponse {
+  balances: BalanceRow[];
+}
+
 interface BudgetResponse {
   budget: { capAmount: string } | null;
   spent: number;
@@ -101,6 +113,7 @@ interface DashboardResponse {
   debts: DebtRow[];
   summary: SummaryResponse;
   jointSummary: JointSummaryResponse;
+  balance: BalanceResponse;
   budget: BudgetResponse;
   categoryBudgets: CategoryBudgetRow[];
   dailyTrend: DailyTrendPoint[];
@@ -145,6 +158,9 @@ export function DashboardPage() {
   const [jointSummary, setJointSummary] = useState<JointSummaryResponse | null>(() =>
     readCache(monthKey("jointSummary"))
   );
+  // Lifetime, not per-month (see dashboard.service.ts) -- cached under the
+  // static key, same as group/debts.
+  const [balance, setBalance] = useState<BalanceResponse | null>(() => readCache(staticKey("balance")));
   const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(monthKey("budget")));
   const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgetRow[]>(
     () => readCache(monthKey("categoryBudgets")) ?? []
@@ -173,6 +189,7 @@ export function DashboardPage() {
       setDebts(data.debts);
       setSummary(data.summary);
       setJointSummary(data.jointSummary);
+      setBalance(data.balance);
       setBudget(data.budget);
       setCategoryBudgets(data.categoryBudgets);
       setDailyTrend(data.dailyTrend);
@@ -180,6 +197,7 @@ export function DashboardPage() {
 
     writeCache(sKey("group"), data.group);
     writeCache(sKey("debts"), data.debts);
+    writeCache(sKey("balance"), data.balance);
     writeCache(mKey("personalMonthTx"), data.personalMonthTx);
     writeCache(mKey("personalPrevMonthTx"), data.personalPrevMonthTx);
     writeCache(mKey("recent"), data.recent);
@@ -278,6 +296,23 @@ export function DashboardPage() {
     }
   }
 
+  // Toggles a split expense between "aberto" (nobody's paid their share
+  // back yet) and "pago" (settled outside the app -- a Pix, cash...). Pure
+  // status flag, never touches the transaction's amount.
+  async function handleToggleSettled(tx: TransactionListRow) {
+    setError(null);
+    try {
+      await apiRequest(`/transactions/${tx.id}/settle`, {
+        method: "PATCH",
+        token,
+        body: { isSettled: !tx.isSettled },
+      });
+      await load(month);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a divisão");
+    }
+  }
+
   // Derived values below must stay above any conditional `return` -- they're
   // hooks (useMemo), and hook calls can't be conditional. Cheap arithmetic
   // (percentChange, budget math) stays as plain consts; the array-heavy work
@@ -329,6 +364,8 @@ export function DashboardPage() {
   }, [group, user]);
   const jointSpentByUser = (memberId: string) =>
     Number(jointSummary?.byPayer.find((row) => row.payerId === memberId)?.total ?? 0);
+  const memberName = (memberId: string) =>
+    memberId === user?.id ? "Você" : (group?.members.find((member) => member.id === memberId)?.displayName ?? "Alguém do grupo");
 
   if (error && !group) {
     return (
@@ -488,6 +525,20 @@ export function DashboardPage() {
                     </div>
                   ))}
                 </div>
+                {balance && balance.balances.length > 0 && (
+                  <p className="card-subtitle" style={{ marginTop: "0.75rem" }}>
+                    Divisões em aberto:{" "}
+                    {balance.balances
+                      .map((row) =>
+                        row.fromUserId === user?.id
+                          ? `${formatCurrency(row.amount)} a pagar pra ${memberName(row.toUserId)}`
+                          : row.toUserId === user?.id
+                            ? `${formatCurrency(row.amount)} a receber de ${memberName(row.fromUserId)}`
+                            : `${formatCurrency(row.amount)} entre ${memberName(row.fromUserId)} e ${memberName(row.toUserId)}`
+                      )
+                      .join(" · ")}
+                  </p>
+                )}
               </div>
             )}
 
@@ -621,7 +672,19 @@ export function DashboardPage() {
                               {tx.description}
                               {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
                             </span>
-                            <span className="transaction-meta">{tx.categoryName ?? "Sem categoria"}</span>
+                            <span className="transaction-meta">
+                              {tx.categoryName ?? "Sem categoria"}
+                              {tx.splitType === "equal" && (
+                                <button
+                                  type="button"
+                                  className={`split-status-pill${tx.isSettled ? " settled" : ""}`}
+                                  onClick={() => handleToggleSettled(tx)}
+                                  title="Marcar como pago/em aberto"
+                                >
+                                  {tx.isSettled ? "✓ Pago" : "Em aberto"}
+                                </button>
+                              )}
+                            </span>
                           </div>
                           <span className={`transaction-amount ${tx.transactionType}`}>
                             {tx.transactionType === "income" ? "+" : "-"}

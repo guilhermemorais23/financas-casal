@@ -35,6 +35,8 @@ interface TransactionListRow {
   categoryEmoji: string | null;
   isPrivate: boolean;
   recurringGroupId: string | null;
+  splitType: "none" | "equal";
+  isSettled: boolean;
 }
 
 export function ReportsPage() {
@@ -135,6 +137,20 @@ export function ReportsPage() {
       setError(err instanceof ApiError ? err.message : "Não foi possível cancelar a recorrência");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function handleToggleSettled(tx: TransactionListRow) {
+    setError(null);
+    try {
+      await apiRequest(`/transactions/${tx.id}/settle`, {
+        method: "PATCH",
+        token,
+        body: { isSettled: !tx.isSettled },
+      });
+      await load(month);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a divisão");
     }
   }
 
@@ -257,7 +273,19 @@ export function ReportsPage() {
                         {tx.isPrivate && <span className="badge private-badge">privado</span>}
                         {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
                       </span>
-                      <span className="transaction-meta">{tx.categoryName ?? "Sem categoria"}</span>
+                      <span className="transaction-meta">
+                        {tx.categoryName ?? "Sem categoria"}
+                        {tx.splitType === "equal" && (
+                          <button
+                            type="button"
+                            className={`split-status-pill${tx.isSettled ? " settled" : ""}`}
+                            onClick={() => handleToggleSettled(tx)}
+                            title="Marcar como pago/em aberto"
+                          >
+                            {tx.isSettled ? "✓ Pago" : "Em aberto"}
+                          </button>
+                        )}
+                      </span>
                     </div>
                     <span className={`transaction-amount ${tx.transactionType}`}>
                       {tx.transactionType === "income" ? "+" : "-"}
