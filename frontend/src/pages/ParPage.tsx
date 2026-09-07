@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { CategoryPieChart } from "../components/CategoryPieChart";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, personTint, tint } from "../utils/categoryColor";
@@ -43,8 +44,16 @@ interface PayerSummaryRow {
   total: string;
 }
 
+interface CategorySummaryRow {
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  total: string;
+}
+
 interface SummaryResponse {
   byPayer: PayerSummaryRow[];
+  byCategory: CategorySummaryRow[];
 }
 
 interface BudgetResponse {
@@ -69,26 +78,40 @@ export function ParPage() {
 
   async function load() {
     const month = currentMonthParam();
-    const [groupRes, summaryRes, budgetRes] = await Promise.all([
-      apiRequest<GroupResponse>("/groups/me", { token }),
-      apiRequest<SummaryResponse>(`/transactions/summary?month=${month}`, { token }),
-      apiRequest<BudgetResponse>(`/budgets/current?month=${month}`, { token }),
+    // The joint-account extrato needs the joint account's id, which
+    // normally only comes from /groups/me -- but that account rarely
+    // changes, so once we've loaded it once (cached in `group` from a
+    // previous visit), reuse it and fire this request in parallel with the
+    // rest instead of waiting for a fresh /groups/me round trip first. That
+    // "wait for group, then fetch extrato" sequencing was exactly why a
+    // transaction just added to "Nossa conta" took a beat to show up here.
+    const knownJointAccountId = group?.accounts.find((a) => a.type === "joint")?.id;
+
+    const groupPromise = apiRequest<GroupResponse>("/groups/me", { token });
+    const summaryPromise = apiRequest<SummaryResponse>(`/transactions/summary?month=${month}`, { token });
+    const budgetPromise = apiRequest<BudgetResponse>(`/budgets/current?month=${month}`, { token });
+
+    async function jointTransactions(): Promise<TransactionListRow[]> {
+      const jointAccountId = knownJointAccountId ?? (await groupPromise).accounts.find((a) => a.type === "joint")?.id;
+      if (!jointAccountId) return [];
+      return apiRequest<TransactionListRow[]>(`/transactions?limit=50&accountId=${jointAccountId}`, { token });
+    }
+
+    const [groupRes, summaryRes, budgetRes, txRes] = await Promise.all([
+      groupPromise,
+      summaryPromise,
+      budgetPromise,
+      jointTransactions(),
     ]);
+
     setGroup(groupRes);
     setSummary(summaryRes);
     setBudget(budgetRes);
+    setTransactions(txRes);
     writeCache(cacheKey("group"), groupRes);
     writeCache(cacheKey("summary"), summaryRes);
     writeCache(cacheKey("budget"), budgetRes);
-    const jointAccount = groupRes.accounts.find((a) => a.type === "joint");
-    if (jointAccount) {
-      const txRes = await apiRequest<TransactionListRow[]>(
-        `/transactions?limit=50&accountId=${jointAccount.id}`,
-        { token }
-      );
-      setTransactions(txRes);
-      writeCache(cacheKey("transactions"), txRes);
-    }
+    writeCache(cacheKey("transactions"), txRes);
     setIsLoading(false);
   }
 
@@ -142,6 +165,14 @@ export function ParPage() {
 
   const spentByUser = (userId: string | undefined) =>
     userId ? summary?.byPayer.find((row) => row.payerId === userId)?.total ?? "0" : "0";
+
+  const pieSlices = (summary?.byCategory ?? []).map((row) => ({
+    id: row.categoryId ?? "none",
+    label: row.categoryName ?? "Sem categoria",
+    emoji: row.categoryEmoji,
+    value: Number(row.total),
+    color: categoryColor(row.categoryId),
+  }));
 
   const cap = budget?.budget ? Number(budget.budget.capAmount) : null;
   const spent = budget?.spent ?? 0;
@@ -234,6 +265,14 @@ export function ParPage() {
             ))}
           </ul>
         </div>
+
+        {orderedMembers.length > 1 && pieSlices.length > 0 && (
+          <div className="card">
+            <p className="card-title">Maiores gastos do casal</p>
+            <p className="card-subtitle">Só o que saiu da conta conjunta esse mês.</p>
+            <CategoryPieChart slices={pieSlices} />
+          </div>
+        )}
 
         <div className="card">
           <div className="section-header">
