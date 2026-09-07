@@ -1954,6 +1954,30 @@ input:focus {
   border-color: color-mix(in srgb, var(--status-good) 45%, transparent);
 }
 
+.split-settle-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: 0.4rem;
+}
+
+.split-settle-prefix {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.split-settle-form input {
+  width: 60px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
+  border-radius: 999px;
+}
+
+.split-settle-form .btn-icon {
+  font-size: 0.8rem;
+  padding: 0.1rem 0.3rem;
+}
+
 .dashed-add-card {
   width: 100%;
   min-height: 96px;

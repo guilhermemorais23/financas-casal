@@ -7,6 +7,7 @@ import {
   InvalidMonthError,
   InvalidPayerError,
   InvalidRecurrenceError,
+  InvalidSettlementAmountError,
   NotSplitError,
   TransactionNotFoundError,
   UnsupportedSplitTypeError,
@@ -267,14 +268,20 @@ export async function cancelRecurringHandler(req: Request, res: Response) {
 // Marks a split expense as settled (someone paid their share back outside
 // the app) or reopens it -- doesn't touch the transaction's amount.
 export async function setSplitSettledHandler(req: Request, res: Response) {
-  const { isSettled } = req.body ?? {};
+  const { isSettled, amount } = req.body ?? {};
   if (typeof isSettled !== "boolean") {
     res.status(400).json({ error: "isSettled must be a boolean" });
     return;
   }
+  // amount only matters (and is required) when settling -- reopening never
+  // needs one, it just deletes the reembolso transaction created earlier.
+  if (isSettled && (typeof amount !== "number" || amount <= 0)) {
+    res.status(400).json({ error: "amount is required and must be a positive number when isSettled is true" });
+    return;
+  }
 
   try {
-    const transaction = await setSplitSettledForUser(req.user!.id, req.params.id, isSettled);
+    const transaction = await setSplitSettledForUser(req.user!.id, req.params.id, isSettled, amount);
     res.status(200).json(transaction);
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
@@ -283,6 +290,10 @@ export async function setSplitSettledHandler(req: Request, res: Response) {
     }
     if (err instanceof NotSplitError) {
       res.status(400).json({ error: "transaction is not split" });
+      return;
+    }
+    if (err instanceof InvalidSettlementAmountError) {
+      res.status(400).json({ error: "invalid amount" });
       return;
     }
     throw err;

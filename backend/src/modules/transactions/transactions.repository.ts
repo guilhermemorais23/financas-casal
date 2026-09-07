@@ -35,6 +35,12 @@ export interface TransactionRow {
   // doesn't touch amountCents or the transaction's real effect on the
   // account balance either way.
   isSettled: boolean;
+  // Id of the real income transaction created when this was marked settled
+  // (see transactions.service.ts setSplitSettledForUser) -- same
+  // linked-transaction pattern used by debts/cards/shopping: "paid" isn't
+  // just a flag, it's backed by a real entry in the ledger, deleted again
+  // if the split is reopened. Null while isSettled is false.
+  settlementTransactionId: string | null;
 }
 
 export interface TransactionListRow extends TransactionRow {
@@ -65,6 +71,7 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
     recurringIndex: data.recurringIndex ?? null,
     recurringTotal: data.recurringTotal ?? null,
     isSettled: data.isSettled ?? false,
+    settlementTransactionId: data.settlementTransactionId ?? null,
   };
 }
 
@@ -129,6 +136,7 @@ export async function insertTransactionSeries(
       recurringIndex: isRecurring ? index + 1 : null,
       recurringTotal: isRecurring ? occurredAtDates.length : null,
       isSettled: false,
+      settlementTransactionId: null,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -139,9 +147,13 @@ export async function insertTransactionSeries(
   return docs.map(toTransactionRow);
 }
 
-export async function setTransactionSettled(transactionId: string, isSettled: boolean): Promise<TransactionRow> {
+export async function setTransactionSettled(
+  transactionId: string,
+  isSettled: boolean,
+  settlementTransactionId: string | null
+): Promise<TransactionRow> {
   const ref = transactionsCol.doc(transactionId);
-  await ref.update({ isSettled, updatedAt: FieldValue.serverTimestamp() });
+  await ref.update({ isSettled, settlementTransactionId, updatedAt: FieldValue.serverTimestamp() });
   const doc = await ref.get();
   return toTransactionRow(doc);
 }
