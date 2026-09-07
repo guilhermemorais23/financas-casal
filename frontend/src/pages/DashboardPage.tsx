@@ -11,7 +11,7 @@ import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { MonthPicker } from "../components/MonthPicker";
 import { AppLayout } from "../layouts/AppLayout";
-import { categoryColor, tint } from "../utils/categoryColor";
+import { categoryColor, personColor, tint } from "../utils/categoryColor";
 import {
   currentMonthParam,
   formatCurrency,
@@ -76,6 +76,15 @@ interface SummaryResponse {
   byCategory: CategorySummaryRow[];
 }
 
+interface PayerSummaryRow {
+  payerId: string;
+  total: string;
+}
+
+interface JointSummaryResponse {
+  byPayer: PayerSummaryRow[];
+}
+
 interface BudgetResponse {
   budget: { capAmount: string } | null;
   spent: number;
@@ -91,6 +100,7 @@ interface DashboardResponse {
   recent: TransactionListRow[];
   debts: DebtRow[];
   summary: SummaryResponse;
+  jointSummary: JointSummaryResponse;
   budget: BudgetResponse;
   categoryBudgets: CategoryBudgetRow[];
   dailyTrend: DailyTrendPoint[];
@@ -132,6 +142,9 @@ export function DashboardPage() {
   const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[]>(() => readCache(monthKey("dailyTrend")) ?? []);
   const [debts, setDebts] = useState<DebtRow[]>(() => readCache(staticKey("debts")) ?? []);
   const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(monthKey("summary")));
+  const [jointSummary, setJointSummary] = useState<JointSummaryResponse | null>(() =>
+    readCache(monthKey("jointSummary"))
+  );
   const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(monthKey("budget")));
   const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgetRow[]>(
     () => readCache(monthKey("categoryBudgets")) ?? []
@@ -159,6 +172,7 @@ export function DashboardPage() {
       setRecent(data.recent);
       setDebts(data.debts);
       setSummary(data.summary);
+      setJointSummary(data.jointSummary);
       setBudget(data.budget);
       setCategoryBudgets(data.categoryBudgets);
       setDailyTrend(data.dailyTrend);
@@ -170,6 +184,7 @@ export function DashboardPage() {
     writeCache(mKey("personalPrevMonthTx"), data.personalPrevMonthTx);
     writeCache(mKey("recent"), data.recent);
     writeCache(mKey("summary"), data.summary);
+    writeCache(mKey("jointSummary"), data.jointSummary);
     writeCache(mKey("budget"), data.budget);
     writeCache(mKey("categoryBudgets"), data.categoryBudgets);
     writeCache(mKey("dailyTrend"), data.dailyTrend);
@@ -304,6 +319,17 @@ export function DashboardPage() {
 
   const recentGroups = useMemo(() => groupByDay(recent), [recent]);
 
+  const jointAccount = group?.accounts.find((account) => account.type === "joint");
+  // Stable order: you first, then everyone else sorted by id -- same rule
+  // ParPage uses, so color assignment doesn't jitter between the two pages.
+  const orderedMembers = useMemo(() => {
+    if (!group || !user) return [];
+    const others = group.members.filter((member) => member.id !== user.id).sort((a, b) => a.id.localeCompare(b.id));
+    return [{ id: user.id, displayName: "Você" }, ...others];
+  }, [group, user]);
+  const jointSpentByUser = (memberId: string) =>
+    Number(jointSummary?.byPayer.find((row) => row.payerId === memberId)?.total ?? 0);
+
   if (error && !group) {
     return (
       <AppLayout wide>
@@ -431,6 +457,39 @@ export function DashboardPage() {
                 <p className="empty-state">Defina um teto mensal na Conta pra acompanhar aqui.</p>
               )}
             </div>
+
+            {jointAccount && orderedMembers.length > 1 && (
+              <div className="card">
+                <div className="section-header">
+                  <p className="card-title">Par</p>
+                  <Link to="/par" className="link">
+                    Ver Par
+                  </Link>
+                </div>
+                <p className="card-subtitle">O que vocês gastaram juntos esse mês, e quem pagou quanto.</p>
+                <p className="value-sm" style={{ marginBottom: "0.75rem" }}>
+                  {jointAccount.name}: {formatCurrency(jointAccount.balance)}
+                </p>
+                <div className="stat-row wrap">
+                  {orderedMembers.map((member, index) => (
+                    <div
+                      className="stat-box"
+                      key={member.id}
+                      style={{
+                        ["--stat-box-accent" as string]: personColor(index),
+                        background: tint(personColor(index)),
+                      }}
+                    >
+                      <div className="stat-box-header">
+                        <span className="identity-dot" style={{ background: personColor(index) }} />
+                        <p className="label">{member.id === user?.id ? "Você" : member.displayName}</p>
+                      </div>
+                      <p className="value-sm">{formatCurrency(jointSpentByUser(member.id))}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="card">
               <div className="section-header">

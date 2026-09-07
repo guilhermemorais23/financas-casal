@@ -29,11 +29,16 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     (account) => account.type === "personal" && account.ownerUserId === userId
   )?.id;
 
-  const [recent, debts, summary, budget, categoryBudgets, dailyTrend, personalMonthTx, personalPrevMonthTx] =
+  const [recent, debts, summary, jointSummary, budget, categoryBudgets, dailyTrend, personalMonthTx, personalPrevMonthTx] =
     await Promise.all([
       listTransactions(userId, 8, month),
       listDebts(userId),
       getMonthlySummaryForUser(userId, month, "visible"),
+      // "joint": only what left "Nossa Conta" this month, by who paid --
+      // powers the compact "Par" card on the Painel (the visible-scope
+      // `summary` above mixes in the requester's own personal spending too,
+      // which isn't what "quanto cada um pôs na conta conjunta" means).
+      getMonthlySummaryForUser(userId, month, "joint"),
       getCurrentBudget(userId, month),
       getCategoryBudgets(userId, month),
       getDailySeriesForUser(userId, month, "visible"),
@@ -46,6 +51,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     recent,
     debts,
     summary,
+    jointSummary,
     budget,
     categoryBudgets,
     dailyTrend,
