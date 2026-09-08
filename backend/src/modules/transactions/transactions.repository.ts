@@ -439,7 +439,7 @@ export interface DailySeriesPoint {
 // the composite indexes that already exist for the extrato -- no new index
 // needed. Unlike fetchExpenseDocsForSummary this pulls both income and
 // expense docs, since the daily series charts both.
-async function fetchDocsForDailySeries(
+async function fetchDocsForDateRange(
   groupId: string,
   requestingUserId: string,
   monthStart: string,
@@ -488,7 +488,7 @@ export async function getDailySeries(
   monthEnd: string,
   scope: SummaryScope = "visible"
 ): Promise<DailySeriesPoint[]> {
-  const docs = await fetchDocsForDailySeries(groupId, requestingUserId, monthStart, monthEnd, scope);
+  const docs = await fetchDocsForDateRange(groupId, requestingUserId, monthStart, monthEnd, scope);
 
   const byDay = new Map<string, { income: number; expense: number }>();
   for (const doc of docs) {
@@ -522,6 +522,61 @@ export async function getDailySeries(
     points.push({ day, income: fromCents(cumIncomeCents), expense: fromCents(cumExpenseCents) });
   }
   return points;
+}
+
+export interface MonthlyTotalPoint {
+  month: string; // "YYYY-MM"
+  income: string;
+  expense: string;
+}
+
+export interface YearlySummary {
+  year: number;
+  months: MonthlyTotalPoint[];
+  totalIncome: string;
+  totalExpense: string;
+}
+
+// One point per calendar month (Jan-Dec, always all 12 even if some are
+// empty) for the whole year -- reuses fetchDocsForDateRange with a
+// year-wide range instead of a month-wide one; same composite indexes cover
+// both, Firestore doesn't care how wide the range is.
+export async function getYearlySummary(
+  groupId: string,
+  requestingUserId: string,
+  year: number,
+  scope: SummaryScope = "visible"
+): Promise<YearlySummary> {
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year + 1}-01-01`;
+  const docs = await fetchDocsForDateRange(groupId, requestingUserId, yearStart, yearEnd, scope);
+
+  const byMonth = new Map<string, { income: number; expense: number }>();
+  for (const doc of docs) {
+    const data = doc.data();
+    if (!(data.isPrivate === false || data.createdBy === requestingUserId)) continue;
+    const monthKey = (data.occurredAt as string).slice(0, 7);
+    const entry = byMonth.get(monthKey) ?? { income: 0, expense: 0 };
+    if (data.transactionType === "income") {
+      entry.income += data.amountCents;
+    } else {
+      entry.expense += data.amountCents;
+    }
+    byMonth.set(monthKey, entry);
+  }
+
+  let totalIncomeCents = 0;
+  let totalExpenseCents = 0;
+  const months: MonthlyTotalPoint[] = [];
+  for (let month = 1; month <= 12; month++) {
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+    const entry = byMonth.get(monthKey) ?? { income: 0, expense: 0 };
+    totalIncomeCents += entry.income;
+    totalExpenseCents += entry.expense;
+    months.push({ month: monthKey, income: fromCents(entry.income), expense: fromCents(entry.expense) });
+  }
+
+  return { year, months, totalIncome: fromCents(totalIncomeCents), totalExpense: fromCents(totalExpenseCents) };
 }
 
 export interface BalanceRow {

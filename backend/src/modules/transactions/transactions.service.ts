@@ -13,6 +13,7 @@ import {
   getBalanceRows,
   getDailySeries,
   getMonthlySummary,
+  getYearlySummary,
   insertSplits,
   insertTransaction,
   insertTransactionSeries,
@@ -180,6 +181,17 @@ export async function getDailySeriesForUser(userId: string, monthParam?: string,
   const groupId = await requireGroupId(userId);
   const { monthStart, monthEnd } = parseMonthRange(monthParam);
   return getDailySeries(groupId, userId, monthStart, monthEnd, scope);
+}
+
+export class InvalidYearError extends Error {}
+
+export async function getYearlySummaryForUser(userId: string, yearParam?: string, scope?: SummaryScope) {
+  const groupId = await requireGroupId(userId);
+  const year = yearParam ? Number(yearParam) : new Date().getUTCFullYear();
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new InvalidYearError();
+  }
+  return getYearlySummary(groupId, userId, year, scope);
 }
 
 // Joint-account transactions are manageable by any group member (same rule

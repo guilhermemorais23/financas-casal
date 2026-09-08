@@ -11,7 +11,7 @@ import { SplitStatusPill } from "../components/SplitStatusPill";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
-import { currentMonthParam, formatCurrency, groupByDay } from "../utils/format";
+import { currentMonthParam, formatCurrency, groupByDay, monthLongName } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 
 interface CategorySummaryRow {
@@ -24,6 +24,19 @@ interface CategorySummaryRow {
 interface SummaryResponse {
   total: string;
   byCategory: CategorySummaryRow[];
+}
+
+interface MonthlyTotalPoint {
+  month: string;
+  income: string;
+  expense: string;
+}
+
+interface YearlySummaryResponse {
+  year: number;
+  months: MonthlyTotalPoint[];
+  totalIncome: string;
+  totalExpense: string;
 }
 
 interface TransactionListRow {
@@ -72,6 +85,26 @@ export function ReportsPage() {
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [selectedYear, setSelectedYear] = useState(() => Number(month.slice(0, 4)));
+  const [yearSummary, setYearSummary] = useState<YearlySummaryResponse | null>(() =>
+    readCache(`reports:year:${selectedYear}:${user?.id ?? "anon"}`)
+  );
+
+  useEffect(() => {
+    const yearCacheKey = `reports:year:${selectedYear}:${user?.id ?? "anon"}`;
+    const cached = readCache<YearlySummaryResponse>(yearCacheKey);
+    if (cached) setYearSummary(cached);
+    apiRequest<YearlySummaryResponse>(`/transactions/summary/year?year=${selectedYear}&scope=visible`, { token })
+      .then((res) => {
+        setYearSummary(res);
+        writeCache(yearCacheKey, res);
+      })
+      .catch(() => {
+        // Best-effort widget -- a failed fetch just leaves whatever was
+        // there (cached or null) instead of showing an error banner.
+      });
+  }, [token, selectedYear]);
 
   async function load(selectedMonth: string) {
     setIsLoading(true);
@@ -211,6 +244,57 @@ export function ReportsPage() {
               {isExporting ? "Baixando..." : "⬇ CSV"}
             </button>
           </div>
+        </div>
+
+        <div className="card">
+          <div className="section-header">
+            <p className="card-title">Visão anual</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <button type="button" className="btn-icon" onClick={() => setSelectedYear((y) => y - 1)} title="Ano anterior">
+                ◀
+              </button>
+              <strong>{selectedYear}</strong>
+              <button type="button" className="btn-icon" onClick={() => setSelectedYear((y) => y + 1)} title="Próximo ano">
+                ▶
+              </button>
+            </div>
+          </div>
+          {yearSummary && (
+            <>
+              <p className="card-subtitle">
+                Total do ano: <strong className="income-text">{formatCurrency(Number(yearSummary.totalIncome))}</strong>{" "}
+                de entrada · <strong>{formatCurrency(Number(yearSummary.totalExpense))}</strong> de saída
+              </p>
+              <ul className="yearly-summary-list">
+                {yearSummary.months.map((point) => {
+                  const maxValue = Math.max(
+                    ...yearSummary.months.flatMap((m) => [Number(m.income), Number(m.expense)]),
+                    1
+                  );
+                  return (
+                    <li key={point.month} className="yearly-summary-row">
+                      <span className="yearly-summary-month">{monthLongName(point.month).slice(0, 3)}</span>
+                      <div className="yearly-summary-bars">
+                        <div
+                          className="yearly-summary-bar income"
+                          style={{ width: `${(Number(point.income) / maxValue) * 100}%` }}
+                        />
+                        <div
+                          className="yearly-summary-bar expense"
+                          style={{ width: `${(Number(point.expense) / maxValue) * 100}%` }}
+                        />
+                      </div>
+                      <span className="yearly-summary-values">
+                        <span className="income-text">{formatCurrency(Number(point.income))}</span>
+                        {" / "}
+                        {formatCurrency(Number(point.expense))}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </div>
 
         <div className="card">

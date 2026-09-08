@@ -18,6 +18,8 @@ import {
   exportTransactionsForUser,
   getBalance,
   getDailySeriesForUser,
+  getYearlySummaryForUser,
+  InvalidYearError,
   getMonthlySummaryForUser,
   listTransactions,
   setSplitSettledForUser,
@@ -161,6 +163,26 @@ export async function getDailySeriesHandler(req: Request, res: Response) {
     }
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "invalid month" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function getYearlySummaryHandler(req: Request, res: Response) {
+  const year = typeof req.query.year === "string" ? req.query.year : undefined;
+  const scope = req.query.scope === "joint" ? "joint" : "visible";
+
+  try {
+    const summary = await getYearlySummaryForUser(req.user!.id, year, scope);
+    res.status(200).json(summary);
+  } catch (err) {
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
+      return;
+    }
+    if (err instanceof InvalidYearError) {
+      res.status(400).json({ error: "invalid year" });
       return;
     }
     throw err;

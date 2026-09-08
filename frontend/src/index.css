@@ -2650,6 +2650,56 @@ input[type="checkbox"] {
   color: var(--success-text);
 }
 
+.yearly-summary-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.yearly-summary-row {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.yearly-summary-month {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: capitalize;
+}
+
+.yearly-summary-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.yearly-summary-bar {
+  height: 5px;
+  border-radius: 999px;
+  min-width: 2px;
+}
+
+.yearly-summary-bar.income {
+  background: var(--status-good);
+}
+
+.yearly-summary-bar.expense {
+  background: var(--status-critical);
+}
+
+.yearly-summary-values {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
 /* Success checkmark (register/login confirmation) ------------------------- */
 
 .success-check {
