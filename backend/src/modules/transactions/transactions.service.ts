@@ -274,6 +274,61 @@ export async function cancelRecurringForUser(userId: string, transactionId: stri
   return { cancelledCount: idsToDelete.length };
 }
 
+export class InvalidRecurringUpdateError extends Error {}
+
+// "The rent went up" -- unlike a plain edit (which only ever touches the
+// one occurrence you clicked), this rewrites the amount/description on
+// this occurrence and every later one in the same series, leaving past
+// (already-happened) occurrences exactly as they were. Same "this and
+// future" scope as cancelRecurringForUser above.
+export async function updateRecurringForUser(
+  userId: string,
+  transactionId: string,
+  input: { amount?: number; description?: string }
+) {
+  const groupId = await requireGroupId(userId);
+  const transaction = await findTransactionById(transactionId);
+  if (
+    !transaction ||
+    transaction.groupId !== groupId ||
+    !transaction.recurringGroupId ||
+    !canManageTransaction(userId, transaction)
+  ) {
+    throw new TransactionNotFoundError();
+  }
+  if (input.amount === undefined && input.description === undefined) {
+    throw new InvalidRecurringUpdateError();
+  }
+  if (input.amount !== undefined && input.amount <= 0) {
+    throw new InvalidRecurringUpdateError();
+  }
+
+  const series = await findRecurringSeries(transaction.recurringGroupId);
+  const futureOccurrences = series.filter((occurrence) => occurrence.occurredAt >= transaction.occurredAt);
+
+  const members = input.amount !== undefined ? await findMembersByGroupId(groupId) : [];
+  await Promise.all(
+    futureOccurrences.map(async (occurrence) => {
+      await updateTransaction(occurrence.id, { amount: input.amount, description: input.description });
+      // Each occurrence carries its own splits (independent docs, created
+      // per-occurrence when the series was first generated) -- an amount
+      // change has to resync every one of them individually, same as a
+      // regular single-transaction edit does for its own splits.
+      if (input.amount !== undefined && occurrence.splitType === "equal" && members.length > 1) {
+        const shares = splitEvenly(input.amount, members.length);
+        await deleteSplitsForTransaction(occurrence.id);
+        await insertSplits(
+          groupId,
+          occurrence.id,
+          members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
+        );
+      }
+    })
+  );
+
+  return { updatedCount: futureOccurrences.length };
+}
+
 export interface UpdateTransactionInput {
   description?: string;
   amount?: number;

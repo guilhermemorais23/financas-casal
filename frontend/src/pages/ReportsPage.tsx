@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiDownload, apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
+import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { IncomeExpenseDonut } from "../components/IncomeExpenseDonut";
 import { MonthPicker } from "../components/MonthPicker";
@@ -68,6 +69,7 @@ export function ReportsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
+  const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   async function load(selectedMonth: string) {
@@ -295,15 +297,25 @@ export function ReportsPage() {
                         ✎
                       </button>
                       {tx.recurringGroupId && (
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          title="Cancelar recorrência"
-                          disabled={deletingId === tx.id}
-                          onClick={() => handleCancelRecurring(tx.id)}
-                        >
-                          🔁🚫
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="Editar valor da recorrência"
+                            onClick={() => setEditingRecurringTx(tx)}
+                          >
+                            ✏️🔁
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="Cancelar recorrência"
+                            disabled={deletingId === tx.id}
+                            onClick={() => handleCancelRecurring(tx.id)}
+                          >
+                            🔁🚫
+                          </button>
+                        </>
                       )}
                       <button
                         type="button"
@@ -327,6 +339,13 @@ export function ReportsPage() {
         <EditTransactionModal
           transaction={editingTx}
           onClose={() => setEditingTx(null)}
+          onSaved={() => load(month)}
+        />
+      )}
+      {editingRecurringTx && (
+        <EditRecurringModal
+          transaction={editingRecurringTx}
+          onClose={() => setEditingRecurringTx(null)}
           onSaved={() => load(month)}
         />
       )}

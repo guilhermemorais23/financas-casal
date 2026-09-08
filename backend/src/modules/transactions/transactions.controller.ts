@@ -7,6 +7,7 @@ import {
   InvalidMonthError,
   InvalidPayerError,
   InvalidRecurrenceError,
+  InvalidRecurringUpdateError,
   InvalidSettlementAmountError,
   NotSplitError,
   TransactionNotFoundError,
@@ -20,6 +21,7 @@ import {
   getMonthlySummaryForUser,
   listTransactions,
   setSplitSettledForUser,
+  updateRecurringForUser,
   updateTransactionForUser,
 } from "./transactions.service";
 import type { SplitType, TransactionType } from "./transactions.repository";
@@ -271,6 +273,38 @@ export async function cancelRecurringHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
       res.status(404).json({ error: "transaction not found" });
+      return;
+    }
+    throw err;
+  }
+}
+
+// Rewrites amount/description on this occurrence and every future one in
+// the same recurring series (e.g. the rent went up) -- past occurrences are
+// never touched.
+export async function updateRecurringHandler(req: Request, res: Response) {
+  const { amount, description } = req.body ?? {};
+  if (
+    (amount !== undefined && (typeof amount !== "number" || amount <= 0)) ||
+    (description !== undefined && !isNonEmptyString(description))
+  ) {
+    res.status(400).json({ error: "invalid recurring update" });
+    return;
+  }
+
+  try {
+    const result = await updateRecurringForUser(req.user!.id, req.params.id, {
+      amount,
+      description: description !== undefined ? description.trim() : undefined,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
+      res.status(404).json({ error: "transaction not found" });
+      return;
+    }
+    if (err instanceof InvalidRecurringUpdateError) {
+      res.status(400).json({ error: "invalid recurring update" });
       return;
     }
     throw err;
