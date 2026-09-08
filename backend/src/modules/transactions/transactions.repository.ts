@@ -471,6 +471,35 @@ async function fetchDocsForDateRange(
   });
 }
 
+// One query across the whole range, personal account only (accountOwnerId,
+// not the broader group scope the summary/daily-series queries use) --
+// matches exactly what the Painel's hero number ("Você tem no mês") already
+// means. Same equality+range field combo as fetchDocsForDateRange's "own"
+// branch above, so this reuses an index that already exists instead of
+// needing a new composite index deployed.
+export async function findOwnDocsForRange(
+  groupId: string,
+  userId: string,
+  rangeStart: string,
+  rangeEnd: string
+): Promise<{ month: string; amountCents: number; transactionType: TransactionType }[]> {
+  const snapshot = await transactionsCol
+    .where("groupId", "==", groupId)
+    .where("accountOwnerId", "==", userId)
+    .where("occurredAt", ">=", rangeStart)
+    .where("occurredAt", "<", rangeEnd)
+    .select("occurredAt", "amountCents", "transactionType")
+    .get();
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      month: (data.occurredAt as string).slice(0, 7),
+      amountCents: data.amountCents as number,
+      transactionType: data.transactionType as TransactionType,
+    };
+  });
+}
+
 // Cumulative income/expense per day, from the 1st through the last day of
 // the month -- one point per calendar day so the line has no gaps, carrying
 // the running total forward on days with no transactions. Always walks the

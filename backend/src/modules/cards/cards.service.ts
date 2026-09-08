@@ -2,7 +2,7 @@ import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { deleteTransaction, insertSplits, insertTransaction } from "../transactions/transactions.repository";
-import { addMonths } from "../../utils/month";
+import { addMonths, dateForDayInMonth } from "../../utils/month";
 import {
   deleteCard,
   deletePurchase,
@@ -69,9 +69,16 @@ export function currentStatementMonth(closingDay: number): string {
 // know which month the due date actually falls in.
 // Exported: the reminders job (outside any per-user request) needs this
 // same due-date math to know when a card's current statement is coming due.
+// dueDay is clamped to the target month's real last day -- a card set to
+// due on the 31st (allowed at creation: any 1-31) would otherwise produce a
+// calendar-invalid string like "2026-04-31" every April/June/September/
+// November/February, which broke the Painel's new "vence em X dias" label
+// silently (JS's Date rolls an invalid day into the next month instead of
+// throwing, so the countdown/urgency styling was computed against the
+// wrong date). Same clamp rule dateForDayInMonth already uses for debts.
 export function dueDateFor(statementMonth: string, closingDay: number, dueDay: number): string {
   const targetMonth = dueDay > closingDay ? statementMonth : addMonths(statementMonth, 1);
-  return `${targetMonth}-${String(dueDay).padStart(2, "0")}`;
+  return dateForDayInMonth(targetMonth, dueDay);
 }
 
 function summarizePurchases(

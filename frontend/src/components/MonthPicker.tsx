@@ -6,6 +6,7 @@ const MONTH_ABBREVIATIONS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "a
 interface MonthPickerProps {
   value: string; // "YYYY-MM"
   onChange: (month: string) => void;
+  isLoading?: boolean;
 }
 
 // Replaces the browser's native <input type="month"> -- its popup renders
@@ -13,7 +14,7 @@ interface MonthPickerProps {
 // that doesn't even make sense here since a month is always selected), which
 // looks out of place next to the rest of the app's styling. Same
 // toggle-panel-with-outside-click pattern as EmojiPicker.
-export function MonthPicker({ value, onChange }: MonthPickerProps) {
+export function MonthPicker({ value, onChange, isLoading = false }: MonthPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewYear, setViewYear] = useState(() => Number(value.slice(0, 4)));
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,7 +47,11 @@ export function MonthPicker({ value, onChange }: MonthPickerProps) {
     <div className="month-picker" ref={containerRef}>
       <button type="button" className="month-picker-trigger" onClick={() => setIsOpen((current) => !current)}>
         {monthYearLabel(value)}
-        <span className="month-picker-caret">▾</span>
+        {isLoading ? (
+          <span className="month-picker-spinner" aria-hidden="true" />
+        ) : (
+          <span className="month-picker-caret">▾</span>
+        )}
       </button>
       {isOpen && (
         <div className="month-picker-panel">
