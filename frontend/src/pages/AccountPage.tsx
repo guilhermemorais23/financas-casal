@@ -63,6 +63,7 @@ export function AccountPage() {
   const [editCategoryName, setEditCategoryName] = useState("");
   const [editCategoryEmoji, setEditCategoryEmoji] = useState("");
   const [categoryActionId, setCategoryActionId] = useState<string | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -212,6 +213,24 @@ export function AccountPage() {
     }
   }
 
+  async function handleRemoveMember(memberId: string, memberName: string) {
+    const confirmed = window.confirm(
+      `Remover ${memberName} do grupo? A conta pessoal dela some do grupo, mas nada é apagado -- ela pode criar ou entrar em outro grupo depois.`
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setRemovingMemberId(memberId);
+    try {
+      await apiRequest(`/groups/members/${memberId}`, { method: "DELETE", token });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível remover essa pessoa");
+    } finally {
+      setRemovingMemberId(null);
+    }
+  }
+
   async function handleLeaveGroup() {
     const confirmed = window.confirm(
       "Desvincular sua conta desse grupo? Você continua usando o app individualmente e pode criar ou entrar em outro grupo depois."
@@ -293,6 +312,18 @@ export function AccountPage() {
                     {member.displayName.charAt(0).toUpperCase()}
                   </span>
                   {member.id === user?.id ? "Você" : member.displayName}
+                  {member.id !== user?.id && (
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      style={{ marginLeft: "auto" }}
+                      title={`Remover ${member.displayName} do grupo`}
+                      disabled={removingMemberId === member.id}
+                      onClick={() => handleRemoveMember(member.id, member.displayName)}
+                    >
+                      🗑
+                    </button>
+                  )}
                 </li>
               ))}
           </ul>
