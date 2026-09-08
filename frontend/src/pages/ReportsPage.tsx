@@ -71,6 +71,7 @@ export function ReportsPage() {
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   async function load(selectedMonth: string) {
     setIsLoading(true);
@@ -154,15 +155,17 @@ export function ReportsPage() {
     );
   }
 
-  const visibleTransactions = useMemo(
-    () =>
-      (transactions ?? []).filter((tx) => {
-        if (!selectedCategoryId) return true;
-        if (selectedCategoryId === "none") return tx.categoryId === null;
-        return tx.categoryId === selectedCategoryId;
-      }),
-    [transactions, selectedCategoryId]
-  );
+  const visibleTransactions = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return (transactions ?? []).filter((tx) => {
+      if (selectedCategoryId) {
+        const matchesCategory = selectedCategoryId === "none" ? tx.categoryId === null : tx.categoryId === selectedCategoryId;
+        if (!matchesCategory) return false;
+      }
+      if (normalizedQuery && !tx.description.toLowerCase().includes(normalizedQuery)) return false;
+      return true;
+    });
+  }, [transactions, selectedCategoryId, searchQuery]);
   const transactionGroups = useMemo(() => groupByDay(visibleTransactions), [visibleTransactions]);
   const selectedCategoryLabel = selectedCategoryId
     ? summary?.byCategory.find((row) => (row.categoryId ?? "none") === selectedCategoryId)
@@ -244,13 +247,25 @@ export function ReportsPage() {
               </button>
             )}
           </div>
+          {transactions && transactions.length > 0 && (
+            <input
+              type="search"
+              placeholder="Buscar por descrição..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ marginBottom: "0.85rem" }}
+              aria-label="Buscar lançamentos por descrição"
+            />
+          )}
           {error && (
             <p className="alert" role="alert">
               {error}
             </p>
           )}
           {transactions && transactions.length > 0 && visibleTransactions.length === 0 && (
-            <p className="empty-state">Nenhuma transação nessa categoria.</p>
+            <p className="empty-state">
+              {searchQuery.trim() ? `Nada encontrado pra "${searchQuery.trim()}".` : "Nenhuma transação nessa categoria."}
+            </p>
           )}
           {transactions && transactions.length === 0 && (
             <p className="empty-state">Nenhuma transação neste mês.</p>
