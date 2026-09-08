@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -281,23 +281,43 @@ export function DashboardPage() {
   // trip AND its own Firebase token verification on the backend, on top of
   // the Firestore reads (which already ran in parallel server-side either
   // way). GET /api/dashboard bundles the same reads into one response.
-  async function load(selectedMonth: string) {
+  // Tracks whichever month is *actually* selected right now, read inside
+  // load()'s async callbacks -- state (`month`) can't be trusted there since
+  // a slow response's continuation runs after later state updates. Without
+  // this, switching quickly between months let an older, slower request's
+  // response land last and overwrite a newer month's already-painted data
+  // (and clear isLoading out from under whichever month is really pending).
+  const activeMonthRef = useRef(month);
+  activeMonthRef.current = month;
+
+  // skipCache=true is what every post-mutation reload below uses: painting
+  // the *previous* cached snapshot first would, for an instant, visually
+  // undo the change that was just confirmed by the server (a settled split
+  // flashing back to "open", a deleted transaction reappearing) before the
+  // fresh fetch corrects it again. A plain month switch still wants the
+  // cache-first paint -- that's the whole point of the neighbor prefetch.
+  async function load(selectedMonth: string, options?: { skipCache?: boolean }) {
     setError(null);
     const mKeyLocal = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
-    const cached = readCache<DashboardResponse>(mKeyLocal("full"));
+    const cached = options?.skipCache ? null : readCache<DashboardResponse>(mKeyLocal("full"));
 
     if (cached) {
       // Already warmed (a previous visit, or the neighbor-month prefetch
       // below) -- paint instantly, no loading state at all, then quietly
       // refetch underneath to catch anything that changed since.
       applyDashboard(selectedMonth, cached, false);
-    } else {
+    } else if (selectedMonth === activeMonthRef.current) {
       setIsLoading(true);
     }
 
     try {
       const data = await apiRequest<DashboardResponse>(`/dashboard?month=${selectedMonth}`, { token });
-      applyDashboard(selectedMonth, data, false);
+      // The user may have already switched to a different month while this
+      // was in flight -- an abandoned month's response is discarded instead
+      // of overwriting whatever's actually on screen now. Still worth
+      // caching (see writeCache below via applyDashboard), just not painted.
+      const isStillActive = selectedMonth === activeMonthRef.current;
+      applyDashboard(selectedMonth, data, !isStillActive);
 
       // Warm the cache for the months someone is likely to check next (back
       // and forth around whatever month they're on) so switching to one of
@@ -319,21 +339,27 @@ export function DashboardPage() {
       // A month we already had cached still shows that cached data -- no
       // reason to blow it away with an error banner over a background
       // refresh failing silently (same "fail quiet" policy as prefetchMonth).
-      if (!cached) {
+      // Also skip it for a month the user has already navigated away from.
+      if (!cached && selectedMonth === activeMonthRef.current) {
         setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
       }
     } finally {
-      setIsLoading(false);
+      if (selectedMonth === activeMonthRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 
   // Best-effort background warm-up for a month not currently on screen --
   // writes only to cache (no setState, no error surfaced). Skips months
   // already cached so re-visiting the same couple of months doesn't refire
-  // this on every mount.
+  // this on every mount. Checks the same "full" key load() actually reads,
+  // not a different field -- otherwise the two checks can disagree and
+  // this silently stops ever refreshing "full" for a month once any one
+  // field of it happens to already be cached.
   async function prefetchMonth(targetMonth: string) {
     const mKey = (name: string) => `dashboard:${name}:${targetMonth}:${user?.id ?? "anon"}`;
-    if (readCache(mKey("summary"))) return;
+    if (readCache(mKey("full"))) return;
 
     try {
       const data = await apiRequest<DashboardResponse>(`/dashboard?month=${targetMonth}`, { token });
@@ -356,7 +382,7 @@ export function DashboardPage() {
     setError(null);
     try {
       await apiRequest(`/transactions/${id}`, { method: "DELETE", token });
-      await load(month);
+      await load(month, { skipCache: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
     } finally {
@@ -372,7 +398,7 @@ export function DashboardPage() {
     setError(null);
     try {
       await apiRequest(`/transactions/${id}/recurring`, { method: "DELETE", token });
-      await load(month);
+      await load(month, { skipCache: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível cancelar a recorrência");
     } finally {
@@ -812,7 +838,7 @@ export function DashboardPage() {
                                   totalAmount={Number(tx.amount)}
                                   isSettled={tx.isSettled}
                                   onOptimisticChange={(next) => setRecentSettled(tx.id, next)}
-                                  onSettled={() => load(month)}
+                                  onSettled={() => load(month, { skipCache: true })}
                                   onError={(message) => setError(message)}
                                 />
                               )}
@@ -878,14 +904,14 @@ export function DashboardPage() {
         <EditTransactionModal
           transaction={editingTx}
           onClose={() => setEditingTx(null)}
-          onSaved={() => load(month)}
+          onSaved={() => load(month, { skipCache: true })}
         />
       )}
       {editingRecurringTx && (
         <EditRecurringModal
           transaction={editingRecurringTx}
           onClose={() => setEditingRecurringTx(null)}
-          onSaved={() => load(month)}
+          onSaved={() => load(month, { skipCache: true })}
         />
       )}
     </AppLayout>

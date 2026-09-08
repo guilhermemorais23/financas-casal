@@ -1,11 +1,21 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ComponentType } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
-import { ToastProvider } from "./components/ToastProvider";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PageSkeleton } from "./components/Skeleton";
+import { ToastProvider } from "./components/ToastProvider";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
+
+// Wraps the `lazy(() => import(...).then((m) => ({ default: m.X })))`
+// boilerplate a named export needs (React.lazy only accepts a default
+// export) -- each call site below still has its own literal `import("./
+// pages/X")`, which is what lets Vite give every page its own chunk; this
+// just removes the repeated `.then((m) => ({ default: m.Name }))` typo risk.
+function namedLazy<K extends string>(loader: () => Promise<Record<K, ComponentType<object>>>, name: K) {
+  return lazy(async () => ({ default: (await loader())[name] }));
+}
 
 // Lazy-loaded: everything past the login screen used to ship in the same
 // single ~460KB bundle regardless of which page someone actually opens, so
@@ -16,30 +26,25 @@ import { ProtectedRoute } from "./routes/ProtectedRoute";
 // the chunk after that, same as any other lazy import. LoginPage stays
 // eager -- it's the one screen nearly everyone hits on the coldest possible
 // load, so there's nothing to gain deferring it.
-const RegisterPage = lazy(() => import("./pages/RegisterPage").then((m) => ({ default: m.RegisterPage })));
-const GroupSetupPage = lazy(() => import("./pages/GroupSetupPage").then((m) => ({ default: m.GroupSetupPage })));
-const DashboardPage = lazy(() => import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
-const ParPage = lazy(() => import("./pages/ParPage").then((m) => ({ default: m.ParPage })));
-const NewTransactionPage = lazy(() =>
-  import("./pages/NewTransactionPage").then((m) => ({ default: m.NewTransactionPage }))
-);
-const DebtsPage = lazy(() => import("./pages/DebtsPage").then((m) => ({ default: m.DebtsPage })));
-const CardsPage = lazy(() => import("./pages/CardsPage").then((m) => ({ default: m.CardsPage })));
-const GoalsPage = lazy(() => import("./pages/GoalsPage").then((m) => ({ default: m.GoalsPage })));
-const ReportsPage = lazy(() => import("./pages/ReportsPage").then((m) => ({ default: m.ReportsPage })));
-const AccountPage = lazy(() => import("./pages/AccountPage").then((m) => ({ default: m.AccountPage })));
-const AdminPage = lazy(() => import("./pages/AdminPage").then((m) => ({ default: m.AdminPage })));
-const InvestmentsPage = lazy(() =>
-  import("./pages/InvestmentsPage").then((m) => ({ default: m.InvestmentsPage }))
-);
-const ShoppingListPage = lazy(() =>
-  import("./pages/ShoppingListPage").then((m) => ({ default: m.ShoppingListPage }))
-);
+const RegisterPage = namedLazy(() => import("./pages/RegisterPage"), "RegisterPage");
+const GroupSetupPage = namedLazy(() => import("./pages/GroupSetupPage"), "GroupSetupPage");
+const DashboardPage = namedLazy(() => import("./pages/DashboardPage"), "DashboardPage");
+const ParPage = namedLazy(() => import("./pages/ParPage"), "ParPage");
+const NewTransactionPage = namedLazy(() => import("./pages/NewTransactionPage"), "NewTransactionPage");
+const DebtsPage = namedLazy(() => import("./pages/DebtsPage"), "DebtsPage");
+const CardsPage = namedLazy(() => import("./pages/CardsPage"), "CardsPage");
+const GoalsPage = namedLazy(() => import("./pages/GoalsPage"), "GoalsPage");
+const ReportsPage = namedLazy(() => import("./pages/ReportsPage"), "ReportsPage");
+const AccountPage = namedLazy(() => import("./pages/AccountPage"), "AccountPage");
+const AdminPage = namedLazy(() => import("./pages/AdminPage"), "AdminPage");
+const InvestmentsPage = namedLazy(() => import("./pages/InvestmentsPage"), "InvestmentsPage");
+const ShoppingListPage = namedLazy(() => import("./pages/ShoppingListPage"), "ShoppingListPage");
 
 function App() {
   return (
     <ToastProvider>
       <AuthProvider>
+        <ErrorBoundary>
         <Suspense fallback={<PageSkeleton />}>
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
@@ -144,6 +149,7 @@ function App() {
             />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </AuthProvider>
     </ToastProvider>
   );
