@@ -147,6 +147,22 @@ export function ReportsPage() {
     }
   }
 
+  // Same endpoint, just without ?month= -- exportTransactionsForUser
+  // already treats a missing month as "no date filter" (up to 10k rows,
+  // far above what any group would realistically have).
+  async function handleExportAll() {
+    setIsExporting(true);
+    setError(null);
+    try {
+      await apiDownload("/transactions/export", token, "par-transacoes-tudo.csv");
+      showToast("CSV baixado");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível exportar");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   async function handleDelete(id: string) {
     const confirmed = window.confirm("Excluir esse lançamento?");
     if (!confirmed) return;
@@ -242,6 +258,15 @@ export function ReportsPage() {
               title="Baixar os lançamentos deste mês em CSV"
             >
               {isExporting ? "Baixando..." : "⬇ CSV"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleExportAll}
+              disabled={isExporting}
+              title="Baixar todos os lançamentos de todos os meses em CSV"
+            >
+              ⬇ Tudo
             </button>
           </div>
         </div>
