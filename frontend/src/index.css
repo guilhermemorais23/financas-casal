@@ -385,6 +385,28 @@ button {
   color: var(--color-text-muted);
 }
 
+.month-picker-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-primary-soft);
+  border-top-color: var(--color-primary);
+  animation: month-picker-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes month-picker-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .month-picker-spinner {
+    animation: none;
+  }
+}
+
 .month-picker-panel {
   position: absolute;
   top: calc(100% + 0.4rem);
@@ -698,6 +720,17 @@ input:focus {
   align-items: center;
   justify-content: center;
   color: var(--color-text-muted);
+}
+
+.error-boundary-fallback {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+  padding: 2rem;
 }
 
 .skeleton {
@@ -1186,6 +1219,62 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.dashboard-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  transition: opacity 0.2s ease;
+}
+
+.dashboard-content.is-loading {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Thin sweep under the header while a month with no cache is being fetched
+   for real -- an already-cached month never sets isLoading, so switching
+   between recently-viewed months never shows this at all. Always 3px tall
+   (transparent track when idle) so it never shifts anything below it. */
+.top-progress {
+  height: 3px;
+  margin-top: -0.5rem;
+  border-radius: 999px;
+  background: transparent;
+  overflow: hidden;
+  transition: background-color 0.15s ease;
+}
+
+.top-progress.is-loading {
+  background: var(--color-border);
+}
+
+.top-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--coffee-500), var(--olive-500));
+}
+
+.top-progress.is-loading .top-progress-fill {
+  width: 35%;
+  animation: top-progress-sweep 1s ease-in-out infinite;
+}
+
+@keyframes top-progress-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(380%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-progress-fill {
+    animation: none;
+  }
 }
 
 .dashboard-greeting h1 {
@@ -2507,6 +2596,73 @@ input[type="checkbox"] {
   margin-top: 0.35rem;
   font-variant-numeric: proportional-nums;
   letter-spacing: -0.01em;
+}
+
+.hero-trend {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.6rem;
+  opacity: 0.9;
+}
+
+.dashboard-mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 480px) {
+  .dashboard-mini-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-mini-widget {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 12px;
+  padding: 0.3rem;
+  margin: -0.3rem;
+  transition: background-color 0.15s;
+}
+
+.dashboard-mini-widget:hover {
+  background: var(--color-bg-soft);
+}
+
+.dashboard-mini-emoji {
+  font-size: 1.1rem;
+}
+
+.dashboard-mini-text {
+  min-width: 0;
+}
+
+.dashboard-mini-title {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.15rem;
+}
+
+.dashboard-mini-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-mini-sub {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin: 0.1rem 0 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .badge {
