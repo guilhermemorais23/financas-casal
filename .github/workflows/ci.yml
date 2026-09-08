@@ -17,12 +17,13 @@ jobs:
         with:
           node-version: 22
 
-      # O emulador do Firestore roda em cima de uma JVM.
+      # O emulador do Firestore roda em cima de uma JVM. firebase-tools exige
+      # Java 21+ (17 quebra com "no longer supports Java version before 21").
       - name: Configura o Java (emulador do Firestore)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Instala dependências (raiz)
         run: npm ci
