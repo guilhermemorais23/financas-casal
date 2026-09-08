@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [desenvolvimento, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixa o código
+        uses: actions/checkout@v4
+
+      - name: Configura o Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # O emulador do Firestore roda em cima de uma JVM.
+      - name: Configura o Java (emulador do Firestore)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instala dependências (raiz)
+        run: npm ci
+
+      - name: Instala dependências (backend)
+        run: npm ci
+        working-directory: backend
+
+      - name: Instala dependências (frontend)
+        run: npm ci
+        working-directory: frontend
+
+      - name: Verifica os tipos do backend
+        run: npx tsc --noEmit
+        working-directory: backend
+
+      - name: Roda os testes do backend (sobe e desliga o emulador sozinho)
+        run: npm run test:backend
+
+      - name: Build do backend
+        run: npm run build
+        working-directory: backend
+
+      - name: Verifica os tipos e builda o frontend
+        run: npm run build
+        working-directory: frontend
