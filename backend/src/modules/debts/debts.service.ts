@@ -2,7 +2,7 @@ import { findAccountsByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { deleteTransaction, insertTransaction, updateTransaction } from "../transactions/transactions.repository";
 import { splitEvenly } from "../../utils/money";
-import { addMonths, monthToDate } from "../../utils/month";
+import { addMonths, dateForDayInMonth, monthToDate } from "../../utils/month";
 import {
   deleteDebt,
   findDebtById,
@@ -30,6 +30,7 @@ export interface CreateDebtInput {
   installmentsCount: number;
   scope: DebtScope;
   startMonth: string;
+  dueDay: number | null;
 }
 
 export interface DebtWithInstallments {
@@ -40,8 +41,9 @@ export interface DebtWithInstallments {
   totalAmount: string;
   installmentsCount: number;
   startMonth: string;
+  dueDay: number | null;
   createdBy: string;
-  installments: DebtInstallmentRow[];
+  installments: (DebtInstallmentRow & { dueDate: string | null })[];
   paidAmount: number;
   remainingAmount: number;
   paidCount: number;
@@ -61,6 +63,7 @@ export async function createDebt(userId: string, input: CreateDebtInput) {
     totalAmount: input.totalAmount,
     installmentsCount: input.installmentsCount,
     startMonth: input.startMonth,
+    dueDay: input.dueDay,
   });
 
   // Installment N books against startMonth + (N-1) by default -- e.g. a
@@ -96,6 +99,10 @@ export async function listDebts(userId: string): Promise<DebtWithInstallments[]>
     const paid = debtInstallments.filter((installment) => installment.isPaid);
     const paidAmount = paid.reduce((sum, installment) => sum + Number(installment.amount), 0);
     const totalAmount = Number(debt.totalAmount);
+    const installmentsWithDueDate = debtInstallments.map((installment) => ({
+      ...installment,
+      dueDate: debt.dueDay ? dateForDayInMonth(installment.referenceMonth, debt.dueDay) : null,
+    }));
 
     return {
       id: debt.id,
@@ -105,8 +112,9 @@ export async function listDebts(userId: string): Promise<DebtWithInstallments[]>
       totalAmount: debt.totalAmount,
       installmentsCount: debt.installmentsCount,
       startMonth: debt.startMonth,
+      dueDay: debt.dueDay,
       createdBy: debt.createdBy,
-      installments: debtInstallments,
+      installments: installmentsWithDueDate,
       paidAmount,
       remainingAmount: totalAmount - paidAmount,
       paidCount: paid.length,
@@ -214,7 +222,7 @@ export async function removeDebt(userId: string, debtId: string) {
 export async function updateDebtForUser(
   userId: string,
   debtId: string,
-  input: { name: string; description: string | null }
+  input: { name: string; description: string | null; dueDay?: number | null }
 ) {
   const groupId = await requireGroupId(userId);
   await requireManageableDebt(userId, groupId, debtId);

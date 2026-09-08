@@ -1,8 +1,9 @@
 import { findCardsByGroupId, findStatement } from "../cards/cards.repository";
 import { currentStatementMonth, dueDateFor } from "../cards/cards.service";
 import { findGroupBudget, getMonthlyExpenseTotal } from "../budgets/budgets.repository";
+import { findDebtsByGroupId, findInstallmentsByDebtIds } from "../debts/debts.repository";
 import { sendReminderEmail } from "../../email/mailer";
-import { daysBetween, parseMonthRange } from "../../utils/month";
+import { daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
 import {
   findAllGroupIds,
   findMembersWithEmailByGroupId,
@@ -82,6 +83,79 @@ async function runCardReminders(groupId: string, members: MemberWithEmail[]): Pr
   return emailsSent;
 }
 
+// Same reasoning as CARD_REMINDER_WINDOW_DAYS -- one email per installment,
+// the first time it's noticed to be due soon (or already overdue).
+const DEBT_REMINDER_WINDOW_DAYS = 3;
+
+async function runDebtReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const today = new Date().toISOString().slice(0, 10);
+  const debts = await findDebtsByGroupId(groupId);
+  const debtsWithDueDay = debts.filter((debt) => debt.dueDay !== null);
+  if (debtsWithDueDay.length === 0) return 0;
+
+  const installments = await findInstallmentsByDebtIds(debtsWithDueDay.map((debt) => debt.id));
+  const installmentsByDebtId = new Map<string, typeof installments>();
+  for (const installment of installments) {
+    const list = installmentsByDebtId.get(installment.debtId);
+    if (list) list.push(installment);
+    else installmentsByDebtId.set(installment.debtId, [installment]);
+  }
+
+  let emailsSent = 0;
+  for (const debt of debtsWithDueDay) {
+    // Only the next unpaid parcela can be "coming due" -- once it's paid,
+    // whichever one is next takes its place next time this runs.
+    const nextUnpaid = (installmentsByDebtId.get(debt.id) ?? [])
+      .filter((installment) => !installment.isPaid)
+      .sort((a, b) => a.installmentNumber - b.installmentNumber)[0];
+    if (!nextUnpaid) continue;
+
+    const dueDate = dateForDayInMonth(nextUnpaid.referenceMonth, debt.dueDay!);
+    const daysUntilDue = daysBetween(today, dueDate);
+    if (daysUntilDue > DEBT_REMINDER_WINDOW_DAYS) continue;
+
+    const key = `debt:${debt.id}:${nextUnpaid.installmentNumber}`;
+    if (await wasReminderSent(key)) continue;
+
+    const recipients = debt.ownerUserId
+      ? membersById.has(debt.ownerUserId)
+        ? [membersById.get(debt.ownerUserId)!]
+        : []
+      : members;
+
+    const dueLabel =
+      daysUntilDue === 0
+        ? "vence hoje"
+        : daysUntilDue > 0
+          ? `vence em ${daysUntilDue} dia${daysUntilDue === 1 ? "" : "s"}`
+          : `venceu há ${-daysUntilDue} dia${-daysUntilDue === 1 ? "" : "s"}`;
+
+    const sent = await sendToMembers(
+      recipients,
+      `Parcela de "${debt.name}" ${dueLabel}`,
+      `
+        <h1 style="font-size: 20px;">📄 Parcela chegando</h1>
+        <p>A parcela ${nextUnpaid.installmentNumber}/${debt.installmentsCount} de <strong>${debt.name}</strong>
+        (${formatBRL(Number(nextUnpaid.amount))}) ${dueLabel} (${formatBRDate(dueDate)}) e ainda não foi paga.</p>
+        <p>Dá uma olhada no PAR. pra marcar como paga.</p>
+      `
+    );
+    if (sent > 0) {
+      emailsSent += sent;
+      await markReminderSent(key, {
+        groupId,
+        kind: "debt",
+        debtId: debt.id,
+        installmentNumber: nextUnpaid.installmentNumber,
+        dueDate,
+      });
+    }
+  }
+
+  return emailsSent;
+}
+
 async function runBudgetReminder(groupId: string, members: MemberWithEmail[]): Promise<number> {
   const { periodMonth, monthStart, monthEnd } = parseMonthRange();
   const budget = await findGroupBudget(groupId, periodMonth);
@@ -120,6 +194,7 @@ export async function runDueReminders(): Promise<{ groupsChecked: number; emails
     const members = await findMembersWithEmailByGroupId(group.id);
     if (members.length === 0) continue;
     emailsSent += await runCardReminders(group.id, members);
+    emailsSent += await runDebtReminders(group.id, members);
     emailsSent += await runBudgetReminder(group.id, members);
   }
 

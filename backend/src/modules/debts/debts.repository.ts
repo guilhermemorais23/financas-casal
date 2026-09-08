@@ -14,6 +14,13 @@ export interface DebtRow {
   totalAmount: string;
   installmentsCount: number;
   startMonth: string;
+  // Day of the month each installment is due ("vence todo dia 10"), or null
+  // for a debt created before this existed / one where the person just
+  // doesn't know/care about an exact day. Optional on purpose -- unlike
+  // cards (where closingDay/dueDay drive the whole statement-cycle math), a
+  // debt installment already books against a real month via referenceMonth
+  // regardless of dueDay.
+  dueDay: number | null;
 }
 
 export interface DebtInstallmentRow {
@@ -45,6 +52,7 @@ function toDebtRow(doc: FirebaseFirestore.DocumentSnapshot): DebtRow {
     totalAmount: fromCents(data.totalAmountCents),
     installmentsCount: data.installmentsCount,
     startMonth: data.startMonth ?? currentMonthParam(),
+    dueDay: data.dueDay ?? null,
   };
 }
 
@@ -72,6 +80,7 @@ export async function insertDebt(input: {
   totalAmount: number;
   installmentsCount: number;
   startMonth: string;
+  dueDay: number | null;
 }): Promise<DebtRow> {
   const ref = await debtsCol.add({
     groupId: input.groupId,
@@ -82,6 +91,7 @@ export async function insertDebt(input: {
     totalAmountCents: toCents(input.totalAmount),
     installmentsCount: input.installmentsCount,
     startMonth: input.startMonth,
+    dueDay: input.dueDay,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -122,6 +132,15 @@ export async function findDebtsVisibleTo(groupId: string, userId: string): Promi
   return [...jointSnap.docs, ...ownSnap.docs]
     .map(toDebtRow)
     .sort((a, b) => (a.id < b.id ? 1 : -1));
+}
+
+// Every debt in the group regardless of owner -- unlike findDebtsVisibleTo
+// this isn't scoped to "what one user can see" (a single equality filter,
+// no new index). Used by the reminders job, same reasoning as
+// cards.repository's findCardsByGroupId.
+export async function findDebtsByGroupId(groupId: string): Promise<DebtRow[]> {
+  const snapshot = await debtsCol.where("groupId", "==", groupId).get();
+  return snapshot.docs.map(toDebtRow);
 }
 
 export async function findInstallmentsByDebtIds(debtIds: string[]): Promise<DebtInstallmentRow[]> {
@@ -175,14 +194,16 @@ export async function updateInstallmentReferenceMonth(
 
 export async function updateDebt(
   debtId: string,
-  input: { name: string; description: string | null }
+  input: { name: string; description: string | null; dueDay?: number | null }
 ): Promise<DebtRow> {
   const ref = debtsCol.doc(debtId);
-  await ref.update({
+  const update: Record<string, unknown> = {
     name: input.name,
     description: input.description,
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  };
+  if (input.dueDay !== undefined) update.dueDay = input.dueDay;
+  await ref.update(update);
   const doc = await ref.get();
   return toDebtRow(doc);
 }

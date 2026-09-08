@@ -18,8 +18,12 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isValidDueDay(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
+}
+
 export async function createDebtHandler(req: Request, res: Response) {
-  const { name, description, totalAmount, installmentsCount, scope, startMonth } = req.body ?? {};
+  const { name, description, totalAmount, installmentsCount, scope, startMonth, dueDay } = req.body ?? {};
 
   if (
     !isNonEmptyString(name) ||
@@ -28,11 +32,12 @@ export async function createDebtHandler(req: Request, res: Response) {
     (installmentsCount !== undefined &&
       (typeof installmentsCount !== "number" || !Number.isInteger(installmentsCount) || installmentsCount < 1)) ||
     (scope !== undefined && scope !== "personal" && scope !== "joint") ||
-    !isValidMonthParam(startMonth)
+    !isValidMonthParam(startMonth) ||
+    (dueDay !== undefined && dueDay !== null && !isValidDueDay(dueDay))
   ) {
     res.status(400).json({
       error:
-        "name, totalAmount and startMonth (YYYY-MM) are required; installmentsCount must be a positive integer",
+        "name, totalAmount and startMonth (YYYY-MM) are required; installmentsCount must be a positive integer; dueDay (if set) must be 1-31",
     });
     return;
   }
@@ -45,6 +50,7 @@ export async function createDebtHandler(req: Request, res: Response) {
       installmentsCount: installmentsCount ?? 1,
       scope: (scope as DebtScope) ?? "personal",
       startMonth,
+      dueDay: dueDay ?? null,
     });
     res.status(201).json(debt);
   } catch (err) {
@@ -96,10 +102,10 @@ export async function setInstallmentPaidHandler(req: Request, res: Response) {
 }
 
 export async function updateDebtHandler(req: Request, res: Response) {
-  const { name, description } = req.body ?? {};
+  const { name, description, dueDay } = req.body ?? {};
 
-  if (!isNonEmptyString(name)) {
-    res.status(400).json({ error: "name is required" });
+  if (!isNonEmptyString(name) || (dueDay !== undefined && dueDay !== null && !isValidDueDay(dueDay))) {
+    res.status(400).json({ error: "name is required; dueDay (if set) must be 1-31" });
     return;
   }
 
@@ -107,6 +113,7 @@ export async function updateDebtHandler(req: Request, res: Response) {
     const debt = await updateDebtForUser(req.user!.id, req.params.id, {
       name: name.trim(),
       description: isNonEmptyString(description) ? description.trim() : null,
+      dueDay: dueDay !== undefined ? dueDay : undefined,
     });
     res.status(200).json(debt);
   } catch (err) {

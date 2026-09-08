@@ -45,6 +45,17 @@ export function addMonthsToDate(dateParam: string, count: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+// "YYYY-MM" + a day-of-month -> "YYYY-MM-DD", clamped to that month's last
+// day (same rule as addMonthsToDate above). Used to turn a debt's dueDay
+// ("vence todo dia 10") into an actual date for a specific installment's
+// referenceMonth.
+export function dateForDayInMonth(monthParam: string, day: number): string {
+  const [year, month] = monthParam.split("-").map(Number);
+  const lastDayOfMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const clampedDay = Math.min(day, lastDayOfMonth);
+  return `${monthParam}-${String(clampedDay).padStart(2, "0")}`;
+}
+
 // Whole days from one "YYYY-MM-DD" to another (positive when `toDate` is
 // later). Used by the reminders job to know how many days are left until a
 // card statement's due date.
