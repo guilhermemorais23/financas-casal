@@ -2226,6 +2226,16 @@ select {
   width: auto;
 }
 
+/* Native checkboxes inherit color-scheme:dark from :root in dark mode --
+   browsers then render an UNCHECKED box with a dark/filled background too,
+   which reads as "already checked" at a glance. Forcing color-scheme:light
+   on the control itself keeps its native chrome (white box, clear check)
+   regardless of the page theme; accent-color still themes the checked fill. */
+input[type="checkbox"] {
+  color-scheme: light;
+  accent-color: var(--color-primary);
+}
+
 .segmented {
   display: flex;
   background: var(--color-bg-soft);
