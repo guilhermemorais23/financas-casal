@@ -71,3 +71,34 @@ export async function categoryIsVisibleTo(categoryId: string, groupId: string): 
   const data = doc.data()!;
   return data.groupId === null || data.groupId === groupId;
 }
+
+export async function findCategoryById(categoryId: string): Promise<CategoryRow | null> {
+  const doc = await categoriesCol.doc(categoryId).get();
+  if (!doc.exists) return null;
+  return toCategoryRow(doc);
+}
+
+// Renaming keeps the doc's existing id (derived from the *original* name at
+// create time) rather than migrating to a freshly-derived one -- every
+// transaction/budget referencing this category by id keeps pointing at the
+// right doc. The only cost is the id no longer matches the current name,
+// which is invisible to callers (nothing re-derives an id from a name
+// except insertCategory's own create-time dedupe check).
+export async function updateCategory(
+  categoryId: string,
+  fields: { name?: string; emoji?: string | null }
+): Promise<CategoryRow> {
+  const update: Record<string, unknown> = {};
+  if (fields.name !== undefined) update.name = fields.name;
+  if (fields.emoji !== undefined) update.emoji = fields.emoji;
+  await categoriesCol.doc(categoryId).update(update);
+  const doc = await categoriesCol.doc(categoryId).get();
+  return toCategoryRow(doc);
+}
+
+// Transactions/budgets that reference this category by id simply degrade to
+// "Sem categoria" afterward (every read site already falls back on a
+// missing category lookup) -- no cascade needed.
+export async function deleteCategory(categoryId: string): Promise<void> {
+  await categoriesCol.doc(categoryId).delete();
+}
