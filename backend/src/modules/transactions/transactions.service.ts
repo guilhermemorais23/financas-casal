@@ -1,12 +1,13 @@
 import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { addMonthsToDate, parseMonthRange } from "../../utils/month";
-import { splitEvenly } from "../../utils/money";
+import { addMonths, addMonthsToDate, parseMonthRange } from "../../utils/month";
+import { fromCents, splitEvenly } from "../../utils/money";
 import {
   deleteSplitsForTransaction,
   deleteTransaction,
   deleteTransactionsBatch,
+  findOwnDocsForRange,
   findRecurringSeries,
   findTransactionById,
   findTransactionsVisibleTo,
@@ -192,6 +193,56 @@ export async function getYearlySummaryForUser(userId: string, yearParam?: string
     throw new InvalidYearError();
   }
   return getYearlySummary(groupId, userId, year, scope);
+}
+
+export interface MonthlyTrendPoint {
+  month: string; // "YYYY-MM"
+  income: number;
+  expense: number;
+  net: number;
+}
+
+// One query covers three things the Painel needs: the 6-month trend line,
+// AND (since the window always includes the current and previous month)
+// this month's and last month's income/expense totals -- what used to take
+// two more separate fetches of up to 100 full transaction rows each, just
+// to sum two numbers each. Personal scope on purpose: matches exactly what
+// the hero number above it ("Você tem no mês") already means, so the two
+// never disagree.
+export async function getMonthlyTrendForUser(
+  userId: string,
+  monthParam?: string,
+  monthsBack = 6
+): Promise<MonthlyTrendPoint[]> {
+  const groupId = await requireGroupId(userId);
+  const { periodMonth } = parseMonthRange(monthParam);
+  const endMonth = periodMonth.slice(0, 7);
+  const startMonth = addMonths(endMonth, -(monthsBack - 1));
+  const rangeStart = `${startMonth}-01`;
+  const rangeEnd = `${addMonths(endMonth, 1)}-01`;
+
+  const rows = await findOwnDocsForRange(groupId, userId, rangeStart, rangeEnd);
+
+  const byMonth = new Map<string, { incomeCents: number; expenseCents: number }>();
+  for (let i = 0; i < monthsBack; i++) {
+    byMonth.set(addMonths(startMonth, i), { incomeCents: 0, expenseCents: 0 });
+  }
+  for (const row of rows) {
+    const entry = byMonth.get(row.month);
+    if (!entry) continue; // outside the requested window -- can't happen given the query's own range, kept defensive
+    if (row.transactionType === "income") {
+      entry.incomeCents += row.amountCents;
+    } else {
+      entry.expenseCents += row.amountCents;
+    }
+  }
+
+  return Array.from(byMonth.entries()).map(([month, { incomeCents, expenseCents }]) => ({
+    month,
+    income: Number(fromCents(incomeCents)),
+    expense: Number(fromCents(expenseCents)),
+    net: Number(fromCents(incomeCents - expenseCents)),
+  }));
 }
 
 // Joint-account transactions are manageable by any group member (same rule

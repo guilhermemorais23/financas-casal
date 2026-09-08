@@ -12,6 +12,7 @@ import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { MonthPicker } from "../components/MonthPicker";
 import { SplitStatusPill } from "../components/SplitStatusPill";
+import { TrendSparkline } from "../components/TrendSparkline";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, tint } from "../utils/categoryColor";
 import {
@@ -20,6 +21,7 @@ import {
   groupByDay,
   monthLongName,
   nextMonthParam,
+  parseLocalDate,
   percentChange,
   previousMonthParam,
 } from "../utils/format";
@@ -111,6 +113,32 @@ interface CategoryBudgetRow {
   capAmount: string | null;
 }
 
+interface GoalHighlight {
+  id: string;
+  name: string;
+  emoji: string | null;
+  currentAmount: string;
+  targetAmount: string;
+}
+
+interface NextInvoice {
+  cardName: string;
+  dueDate: string;
+  total: string;
+}
+
+interface MonthlyTrendPoint {
+  month: string;
+  income: number;
+  expense: number;
+  net: number;
+}
+
+interface MonthTotals {
+  income: number;
+  expense: number;
+}
+
 interface DashboardResponse {
   group: GroupResponse;
   recent: TransactionListRow[];
@@ -121,12 +149,25 @@ interface DashboardResponse {
   budget: BudgetResponse;
   categoryBudgets: CategoryBudgetRow[];
   dailyTrend: DailyTrendPoint[];
-  personalMonthTx: TransactionListRow[];
-  personalPrevMonthTx: TransactionListRow[];
+  personalMonthTotals: MonthTotals;
+  personalPrevMonthTotals: MonthTotals;
+  goalHighlight: GoalHighlight | null;
+  nextInvoice: NextInvoice | null;
+  trend6m: MonthlyTrendPoint[];
 }
 
-function sumByType(rows: TransactionListRow[], type: "income" | "expense") {
-  return rows.filter((tx) => tx.transactionType === type).reduce((sum, tx) => sum + Number(tx.amount), 0);
+function daysUntil(dateStr: string): number {
+  const date = parseLocalDate(dateStr);
+  const today = new Date();
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((startOfDay(date) - startOfDay(today)) / 86_400_000);
+}
+
+function dueLabel(days: number): string {
+  if (days < 0) return `venceu há ${Math.abs(days)} dia${Math.abs(days) > 1 ? "s" : ""}`;
+  if (days === 0) return "vence hoje";
+  if (days === 1) return "vence amanhã";
+  return `vence em ${days} dias`;
 }
 
 export function DashboardPage() {
@@ -149,11 +190,11 @@ export function DashboardPage() {
   const monthKey = (name: string) => `dashboard:${name}:${month}:${user?.id ?? "anon"}`;
 
   const [group, setGroup] = useState<GroupResponse | null>(() => readCache(staticKey("group")));
-  const [personalMonthTx, setPersonalMonthTx] = useState<TransactionListRow[]>(
-    () => readCache(monthKey("personalMonthTx")) ?? []
+  const [personalMonthTotals, setPersonalMonthTotals] = useState<MonthTotals>(
+    () => readCache(monthKey("personalMonthTotals")) ?? { income: 0, expense: 0 }
   );
-  const [personalPrevMonthTx, setPersonalPrevMonthTx] = useState<TransactionListRow[]>(
-    () => readCache(monthKey("personalPrevMonthTx")) ?? []
+  const [personalPrevMonthTotals, setPersonalPrevMonthTotals] = useState<MonthTotals>(
+    () => readCache(monthKey("personalPrevMonthTotals")) ?? { income: 0, expense: 0 }
   );
   const [recent, setRecent] = useState<TransactionListRow[]>(() => readCache(monthKey("recent")) ?? []);
   const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[]>(() => readCache(monthKey("dailyTrend")) ?? []);
@@ -169,6 +210,14 @@ export function DashboardPage() {
   const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgetRow[]>(
     () => readCache(monthKey("categoryBudgets")) ?? []
   );
+  // Neither depends on the selected month (a goal/card due date isn't tied
+  // to which month you're browsing) -- static key, same reasoning as
+  // debts/balance above.
+  const [goalHighlight, setGoalHighlight] = useState<GoalHighlight | null>(() =>
+    readCache(staticKey("goalHighlight"))
+  );
+  const [nextInvoice, setNextInvoice] = useState<NextInvoice | null>(() => readCache(staticKey("nextInvoice")));
+  const [trend6m, setTrend6m] = useState<MonthlyTrendPoint[]>(() => readCache(monthKey("trend6m")) ?? []);
   const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
@@ -188,8 +237,8 @@ export function DashboardPage() {
 
     if (!warmCacheOnly) {
       setGroup(data.group);
-      setPersonalMonthTx(data.personalMonthTx);
-      setPersonalPrevMonthTx(data.personalPrevMonthTx);
+      setPersonalMonthTotals(data.personalMonthTotals);
+      setPersonalPrevMonthTotals(data.personalPrevMonthTotals);
       setRecent(data.recent);
       setDebts(data.debts);
       setSummary(data.summary);
@@ -198,19 +247,32 @@ export function DashboardPage() {
       setBudget(data.budget);
       setCategoryBudgets(data.categoryBudgets);
       setDailyTrend(data.dailyTrend);
+      setGoalHighlight(data.goalHighlight);
+      setNextInvoice(data.nextInvoice);
+      setTrend6m(data.trend6m);
     }
 
     writeCache(sKey("group"), data.group);
     writeCache(sKey("debts"), data.debts);
     writeCache(sKey("balance"), data.balance);
-    writeCache(mKey("personalMonthTx"), data.personalMonthTx);
-    writeCache(mKey("personalPrevMonthTx"), data.personalPrevMonthTx);
+    writeCache(sKey("goalHighlight"), data.goalHighlight);
+    writeCache(sKey("nextInvoice"), data.nextInvoice);
+    writeCache(mKey("personalMonthTotals"), data.personalMonthTotals);
+    writeCache(mKey("personalPrevMonthTotals"), data.personalPrevMonthTotals);
     writeCache(mKey("recent"), data.recent);
     writeCache(mKey("summary"), data.summary);
     writeCache(mKey("jointSummary"), data.jointSummary);
     writeCache(mKey("budget"), data.budget);
     writeCache(mKey("categoryBudgets"), data.categoryBudgets);
     writeCache(mKey("dailyTrend"), data.dailyTrend);
+    writeCache(mKey("trend6m"), data.trend6m);
+    // The whole response, one key -- lets load() below check "do we already
+    // have this month?" with a single readCache instead of guessing from
+    // one field. This is what prefetchMonth's warm-up actually pays off:
+    // without this, the neighbor-month prefetch below wrote a cache that
+    // load() never consulted, so switching to an already-prefetched month
+    // still paid a full network round trip for no reason.
+    writeCache(mKey("full"), data);
   }
 
   // One request instead of the 7 separate ones this used to fire (group,
@@ -221,6 +283,18 @@ export function DashboardPage() {
   // way). GET /api/dashboard bundles the same reads into one response.
   async function load(selectedMonth: string) {
     setError(null);
+    const mKeyLocal = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
+    const cached = readCache<DashboardResponse>(mKeyLocal("full"));
+
+    if (cached) {
+      // Already warmed (a previous visit, or the neighbor-month prefetch
+      // below) -- paint instantly, no loading state at all, then quietly
+      // refetch underneath to catch anything that changed since.
+      applyDashboard(selectedMonth, cached, false);
+    } else {
+      setIsLoading(true);
+    }
+
     try {
       const data = await apiRequest<DashboardResponse>(`/dashboard?month=${selectedMonth}`, { token });
       applyDashboard(selectedMonth, data, false);
@@ -242,7 +316,12 @@ export function DashboardPage() {
         neighborMonths.forEach((neighborMonth) => prefetchMonth(neighborMonth));
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
+      // A month we already had cached still shows that cached data -- no
+      // reason to blow it away with an error banner over a background
+      // refresh failing silently (same "fail quiet" policy as prefetchMonth).
+      if (!cached) {
+        setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -314,10 +393,10 @@ export function DashboardPage() {
   // (filtering/reducing up to 100 rows, regrouping by day) is memoized so
   // opening/closing a modal (editingTx/deletingId) doesn't redo it for no
   // reason -- none of those state changes affect this derived data.
-  const income = useMemo(() => sumByType(personalMonthTx, "income"), [personalMonthTx]);
-  const expense = useMemo(() => sumByType(personalMonthTx, "expense"), [personalMonthTx]);
-  const prevIncome = useMemo(() => sumByType(personalPrevMonthTx, "income"), [personalPrevMonthTx]);
-  const prevExpense = useMemo(() => sumByType(personalPrevMonthTx, "expense"), [personalPrevMonthTx]);
+  const income = personalMonthTotals.income;
+  const expense = personalMonthTotals.expense;
+  const prevIncome = personalPrevMonthTotals.income;
+  const prevExpense = personalPrevMonthTotals.expense;
   const incomeDelta = percentChange(income, prevIncome);
   const expenseDelta = percentChange(expense, prevExpense);
   const prevMonthName = monthLongName(previousMonthParam(month));
@@ -383,16 +462,24 @@ export function DashboardPage() {
   return (
     <AppLayout wide>
       <div className="dashboard">
-        {isLoading && <p className="refresh-note">Atualizando...</p>}
         <div className="section-header" style={{ alignItems: "flex-start" }}>
           <div className="dashboard-greeting">
             <h1>Olá, {user?.displayName?.split(" ")[0]} 👋</h1>
             <p className="card-subtitle">{monthLabel}</p>
             <FinancialHealthBadge monthlyIncome={income} monthlyExpense={expense} />
           </div>
-          <MonthPicker value={month} onChange={setMonth} />
+          <MonthPicker value={month} onChange={setMonth} isLoading={isLoading} />
         </div>
 
+        {/* Only visible while isLoading -- a month not already cached is
+            being fetched for real. An already-cached month never sets
+            isLoading, so switching between recently-viewed months never
+            shows this at all. */}
+        <div className={`top-progress${isLoading ? " is-loading" : ""}`} aria-hidden="true">
+          <div className="top-progress-fill" />
+        </div>
+
+        <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
         <div className="stat-card wide">
           <span className="stat-card-circle" />
           <span className="stat-card-circle stat-card-circle-2" />
@@ -400,6 +487,11 @@ export function DashboardPage() {
           <p className="value">
             <AnimatedNumber value={income - expense} />
           </p>
+          {trend6m.length > 1 && (
+            <div className="hero-trend">
+              <TrendSparkline points={trend6m} />
+            </div>
+          )}
         </div>
 
         <div className="stat-row wrap">
@@ -489,6 +581,50 @@ export function DashboardPage() {
                 <p className="empty-state">Defina um teto mensal na Conta pra acompanhar aqui.</p>
               )}
             </div>
+
+            {(goalHighlight || nextInvoice) && (
+              <div className="card">
+                <div className="dashboard-mini-grid">
+                  {goalHighlight && (
+                    <Link to="/goals" className="dashboard-mini-widget">
+                      <CircularProgress
+                        percent={
+                          (Number(goalHighlight.currentAmount) / Number(goalHighlight.targetAmount)) * 100
+                        }
+                        size={48}
+                        strokeWidth={5}
+                        color="var(--color-primary)"
+                      >
+                        <span className="dashboard-mini-emoji">{goalHighlight.emoji ?? "🎯"}</span>
+                      </CircularProgress>
+                      <div className="dashboard-mini-text">
+                        <p className="dashboard-mini-title">Meta</p>
+                        <p className="dashboard-mini-name">{goalHighlight.name}</p>
+                        <p className="dashboard-mini-sub">
+                          {formatCurrency(Number(goalHighlight.currentAmount))} de{" "}
+                          {formatCurrency(Number(goalHighlight.targetAmount))}
+                        </p>
+                      </div>
+                    </Link>
+                  )}
+                  {nextInvoice && (
+                    <Link to="/cards" className="dashboard-mini-widget">
+                      <div className="dashboard-mini-text">
+                        <p className="dashboard-mini-title">Próxima fatura</p>
+                        <p className="dashboard-mini-name">{nextInvoice.cardName}</p>
+                        <p
+                          className={`dashboard-mini-sub${
+                            daysUntil(nextInvoice.dueDate) <= 3 ? " danger-text" : ""
+                          }`}
+                        >
+                          {formatCurrency(Number(nextInvoice.total))} · {dueLabel(daysUntil(nextInvoice.dueDate))}
+                        </p>
+                      </div>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
 
             {jointAccount && orderedMembers.length > 1 && (
               <div className="card">
@@ -735,7 +871,7 @@ export function DashboardPage() {
             </div>
           </div>
         </div>
-
+        </div>
       </div>
 
       {editingTx && (
