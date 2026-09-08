@@ -8,6 +8,18 @@ interface CategoryRow {
   emoji: string | null;
 }
 
+interface AccountRow {
+  id: string;
+  type: "personal" | "joint";
+  name: string;
+  emoji: string | null;
+}
+
+interface MemberRow {
+  id: string;
+  displayName: string;
+}
+
 export interface EditableTransaction {
   id: string;
   description: string;
@@ -15,6 +27,8 @@ export interface EditableTransaction {
   transactionType: "expense" | "income";
   categoryId: string | null;
   occurredAt: string;
+  accountId: string;
+  payerId: string;
 }
 
 export function EditTransactionModal({
@@ -26,8 +40,10 @@ export function EditTransactionModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const [categories, setCategories] = useState<CategoryRow[]>([]);
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [members, setMembers] = useState<MemberRow[]>([]);
 
   const [description, setDescription] = useState(transaction.description);
   const [amount, setAmount] = useState(transaction.amount);
@@ -36,12 +52,18 @@ export function EditTransactionModal({
   );
   const [categoryId, setCategoryId] = useState(transaction.categoryId ?? "");
   const [occurredAt, setOccurredAt] = useState(transaction.occurredAt.slice(0, 10));
+  const [accountId, setAccountId] = useState(transaction.accountId);
+  const [payerId, setPayerId] = useState(transaction.payerId);
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     apiRequest<CategoryRow[]>("/categories", { token }).then(setCategories);
+    apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/groups/me", { token }).then((res) => {
+      setAccounts(res.accounts);
+      setMembers(res.members);
+    });
   }, [token]);
 
   async function handleSubmit(event: FormEvent) {
@@ -65,6 +87,8 @@ export function EditTransactionModal({
           transactionType,
           categoryId: categoryId || null,
           occurredAt,
+          accountId,
+          payerId,
         },
       });
       onSaved();
@@ -143,6 +167,30 @@ export function EditTransactionModal({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="edit-account">Conta</label>
+              <select id="edit-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.emoji ? `${account.emoji} ` : ""}
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="edit-payer">{transactionType === "income" ? "Quem recebeu" : "Quem pagou"}</label>
+              <select id="edit-payer" value={payerId} onChange={(e) => setPayerId(e.target.value)}>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.id === user?.id ? "Você" : member.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {error && (

@@ -9,8 +9,10 @@ import {
   getBalanceHandler,
   getDailySeriesHandler,
   getSummaryHandler,
+  getYearlySummaryHandler,
   listTransactionsHandler,
   setSplitSettledHandler,
+  updateRecurringHandler,
   updateTransactionHandler,
 } from "./transactions.controller";
 
@@ -22,9 +24,11 @@ transactionsRouter.post("/", asyncHandler(createTransactionHandler));
 transactionsRouter.get("/", asyncHandler(listTransactionsHandler));
 transactionsRouter.get("/balance", asyncHandler(getBalanceHandler));
 transactionsRouter.get("/summary", asyncHandler(getSummaryHandler));
+transactionsRouter.get("/summary/year", asyncHandler(getYearlySummaryHandler));
 transactionsRouter.get("/daily-series", asyncHandler(getDailySeriesHandler));
 transactionsRouter.get("/export", asyncHandler(exportTransactionsHandler));
 transactionsRouter.patch("/:id/settle", asyncHandler(setSplitSettledHandler));
+transactionsRouter.patch("/:id/recurring", asyncHandler(updateRecurringHandler));
 transactionsRouter.patch("/:id", asyncHandler(updateTransactionHandler));
 transactionsRouter.delete("/:id/recurring", asyncHandler(cancelRecurringHandler));
 transactionsRouter.delete("/:id", asyncHandler(deleteTransactionHandler));

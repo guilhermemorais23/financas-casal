@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiDownload, apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
+import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { IncomeExpenseDonut } from "../components/IncomeExpenseDonut";
 import { MonthPicker } from "../components/MonthPicker";
@@ -10,7 +11,7 @@ import { SplitStatusPill } from "../components/SplitStatusPill";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
-import { currentMonthParam, formatCurrency, groupByDay } from "../utils/format";
+import { currentMonthParam, formatCurrency, groupByDay, monthLongName } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 
 interface CategorySummaryRow {
@@ -23,6 +24,19 @@ interface CategorySummaryRow {
 interface SummaryResponse {
   total: string;
   byCategory: CategorySummaryRow[];
+}
+
+interface MonthlyTotalPoint {
+  month: string;
+  income: string;
+  expense: string;
+}
+
+interface YearlySummaryResponse {
+  year: number;
+  months: MonthlyTotalPoint[];
+  totalIncome: string;
+  totalExpense: string;
 }
 
 interface TransactionListRow {
@@ -38,6 +52,8 @@ interface TransactionListRow {
   recurringGroupId: string | null;
   splitType: "none" | "equal";
   isSettled: boolean;
+  accountId: string;
+  payerId: string;
 }
 
 export function ReportsPage() {
@@ -66,7 +82,29 @@ export function ReportsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
+  const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [selectedYear, setSelectedYear] = useState(() => Number(month.slice(0, 4)));
+  const [yearSummary, setYearSummary] = useState<YearlySummaryResponse | null>(() =>
+    readCache(`reports:year:${selectedYear}:${user?.id ?? "anon"}`)
+  );
+
+  useEffect(() => {
+    const yearCacheKey = `reports:year:${selectedYear}:${user?.id ?? "anon"}`;
+    const cached = readCache<YearlySummaryResponse>(yearCacheKey);
+    if (cached) setYearSummary(cached);
+    apiRequest<YearlySummaryResponse>(`/transactions/summary/year?year=${selectedYear}&scope=visible`, { token })
+      .then((res) => {
+        setYearSummary(res);
+        writeCache(yearCacheKey, res);
+      })
+      .catch(() => {
+        // Best-effort widget -- a failed fetch just leaves whatever was
+        // there (cached or null) instead of showing an error banner.
+      });
+  }, [token, selectedYear]);
 
   async function load(selectedMonth: string) {
     setIsLoading(true);
@@ -101,6 +139,22 @@ export function ReportsPage() {
     setError(null);
     try {
       await apiDownload(`/transactions/export?month=${month}`, token, `par-transacoes-${month}.csv`);
+      showToast("CSV baixado");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível exportar");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  // Same endpoint, just without ?month= -- exportTransactionsForUser
+  // already treats a missing month as "no date filter" (up to 10k rows,
+  // far above what any group would realistically have).
+  async function handleExportAll() {
+    setIsExporting(true);
+    setError(null);
+    try {
+      await apiDownload("/transactions/export", token, "par-transacoes-tudo.csv");
       showToast("CSV baixado");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível exportar");
@@ -150,15 +204,17 @@ export function ReportsPage() {
     );
   }
 
-  const visibleTransactions = useMemo(
-    () =>
-      (transactions ?? []).filter((tx) => {
-        if (!selectedCategoryId) return true;
-        if (selectedCategoryId === "none") return tx.categoryId === null;
-        return tx.categoryId === selectedCategoryId;
-      }),
-    [transactions, selectedCategoryId]
-  );
+  const visibleTransactions = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return (transactions ?? []).filter((tx) => {
+      if (selectedCategoryId) {
+        const matchesCategory = selectedCategoryId === "none" ? tx.categoryId === null : tx.categoryId === selectedCategoryId;
+        if (!matchesCategory) return false;
+      }
+      if (normalizedQuery && !tx.description.toLowerCase().includes(normalizedQuery)) return false;
+      return true;
+    });
+  }, [transactions, selectedCategoryId, searchQuery]);
   const transactionGroups = useMemo(() => groupByDay(visibleTransactions), [visibleTransactions]);
   const selectedCategoryLabel = selectedCategoryId
     ? summary?.byCategory.find((row) => (row.categoryId ?? "none") === selectedCategoryId)
@@ -203,7 +259,67 @@ export function ReportsPage() {
             >
               {isExporting ? "Baixando..." : "⬇ CSV"}
             </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleExportAll}
+              disabled={isExporting}
+              title="Baixar todos os lançamentos de todos os meses em CSV"
+            >
+              ⬇ Tudo
+            </button>
           </div>
+        </div>
+
+        <div className="card">
+          <div className="section-header">
+            <p className="card-title">Visão anual</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <button type="button" className="btn-icon" onClick={() => setSelectedYear((y) => y - 1)} title="Ano anterior">
+                ◀
+              </button>
+              <strong>{selectedYear}</strong>
+              <button type="button" className="btn-icon" onClick={() => setSelectedYear((y) => y + 1)} title="Próximo ano">
+                ▶
+              </button>
+            </div>
+          </div>
+          {yearSummary && (
+            <>
+              <p className="card-subtitle">
+                Total do ano: <strong className="income-text">{formatCurrency(Number(yearSummary.totalIncome))}</strong>{" "}
+                de entrada · <strong>{formatCurrency(Number(yearSummary.totalExpense))}</strong> de saída
+              </p>
+              <ul className="yearly-summary-list">
+                {yearSummary.months.map((point) => {
+                  const maxValue = Math.max(
+                    ...yearSummary.months.flatMap((m) => [Number(m.income), Number(m.expense)]),
+                    1
+                  );
+                  return (
+                    <li key={point.month} className="yearly-summary-row">
+                      <span className="yearly-summary-month">{monthLongName(point.month).slice(0, 3)}</span>
+                      <div className="yearly-summary-bars">
+                        <div
+                          className="yearly-summary-bar income"
+                          style={{ width: `${(Number(point.income) / maxValue) * 100}%` }}
+                        />
+                        <div
+                          className="yearly-summary-bar expense"
+                          style={{ width: `${(Number(point.expense) / maxValue) * 100}%` }}
+                        />
+                      </div>
+                      <span className="yearly-summary-values">
+                        <span className="income-text">{formatCurrency(Number(point.income))}</span>
+                        {" / "}
+                        {formatCurrency(Number(point.expense))}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </div>
 
         <div className="card">
@@ -240,13 +356,25 @@ export function ReportsPage() {
               </button>
             )}
           </div>
+          {transactions && transactions.length > 0 && (
+            <input
+              type="search"
+              placeholder="Buscar por descrição..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ marginBottom: "0.85rem" }}
+              aria-label="Buscar lançamentos por descrição"
+            />
+          )}
           {error && (
             <p className="alert" role="alert">
               {error}
             </p>
           )}
           {transactions && transactions.length > 0 && visibleTransactions.length === 0 && (
-            <p className="empty-state">Nenhuma transação nessa categoria.</p>
+            <p className="empty-state">
+              {searchQuery.trim() ? `Nada encontrado pra "${searchQuery.trim()}".` : "Nenhuma transação nessa categoria."}
+            </p>
           )}
           {transactions && transactions.length === 0 && (
             <p className="empty-state">Nenhuma transação neste mês.</p>
@@ -293,15 +421,25 @@ export function ReportsPage() {
                         ✎
                       </button>
                       {tx.recurringGroupId && (
-                        <button
-                          type="button"
-                          className="btn-icon"
-                          title="Cancelar recorrência"
-                          disabled={deletingId === tx.id}
-                          onClick={() => handleCancelRecurring(tx.id)}
-                        >
-                          🔁🚫
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="Editar valor da recorrência"
+                            onClick={() => setEditingRecurringTx(tx)}
+                          >
+                            ✏️🔁
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="Cancelar recorrência"
+                            disabled={deletingId === tx.id}
+                            onClick={() => handleCancelRecurring(tx.id)}
+                          >
+                            🔁🚫
+                          </button>
+                        </>
                       )}
                       <button
                         type="button"
@@ -325,6 +463,13 @@ export function ReportsPage() {
         <EditTransactionModal
           transaction={editingTx}
           onClose={() => setEditingTx(null)}
+          onSaved={() => load(month)}
+        />
+      )}
+      {editingRecurringTx && (
+        <EditRecurringModal
+          transaction={editingRecurringTx}
+          onClose={() => setEditingRecurringTx(null)}
           onSaved={() => load(month)}
         />
       )}

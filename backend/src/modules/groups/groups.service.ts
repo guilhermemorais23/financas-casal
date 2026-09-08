@@ -27,6 +27,8 @@ export class InviteNotFoundError extends Error {}
 export class InviteNotPendingError extends Error {}
 export class InviteExpiredError extends Error {}
 export class NoGroupError extends Error {}
+export class MemberNotFoundError extends Error {}
+export class CannotRemoveSelfError extends Error {}
 
 function generateInviteToken(): string {
   return randomBytes(24).toString("base64url");
@@ -110,6 +112,23 @@ export async function createNewInvite(userId: string): Promise<string> {
 export async function leaveGroup(userId: string): Promise<void> {
   await requireGroupId(userId);
   await setUserGroup(userId, null);
+}
+
+// Any member can remove any other -- same mutual-trust model already used
+// for managing joint accounts/transactions, there's no owner/admin role on
+// a group. Removing yourself is what leaveGroup is for instead, so it's
+// rejected here rather than silently doing the same thing under a
+// different name.
+export async function removeMemberForUser(userId: string, targetUserId: string): Promise<void> {
+  const groupId = await requireGroupId(userId);
+  if (targetUserId === userId) {
+    throw new CannotRemoveSelfError();
+  }
+  const members = await findMembersByGroupId(groupId);
+  if (!members.some((member) => member.id === targetUserId)) {
+    throw new MemberNotFoundError();
+  }
+  await setUserGroup(targetUserId, null);
 }
 
 export async function getGroupForUser(userId: string): Promise<{

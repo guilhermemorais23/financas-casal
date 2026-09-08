@@ -7,6 +7,7 @@ import { AnimatedNumber } from "../components/AnimatedNumber";
 import { DashboardSkeleton } from "../components/Skeleton";
 import { EmptyState } from "../components/EmptyState";
 import { CircularProgress } from "../components/CircularProgress";
+import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { MonthPicker } from "../components/MonthPicker";
@@ -55,6 +56,8 @@ interface TransactionListRow {
   recurringGroupId: string | null;
   splitType: "none" | "equal";
   isSettled: boolean;
+  accountId: string;
+  payerId: string;
 }
 
 interface DebtRow {
@@ -169,6 +172,7 @@ export function DashboardPage() {
   const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
+  const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const idle = (cb: () => void) =>
@@ -692,15 +696,25 @@ export function DashboardPage() {
                               ✎
                             </button>
                             {tx.recurringGroupId && (
-                              <button
-                                type="button"
-                                className="btn-icon"
-                                title="Cancelar recorrência"
-                                disabled={deletingId === tx.id}
-                                onClick={() => handleCancelRecurring(tx.id)}
-                              >
-                                🔁🚫
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn-icon"
+                                  title="Editar valor da recorrência"
+                                  onClick={() => setEditingRecurringTx(tx)}
+                                >
+                                  ✏️🔁
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-icon"
+                                  title="Cancelar recorrência"
+                                  disabled={deletingId === tx.id}
+                                  onClick={() => handleCancelRecurring(tx.id)}
+                                >
+                                  🔁🚫
+                                </button>
+                              </>
                             )}
                             <button
                               type="button"
@@ -728,6 +742,13 @@ export function DashboardPage() {
         <EditTransactionModal
           transaction={editingTx}
           onClose={() => setEditingTx(null)}
+          onSaved={() => load(month)}
+        />
+      )}
+      {editingRecurringTx && (
+        <EditRecurringModal
+          transaction={editingRecurringTx}
+          onClose={() => setEditingRecurringTx(null)}
           onSaved={() => load(month)}
         />
       )}

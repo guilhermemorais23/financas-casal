@@ -13,6 +13,7 @@ import {
   getBalanceRows,
   getDailySeries,
   getMonthlySummary,
+  getYearlySummary,
   insertSplits,
   insertTransaction,
   insertTransactionSeries,
@@ -182,6 +183,17 @@ export async function getDailySeriesForUser(userId: string, monthParam?: string,
   return getDailySeries(groupId, userId, monthStart, monthEnd, scope);
 }
 
+export class InvalidYearError extends Error {}
+
+export async function getYearlySummaryForUser(userId: string, yearParam?: string, scope?: SummaryScope) {
+  const groupId = await requireGroupId(userId);
+  const year = yearParam ? Number(yearParam) : new Date().getUTCFullYear();
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new InvalidYearError();
+  }
+  return getYearlySummary(groupId, userId, year, scope);
+}
+
 // Joint-account transactions are manageable by any group member (same rule
 // as joint debts); personal-account transactions stay restricted to whoever
 // created them.
@@ -274,12 +286,69 @@ export async function cancelRecurringForUser(userId: string, transactionId: stri
   return { cancelledCount: idsToDelete.length };
 }
 
+export class InvalidRecurringUpdateError extends Error {}
+
+// "The rent went up" -- unlike a plain edit (which only ever touches the
+// one occurrence you clicked), this rewrites the amount/description on
+// this occurrence and every later one in the same series, leaving past
+// (already-happened) occurrences exactly as they were. Same "this and
+// future" scope as cancelRecurringForUser above.
+export async function updateRecurringForUser(
+  userId: string,
+  transactionId: string,
+  input: { amount?: number; description?: string }
+) {
+  const groupId = await requireGroupId(userId);
+  const transaction = await findTransactionById(transactionId);
+  if (
+    !transaction ||
+    transaction.groupId !== groupId ||
+    !transaction.recurringGroupId ||
+    !canManageTransaction(userId, transaction)
+  ) {
+    throw new TransactionNotFoundError();
+  }
+  if (input.amount === undefined && input.description === undefined) {
+    throw new InvalidRecurringUpdateError();
+  }
+  if (input.amount !== undefined && input.amount <= 0) {
+    throw new InvalidRecurringUpdateError();
+  }
+
+  const series = await findRecurringSeries(transaction.recurringGroupId);
+  const futureOccurrences = series.filter((occurrence) => occurrence.occurredAt >= transaction.occurredAt);
+
+  const members = input.amount !== undefined ? await findMembersByGroupId(groupId) : [];
+  await Promise.all(
+    futureOccurrences.map(async (occurrence) => {
+      await updateTransaction(occurrence.id, { amount: input.amount, description: input.description });
+      // Each occurrence carries its own splits (independent docs, created
+      // per-occurrence when the series was first generated) -- an amount
+      // change has to resync every one of them individually, same as a
+      // regular single-transaction edit does for its own splits.
+      if (input.amount !== undefined && occurrence.splitType === "equal" && members.length > 1) {
+        const shares = splitEvenly(input.amount, members.length);
+        await deleteSplitsForTransaction(occurrence.id);
+        await insertSplits(
+          groupId,
+          occurrence.id,
+          members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
+        );
+      }
+    })
+  );
+
+  return { updatedCount: futureOccurrences.length };
+}
+
 export interface UpdateTransactionInput {
   description?: string;
   amount?: number;
   transactionType?: TransactionType;
   categoryId?: string | null;
   occurredAt?: string;
+  payerId?: string;
+  accountId?: string;
 }
 
 export async function updateTransactionForUser(
@@ -297,7 +366,38 @@ export async function updateTransactionForUser(
     throw new InvalidCategoryError();
   }
 
-  const updated = await updateTransaction(transactionId, input);
+  // Moving a transaction to a different account means the target account
+  // must also belong to this group -- otherwise you could quietly move
+  // money into (or a private expense onto) an account nobody here owns.
+  // accountType/accountOwnerId are denormalized onto the transaction from
+  // the account at write time (same as on create) and have to be
+  // refreshed together whenever accountId changes.
+  let accountFields: { accountId?: string; accountType?: "personal" | "joint"; accountOwnerId?: string | null } = {};
+  if (input.accountId !== undefined && input.accountId !== transaction.accountId) {
+    const accounts = await findAccountsByGroupId(groupId);
+    const account = accounts.find((a) => a.id === input.accountId);
+    if (!account) {
+      throw new InvalidAccountError();
+    }
+    accountFields = { accountId: account.id, accountType: account.type, accountOwnerId: account.ownerUserId };
+  }
+
+  if (input.payerId !== undefined && input.payerId !== transaction.payerId) {
+    const members = await findMembersByGroupId(groupId);
+    if (!members.some((member) => member.id === input.payerId)) {
+      throw new InvalidPayerError();
+    }
+  }
+
+  const updated = await updateTransaction(transactionId, {
+    description: input.description,
+    amount: input.amount,
+    transactionType: input.transactionType,
+    categoryId: input.categoryId,
+    occurredAt: input.occurredAt,
+    payerId: input.payerId,
+    ...accountFields,
+  });
 
   // Keep "who owes whom" consistent with the edited amount/type: income has
   // no debt, and an equal-split expense's shares must track the new amount.

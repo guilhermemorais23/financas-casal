@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { EmojiPicker } from "../components/EmojiPicker";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { personColor, personTint } from "../utils/categoryColor";
@@ -39,6 +40,14 @@ interface CategoryBudgetRow {
   spent: number;
 }
 
+interface CategoryRow {
+  id: string;
+  groupId: string | null;
+  name: string;
+  emoji: string | null;
+  isDefault: boolean;
+}
+
 export function AccountPage() {
   const { user, token, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
@@ -49,6 +58,12 @@ export function AccountPage() {
   const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgetRow[] | null>(null);
   const [categoryCapInputs, setCategoryCapInputs] = useState<Record<string, string>>({});
   const [savingCategoryId, setSavingCategoryId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<CategoryRow[] | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState("");
+  const [editCategoryEmoji, setEditCategoryEmoji] = useState("");
+  const [categoryActionId, setCategoryActionId] = useState<string | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -62,10 +77,11 @@ export function AccountPage() {
   const month = currentMonthParam();
 
   async function load() {
-    const [groupRes, budgetRes, categoryBudgetsRes] = await Promise.all([
+    const [groupRes, budgetRes, categoryBudgetsRes, categoriesRes] = await Promise.all([
       apiRequest<GroupResponse>("/groups/me", { token }),
       apiRequest<BudgetResponse>(`/budgets/current?month=${month}`, { token }),
       apiRequest<CategoryBudgetRow[]>(`/budgets/categories?month=${month}`, { token }),
+      apiRequest<CategoryRow[]>("/categories", { token }),
     ]);
     setGroup(groupRes);
     setBudget(budgetRes);
@@ -74,6 +90,52 @@ export function AccountPage() {
     setCategoryCapInputs(
       Object.fromEntries(categoryBudgetsRes.map((row) => [row.categoryId, row.capAmount ?? ""]))
     );
+    setCategories(categoriesRes);
+  }
+
+  function startEditCategory(category: CategoryRow) {
+    setEditingCategoryId(category.id);
+    setEditCategoryName(category.name);
+    setEditCategoryEmoji(category.emoji ?? "");
+  }
+
+  async function handleSaveCategoryEdit(categoryId: string) {
+    if (!editCategoryName.trim()) return;
+    setError(null);
+    setCategoryActionId(categoryId);
+    try {
+      await apiRequest(`/categories/${categoryId}`, {
+        method: "PATCH",
+        token,
+        body: { name: editCategoryName.trim(), emoji: editCategoryEmoji.trim() || null },
+      });
+      setEditingCategoryId(null);
+      showToast("Categoria atualizada");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar a categoria");
+    } finally {
+      setCategoryActionId(null);
+    }
+  }
+
+  async function handleDeleteCategory(categoryId: string) {
+    const confirmed = window.confirm(
+      "Excluir essa categoria? Lançamentos que já usam ela ficam sem categoria, mas não são apagados."
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setCategoryActionId(categoryId);
+    try {
+      await apiRequest(`/categories/${categoryId}`, { method: "DELETE", token });
+      showToast("Categoria excluída");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível excluir a categoria");
+    } finally {
+      setCategoryActionId(null);
+    }
   }
 
   useEffect(() => {
@@ -148,6 +210,24 @@ export function AccountPage() {
       setError(err instanceof ApiError ? err.message : "Não foi possível gerar o convite");
     } finally {
       setIsInviting(false);
+    }
+  }
+
+  async function handleRemoveMember(memberId: string, memberName: string) {
+    const confirmed = window.confirm(
+      `Remover ${memberName} do grupo? A conta pessoal dela some do grupo, mas nada é apagado -- ela pode criar ou entrar em outro grupo depois.`
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setRemovingMemberId(memberId);
+    try {
+      await apiRequest(`/groups/members/${memberId}`, { method: "DELETE", token });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível remover essa pessoa");
+    } finally {
+      setRemovingMemberId(null);
     }
   }
 
@@ -232,6 +312,18 @@ export function AccountPage() {
                     {member.displayName.charAt(0).toUpperCase()}
                   </span>
                   {member.id === user?.id ? "Você" : member.displayName}
+                  {member.id !== user?.id && (
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      style={{ marginLeft: "auto" }}
+                      title={`Remover ${member.displayName} do grupo`}
+                      disabled={removingMemberId === member.id}
+                      onClick={() => handleRemoveMember(member.id, member.displayName)}
+                    >
+                      🗑
+                    </button>
+                  )}
                 </li>
               ))}
           </ul>
@@ -298,6 +390,82 @@ export function AccountPage() {
               {isSaving ? "Salvando..." : "Salvar orçamento"}
             </button>
           </form>
+        </div>
+
+        <div className="card">
+          <p className="card-title">Categorias</p>
+          <p className="card-subtitle">
+            As padrão (com a estrela) valem pra qualquer grupo e não dá pra mudar. As que vocês criaram dá pra
+            renomear, trocar o emoji ou excluir.
+          </p>
+          {categories?.map((category) => (
+            <div key={category.id} className="category-budget-row">
+              {editingCategoryId === category.id ? (
+                <>
+                  <EmojiPicker value={editCategoryEmoji} onChange={setEditCategoryEmoji} />
+                  <input
+                    className="category-budget-input"
+                    style={{ flex: 1 }}
+                    value={editCategoryName}
+                    onChange={(e) => setEditCategoryName(e.target.value)}
+                    aria-label="Nome da categoria"
+                  />
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    title="Salvar"
+                    disabled={categoryActionId === category.id}
+                    onClick={() => handleSaveCategoryEdit(category.id)}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    title="Cancelar"
+                    onClick={() => setEditingCategoryId(null)}
+                  >
+                    ×
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="category-budget-emoji">{category.emoji ?? "✨"}</span>
+                  <div className="category-budget-info">
+                    <span className="category-budget-name">
+                      {category.name}
+                      {category.isDefault && (
+                        <span className="badge private-badge" style={{ marginLeft: "0.4rem" }}>
+                          padrão
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {!category.isDefault && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Editar"
+                        onClick={() => startEditCategory(category)}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Excluir"
+                        disabled={categoryActionId === category.id}
+                        onClick={() => handleDeleteCategory(category.id)}
+                      >
+                        🗑
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
         </div>
 
         <div className="card">

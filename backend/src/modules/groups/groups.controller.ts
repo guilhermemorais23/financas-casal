@@ -1,15 +1,18 @@
 import type { Request, Response } from "express";
 import {
   AlreadyInGroupError,
+  CannotRemoveSelfError,
   InviteExpiredError,
   InviteNotFoundError,
   InviteNotPendingError,
+  MemberNotFoundError,
   NoGroupError,
   acceptInvite,
   createGroupForUser,
   createNewInvite,
   getGroupForUser,
   leaveGroup,
+  removeMemberForUser,
   updateFinancialProfile,
 } from "./groups.service";
 
@@ -117,6 +120,23 @@ export async function leaveGroupHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof NoGroupError) {
       res.status(404).json({ error: "no group yet" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function removeMemberHandler(req: Request, res: Response) {
+  try {
+    await removeMemberForUser(req.user!.id, req.params.userId);
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof MemberNotFoundError) {
+      res.status(404).json({ error: "member not found" });
+      return;
+    }
+    if (err instanceof CannotRemoveSelfError) {
+      res.status(400).json({ error: "use leave group to remove yourself" });
       return;
     }
     throw err;

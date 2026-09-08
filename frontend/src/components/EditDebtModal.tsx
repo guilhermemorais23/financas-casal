@@ -6,6 +6,7 @@ export interface EditableDebt {
   id: string;
   name: string;
   description: string | null;
+  dueDay: number | null;
 }
 
 export function EditDebtModal({
@@ -21,6 +22,7 @@ export function EditDebtModal({
 
   const [name, setName] = useState(debt.name);
   const [description, setDescription] = useState(debt.description ?? "");
+  const [dueDay, setDueDay] = useState(debt.dueDay !== null ? String(debt.dueDay) : "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,6 +34,11 @@ export function EditDebtModal({
       setError("Informe o nome da dívida.");
       return;
     }
+    const parsedDueDay = dueDay ? Number(dueDay) : null;
+    if (parsedDueDay !== null && (!Number.isInteger(parsedDueDay) || parsedDueDay < 1 || parsedDueDay > 31)) {
+      setError("O dia de vencimento precisa ser entre 1 e 31.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -41,6 +48,7 @@ export function EditDebtModal({
         body: {
           name: name.trim(),
           description: description.trim() || null,
+          dueDay: parsedDueDay,
         },
       });
       onSaved();
@@ -69,6 +77,19 @@ export function EditDebtModal({
               id="edit-debt-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="edit-debt-due-day">Dia do vencimento (opcional)</label>
+            <input
+              id="edit-debt-due-day"
+              type="number"
+              min={1}
+              max={31}
+              placeholder="ex: 10"
+              value={dueDay}
+              onChange={(e) => setDueDay(e.target.value)}
             />
           </div>
 

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [desenvolvimento, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixa o código
+        uses: actions/checkout@v4
+
+      - name: Configura o Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # O emulador do Firestore roda em cima de uma JVM. firebase-tools exige
+      # Java 21+ (17 quebra com "no longer supports Java version before 21").
+      - name: Configura o Java (emulador do Firestore)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Instala dependências (raiz)
+        run: npm ci
+
+      - name: Instala dependências (backend)
+        run: npm ci
+        working-directory: backend
+
+      - name: Instala dependências (frontend)
+        run: npm ci
+        working-directory: frontend
+
+      - name: Verifica os tipos do backend
+        run: npx tsc --noEmit
+        working-directory: backend
+
+      - name: Roda os testes do backend (sobe e desliga o emulador sozinho)
+        run: npm run test:backend
+
+      - name: Build do backend
+        run: npm run build
+        working-directory: backend
+
+      - name: Verifica os tipos e builda o frontend
+        run: npm run build
+        working-directory: frontend
+
+      # Os dois passos abaixo só rodam em push direto pra master (nunca em
+      # PR pra desenvolvimento) -- hoje isso só acontece quando o PR
+      # desenvolvimento -> master é mergeado.
+      - name: Deploy do backend (Render)
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+
+      - name: Autentica no Firebase
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: echo "$FIREBASE_SERVICE_ACCOUNT" > "${{ runner.temp }}/firebase-sa.json"
+
+      # Reaproveita o build do passo acima (frontend/dist) -- não builda de
+      # novo. firebase.json fica na raiz do repo, por isso sem
+      # working-directory aqui.
+      - name: Deploy do frontend (Firebase Hosting)
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: npx firebase-tools deploy --only hosting --project par-projeto --non-interactive

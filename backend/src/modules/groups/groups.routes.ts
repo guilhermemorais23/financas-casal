@@ -7,6 +7,7 @@ import {
   createInviteHandler,
   getMyGroupHandler,
   leaveGroupHandler,
+  removeMemberHandler,
   updateFinancialProfileHandler,
 } from "./groups.controller";
 
@@ -19,4 +20,5 @@ groupsRouter.post("/accept", asyncHandler(acceptInviteHandler));
 groupsRouter.get("/me", asyncHandler(getMyGroupHandler));
 groupsRouter.post("/invite", asyncHandler(createInviteHandler));
 groupsRouter.post("/leave", asyncHandler(leaveGroupHandler));
+groupsRouter.delete("/members/:userId", asyncHandler(removeMemberHandler));
 groupsRouter.patch("/financial-profile", asyncHandler(updateFinancialProfileHandler));

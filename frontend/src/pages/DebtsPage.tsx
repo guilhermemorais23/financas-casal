@@ -14,6 +14,7 @@ interface InstallmentRow {
   amount: string;
   isPaid: boolean;
   referenceMonth: string;
+  dueDate: string | null;
 }
 
 interface DebtRow {
@@ -24,6 +25,7 @@ interface DebtRow {
   totalAmount: string;
   installmentsCount: number;
   startMonth: string;
+  dueDay: number | null;
   installments: InstallmentRow[];
   paidAmount: number;
   remainingAmount: number;
@@ -49,6 +51,7 @@ export function DebtsPage() {
   const [installmentsCount, setInstallmentsCount] = useState("2");
   const [scope, setScope] = useState<"personal" | "joint">("personal");
   const [startMonth, setStartMonth] = useState(currentMonthParam());
+  const [dueDay, setDueDay] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function load() {
@@ -73,8 +76,13 @@ export function DebtsPage() {
     setError(null);
     const parsedTotal = Number(totalAmount.replace(",", "."));
     const parsedCount = isInstallment ? Number(installmentsCount) : 1;
+    const parsedDueDay = dueDay ? Number(dueDay) : null;
     if (!name.trim() || !(parsedTotal > 0) || !(parsedCount >= 1) || !startMonth) {
       setError("Informe nome, valor total, mês de início e (se parcelado) a quantidade de parcelas.");
+      return;
+    }
+    if (parsedDueDay !== null && (!Number.isInteger(parsedDueDay) || parsedDueDay < 1 || parsedDueDay > 31)) {
+      setError("O dia de vencimento precisa ser entre 1 e 31.");
       return;
     }
 
@@ -90,6 +98,7 @@ export function DebtsPage() {
           installmentsCount: parsedCount,
           scope,
           startMonth,
+          dueDay: parsedDueDay,
         },
       });
       setName("");
@@ -98,6 +107,7 @@ export function DebtsPage() {
       setIsInstallment(false);
       setInstallmentsCount("2");
       setStartMonth(currentMonthParam());
+      setDueDay("");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar a dívida");
@@ -184,7 +194,7 @@ export function DebtsPage() {
                 title={
                   installment.isPaid
                     ? `Parcela ${installment.installmentNumber} · ${formatCurrency(Number(installment.amount))} · ${monthYearLabel(installment.referenceMonth)} · clique pra editar`
-                    : `Parcela ${installment.installmentNumber} · ${formatCurrency(Number(installment.amount))} · conta em ${monthYearLabel(installment.referenceMonth)}`
+                    : `Parcela ${installment.installmentNumber} · ${formatCurrency(Number(installment.amount))} · conta em ${monthYearLabel(installment.referenceMonth)}${installment.dueDate ? ` · vence ${installment.dueDate.split("-").reverse().join("/")}` : ""}`
                 }
                 onClick={() =>
                   installment.isPaid
@@ -281,6 +291,22 @@ export function DebtsPage() {
                 {isInstallment
                   ? "A parcela 1 conta nesse mês, a 2 no seguinte, e assim por diante."
                   : "Mês em que essa dívida entra nas contas."}
+              </p>
+            </div>
+
+            <div className="field">
+              <label htmlFor="debt-due-day">Dia do vencimento (opcional)</label>
+              <input
+                id="debt-due-day"
+                type="number"
+                min={1}
+                max={31}
+                placeholder="ex: 10"
+                value={dueDay}
+                onChange={(e) => setDueDay(e.target.value)}
+              />
+              <p className="card-subtitle" style={{ marginBottom: 0 }}>
+                Se preencher, a gente avisa por e-mail quando a parcela estiver perto de vencer.
               </p>
             </div>
 
