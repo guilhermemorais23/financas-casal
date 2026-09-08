@@ -47,9 +47,22 @@ jobs:
         run: npm run build
         working-directory: backend
 
+      # O frontend le VITE_* via import.meta.env em build-time (Vite grava o
+      # valor direto no JS gerado) -- ate agora o build so rodava na maquina
+      # de quem fazia o deploy, que tinha frontend/.env.production (fora do
+      # git, com esses valores) na pasta. No CI o checkout e limpo, esse
+      # arquivo nunca existiu ali, e o build saia com a API key do Firebase
+      # vazia (auth/invalid-api-key, app inteiro em branco). Vite tambem le
+      # env vars reais do processo, nao só arquivos .env -- por isso basta
+      # declarar aqui, sem precisar escrever um .env.production no runner.
       - name: Verifica os tipos e builda o frontend
         run: npm run build
         working-directory: frontend
+        env:
+          VITE_API_URL: https://financas-casal-m496.onrender.com/api
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
 
       # Os dois passos abaixo só rodam em push direto pra master (nunca em
       # PR pra desenvolvimento) -- hoje isso só acontece quando o PR
