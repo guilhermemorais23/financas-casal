@@ -280,6 +280,8 @@ export interface UpdateTransactionInput {
   transactionType?: TransactionType;
   categoryId?: string | null;
   occurredAt?: string;
+  payerId?: string;
+  accountId?: string;
 }
 
 export async function updateTransactionForUser(
@@ -297,7 +299,38 @@ export async function updateTransactionForUser(
     throw new InvalidCategoryError();
   }
 
-  const updated = await updateTransaction(transactionId, input);
+  // Moving a transaction to a different account means the target account
+  // must also belong to this group -- otherwise you could quietly move
+  // money into (or a private expense onto) an account nobody here owns.
+  // accountType/accountOwnerId are denormalized onto the transaction from
+  // the account at write time (same as on create) and have to be
+  // refreshed together whenever accountId changes.
+  let accountFields: { accountId?: string; accountType?: "personal" | "joint"; accountOwnerId?: string | null } = {};
+  if (input.accountId !== undefined && input.accountId !== transaction.accountId) {
+    const accounts = await findAccountsByGroupId(groupId);
+    const account = accounts.find((a) => a.id === input.accountId);
+    if (!account) {
+      throw new InvalidAccountError();
+    }
+    accountFields = { accountId: account.id, accountType: account.type, accountOwnerId: account.ownerUserId };
+  }
+
+  if (input.payerId !== undefined && input.payerId !== transaction.payerId) {
+    const members = await findMembersByGroupId(groupId);
+    if (!members.some((member) => member.id === input.payerId)) {
+      throw new InvalidPayerError();
+    }
+  }
+
+  const updated = await updateTransaction(transactionId, {
+    description: input.description,
+    amount: input.amount,
+    transactionType: input.transactionType,
+    categoryId: input.categoryId,
+    occurredAt: input.occurredAt,
+    payerId: input.payerId,
+    ...accountFields,
+  });
 
   // Keep "who owes whom" consistent with the edited amount/type: income has
   // no debt, and an equal-split expense's shares must track the new amount.

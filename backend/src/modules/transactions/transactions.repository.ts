@@ -277,6 +277,15 @@ export async function updateTransaction(
     transactionType?: TransactionType;
     categoryId?: string | null;
     occurredAt?: string;
+    payerId?: string;
+    // Moving a transaction to a different account also means its
+    // accountType/accountOwnerId (denormalized from that account at write
+    // time, for the privacy-predicate queries above) must move with it --
+    // the service layer resolves the target account and passes all three
+    // together, never accountId alone.
+    accountId?: string;
+    accountType?: "personal" | "joint";
+    accountOwnerId?: string | null;
   }
 ): Promise<TransactionRow> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
@@ -285,6 +294,10 @@ export async function updateTransaction(
   if (fields.transactionType !== undefined) update.transactionType = fields.transactionType;
   if (fields.categoryId !== undefined) update.categoryId = fields.categoryId;
   if (fields.occurredAt !== undefined) update.occurredAt = fields.occurredAt;
+  if (fields.payerId !== undefined) update.payerId = fields.payerId;
+  if (fields.accountId !== undefined) update.accountId = fields.accountId;
+  if (fields.accountType !== undefined) update.accountType = fields.accountType;
+  if (fields.accountOwnerId !== undefined) update.accountOwnerId = fields.accountOwnerId;
 
   await transactionsCol.doc(transactionId).update(update);
   const doc = await transactionsCol.doc(transactionId).get();

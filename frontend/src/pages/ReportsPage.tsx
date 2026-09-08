@@ -38,6 +38,8 @@ interface TransactionListRow {
   recurringGroupId: string | null;
   splitType: "none" | "equal";
   isSettled: boolean;
+  accountId: string;
+  payerId: string;
 }
 
 export function ReportsPage() {

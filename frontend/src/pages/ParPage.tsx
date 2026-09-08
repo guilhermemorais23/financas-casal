@@ -35,6 +35,7 @@ interface TransactionListRow {
   transactionType: "expense" | "income";
   occurredAt: string;
   payerId: string;
+  accountId: string;
   categoryId: string | null;
   categoryName: string | null;
   categoryEmoji: string | null;
