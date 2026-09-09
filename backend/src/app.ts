@@ -14,7 +14,13 @@ import { quotesRouter } from "./modules/quotes/quotes.routes";
 import { remindersRouter } from "./modules/reminders/reminders.routes";
 import { shoppingRouter } from "./modules/shopping/shopping.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
-import { bootstrapHandler, logLoginEventHandler, meHandler, updateProfileHandler } from "./modules/users/users.controller";
+import {
+  bootstrapHandler,
+  logLoginEventHandler,
+  meHandler,
+  revokeSessionsHandler,
+  updateProfileHandler,
+} from "./modules/users/users.controller";
 import { asyncHandler } from "./middleware/asyncHandler";
 import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
@@ -62,6 +68,7 @@ export function createApp() {
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));
   app.post("/api/me/login-event", requireAuth, asyncHandler(logLoginEventHandler));
   app.patch("/api/me", requireAuth, asyncHandler(updateProfileHandler));
+  app.post("/api/me/revoke-sessions", requireAuth, asyncHandler(revokeSessionsHandler));
   app.use("/api/groups", groupsRouter);
   app.use("/api/dashboard", dashboardRouter);
   app.use("/api/categories", categoriesRouter);

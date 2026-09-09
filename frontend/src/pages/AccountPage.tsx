@@ -49,7 +49,7 @@ interface CategoryRow {
 }
 
 export function AccountPage() {
-  const { user, token, logout, refreshUser } = useAuth();
+  const { user, token, logout, refreshUser, revokeAllSessions } = useAuth();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [group, setGroup] = useState<GroupResponse | null>(null);
@@ -69,6 +69,7 @@ export function AccountPage() {
   const [copied, setCopied] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isRevokingSessions, setIsRevokingSessions] = useState(false);
   const [telegramCode, setTelegramCode] = useState<string | null>(null);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [whatsappCode, setWhatsappCode] = useState<string | null>(null);
@@ -246,6 +247,23 @@ export function AccountPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível desvincular a conta");
       setIsLeaving(false);
+    }
+  }
+
+  async function handleRevokeSessions() {
+    const confirmed = window.confirm(
+      "Sair de todos os dispositivos? Qualquer outra sessão aberta (celular, outro navegador) é desconectada, e você também sai daqui."
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setIsRevokingSessions(true);
+    try {
+      await revokeAllSessions();
+      navigate("/login");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível encerrar as outras sessões");
+      setIsRevokingSessions(false);
     }
   }
 
@@ -563,6 +581,16 @@ export function AccountPage() {
 
         <button type="button" className="btn btn-outline" onClick={logout}>
           Sair da conta
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={handleRevokeSessions}
+          disabled={isRevokingSessions}
+          title="Desconecta qualquer outro celular ou navegador onde sua conta esteja logada"
+        >
+          {isRevokingSessions ? "Encerrando sessões..." : "Sair de todos os dispositivos"}
         </button>
 
         <button type="button" className="btn btn-ghost danger-text" onClick={handleLeaveGroup} disabled={isLeaving}>

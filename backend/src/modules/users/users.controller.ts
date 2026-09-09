@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { isAdminEmail } from "../admin/admin.service";
 import { logAccess, type AccessEvent } from "../../utils/accessLog";
 import { sendWelcomeEmail } from "../../email/mailer";
+import { auth } from "../../db/firestore";
 import { findUserById, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
 
 function isNonEmptyString(value: unknown): value is string {
@@ -130,4 +131,15 @@ export async function updateProfileHandler(req: Request, res: Response) {
 
   const user = await updateUserProfile(req.user!.id, updates);
   res.status(200).json(toPublicUser(user));
+}
+
+// Self-service "sair de todos os dispositivos": invalidates every refresh
+// token Firebase has issued for this user, so every other signed-in device
+// (and the current one, once its ID token naturally expires or is checked
+// with checkRevoked -- see middleware/auth.ts) gets logged out. Firebase
+// itself has no "list active sessions" API to show first; this is the same
+// all-or-nothing revocation every major provider offers here.
+export async function revokeSessionsHandler(req: Request, res: Response) {
+  await auth.revokeRefreshTokens(req.user!.id);
+  res.status(204).send();
 }

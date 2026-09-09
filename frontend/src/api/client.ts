@@ -9,20 +9,43 @@ export class ApiError extends Error {
   }
 }
 
+// Set once by AuthContext on mount -- gives this module a way to force a
+// fresh Firebase ID token without importing AuthContext itself (would be a
+// dependency cycle: AuthContext is the thing that calls apiRequest).
+let refreshToken: (() => Promise<string | null>) | null = null;
+export function setTokenRefresher(fn: (() => Promise<string | null>) | null): void {
+  refreshToken = fn;
+}
+
 export async function apiRequest<T>(
   path: string,
   options: { method?: string; body?: unknown; token?: string | null } = {}
 ): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (options.token) {
-    headers.Authorization = `Bearer ${options.token}`;
-  }
+  const doFetch = async (token?: string | null) => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return fetch(`${API_URL}${path}`, {
+      method: options.method ?? "GET",
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  };
 
-  const response = await fetch(`${API_URL}${path}`, {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  let response = await doFetch(options.token);
+
+  // A 401 on a request that DID carry a token usually means the ID token
+  // was stale, not that the user is actually signed out -- most often
+  // because the background tab was suspended long enough that Firebase's
+  // own auto-refresh timer never got to run. Force one fresh token and
+  // retry exactly once before surfacing anything to the caller.
+  if (response.status === 401 && options.token && refreshToken) {
+    const freshToken = await refreshToken().catch(() => null);
+    if (freshToken && freshToken !== options.token) {
+      response = await doFetch(freshToken);
+    }
+  }
 
   const data = await response.json().catch(() => null);
 
@@ -37,12 +60,17 @@ export async function apiRequest<T>(
 // response as JSON, which a file response isn't. Fetches with the same auth
 // header, then hands the browser a real file via a throwaway <a download>.
 export async function apiDownload(path: string, token: string | null, filename: string): Promise<void> {
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  const fetchWith = (t: string | null) =>
+    fetch(`${API_URL}${path}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+
+  let response = await fetchWith(token);
+  if (response.status === 401 && token && refreshToken) {
+    const freshToken = await refreshToken().catch(() => null);
+    if (freshToken && freshToken !== token) {
+      response = await fetchWith(freshToken);
+    }
   }
 
-  const response = await fetch(`${API_URL}${path}`, { headers });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     throw new ApiError(data?.error ?? "Request failed", response.status);

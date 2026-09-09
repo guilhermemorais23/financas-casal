@@ -12,7 +12,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const decoded = await auth.verifyIdToken(idToken);
+    // checkRevoked (2nd arg) costs one extra Firebase Auth lookup per
+    // request, but without it a token stays "valid" (signature/expiry
+    // check alone) up to its natural ~1h expiry even after
+    // auth.revokeRefreshTokens() -- which defeats the point of a
+    // self-service "sign out everywhere" (see revokeSessionsHandler).
+    const decoded = await auth.verifyIdToken(idToken, true);
     const user: AuthenticatedUser = {
       id: decoded.uid,
       email: decoded.email ?? "",
