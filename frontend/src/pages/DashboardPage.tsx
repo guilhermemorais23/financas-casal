@@ -743,9 +743,19 @@ export function DashboardPage() {
                     const capSeverity = capRawPercent >= 100 ? "over" : capRawPercent >= 80 ? "warning" : "good";
                     return (
                       <div className="category-gauge-item" key={row.categoryId ?? "none"}>
-                        <CircularProgress percent={percent} size={72} strokeWidth={7} color={color}>
-                          <span className="category-gauge-emoji">{row.categoryEmoji ?? "✨"}</span>
-                        </CircularProgress>
+                        {row.categoryId ? (
+                          <CircularProgress percent={percent} size={72} strokeWidth={7} color={color}>
+                            <span className="category-gauge-emoji">{row.categoryEmoji ?? "✨"}</span>
+                          </CircularProgress>
+                        ) : (
+                          // "Sem categoria" isn't a category to track against
+                          // a teto -- a colored progress ring here implied a
+                          // goal that doesn't exist. A plain dashed circle
+                          // reads as "uncategorized", not as a broken gauge.
+                          <div className="category-gauge-uncategorized" style={{ width: 72, height: 72 }}>
+                            <span className="category-gauge-emoji">✨</span>
+                          </div>
+                        )}
                         <span className="category-gauge-name">{row.categoryName ?? "Sem categoria"}</span>
                         <span className="category-gauge-amount">{formatCurrency(value)}</span>
                         {categoryCap ? (

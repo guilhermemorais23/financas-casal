@@ -2417,6 +2417,15 @@ input[type="checkbox"] {
   font-size: 1.4rem;
 }
 
+.category-gauge-uncategorized {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px dashed var(--color-border);
+  color: var(--color-text-muted);
+}
+
 .category-gauge-name {
   font-size: 0.82rem;
   font-weight: 600;
