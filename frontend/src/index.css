@@ -2733,6 +2733,56 @@ input[type="checkbox"] {
   gap: 0.15rem;
 }
 
+.row-actions-menu {
+  position: relative;
+}
+
+.row-actions-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 30;
+  min-width: 200px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.row-actions-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.row-actions-item:hover:not(:disabled) {
+  background: var(--color-bg-soft);
+}
+
+.row-actions-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row-actions-item.danger {
+  color: var(--color-danger-text);
+}
+
 /* Debts ---------------------------------------------------------------------- */
 
 .debt-card {

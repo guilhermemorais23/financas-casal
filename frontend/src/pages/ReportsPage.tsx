@@ -7,6 +7,7 @@ import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { IncomeExpenseDonut } from "../components/IncomeExpenseDonut";
 import { MonthPicker } from "../components/MonthPicker";
+import { RowActionsMenu } from "../components/RowActionsMenu";
 import { SplitStatusPill } from "../components/SplitStatusPill";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
@@ -420,36 +421,35 @@ export function ReportsPage() {
                       <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                         ✎
                       </button>
-                      {tx.recurringGroupId && (
-                        <>
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            title="Editar valor da recorrência"
-                            onClick={() => setEditingRecurringTx(tx)}
-                          >
-                            ✏️🔁
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            title="Cancelar recorrência"
-                            disabled={deletingId === tx.id}
-                            onClick={() => handleCancelRecurring(tx.id)}
-                          >
-                            🔁🚫
-                          </button>
-                        </>
-                      )}
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        title="Excluir"
-                        disabled={deletingId === tx.id}
-                        onClick={() => handleDelete(tx.id)}
-                      >
-                        🗑
-                      </button>
+                      <RowActionsMenu
+                        actions={[
+                          ...(tx.recurringGroupId
+                            ? [
+                                {
+                                  key: "edit-recurring",
+                                  label: "Editar valor da recorrência",
+                                  icon: "✏️🔁",
+                                  onClick: () => setEditingRecurringTx(tx),
+                                },
+                                {
+                                  key: "cancel-recurring",
+                                  label: "Cancelar recorrência",
+                                  icon: "🔁🚫",
+                                  disabled: deletingId === tx.id,
+                                  onClick: () => handleCancelRecurring(tx.id),
+                                },
+                              ]
+                            : []),
+                          {
+                            key: "delete",
+                            label: "Excluir",
+                            icon: "🗑",
+                            disabled: deletingId === tx.id,
+                            danger: true,
+                            onClick: () => handleDelete(tx.id),
+                          },
+                        ]}
+                      />
                     </div>
                   </li>
                 ))}
