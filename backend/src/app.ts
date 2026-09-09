@@ -11,6 +11,7 @@ import { debtsRouter } from "./modules/debts/debts.routes";
 import { goalsRouter } from "./modules/goals/goals.routes";
 import { groupsRouter } from "./modules/groups/groups.routes";
 import { quotesRouter } from "./modules/quotes/quotes.routes";
+import { recurringBillsRouter } from "./modules/recurringBills/recurringBills.routes";
 import { remindersRouter } from "./modules/reminders/reminders.routes";
 import { shoppingRouter } from "./modules/shopping/shopping.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
@@ -82,6 +83,7 @@ export function createApp() {
   app.use("/api/quotes", quotesRouter);
   app.use("/api/shopping", shoppingRouter);
   app.use("/api/reminders", remindersRouter);
+  app.use("/api/recurring-bills", recurringBillsRouter);
 
   app.use(errorHandler);
 

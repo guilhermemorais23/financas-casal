@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { to: "/par", label: "Par", icon: "💞" },
   { to: "/transactions/new", label: "Nova despesa", icon: "➕" },
   { to: "/debts", label: "Dívidas", icon: "💳" },
+  { to: "/recurring-bills", label: "Contas fixas", icon: "🔁" },
   { to: "/cards", label: "Cartão conjunto", icon: "🧾" },
   { to: "/shopping", label: "Lista de compras", icon: "🛒" },
   { to: "/goals", label: "Metas", icon: "🎯" },

@@ -2789,6 +2789,10 @@ input[type="checkbox"] {
   max-width: none;
 }
 
+.paused-bill {
+  opacity: 0.6;
+}
+
 .installment-grid {
   display: flex;
   flex-wrap: wrap;
