@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { adminRouter } from "./modules/admin/admin.routes";
+import { alertsRouter } from "./modules/alerts/alerts.routes";
 import { assistantRouter } from "./modules/assistant/assistant.routes";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { cardsRouter } from "./modules/cards/cards.routes";
@@ -84,6 +85,7 @@ export function createApp() {
   app.use("/api/shopping", shoppingRouter);
   app.use("/api/reminders", remindersRouter);
   app.use("/api/recurring-bills", recurringBillsRouter);
+  app.use("/api/alerts", alertsRouter);
 
   app.use(errorHandler);
 

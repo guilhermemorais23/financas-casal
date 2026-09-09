@@ -1782,6 +1782,43 @@ input:focus {
   color: var(--color-danger-text);
 }
 
+/* Alertas (Painel) -------------------------------------------------------- */
+
+.alerts-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.alert-item {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border-left: 3px solid transparent;
+}
+
+.alert-item.severity-critical {
+  background: var(--color-danger-bg);
+  border-left-color: var(--status-critical);
+  color: var(--color-danger-text);
+}
+
+.alert-item.severity-warning {
+  background: color-mix(in srgb, var(--status-warning) 15%, var(--color-bg));
+  border-left-color: var(--status-warning);
+  color: var(--color-text);
+}
+
+.alert-item.severity-info {
+  background: color-mix(in srgb, var(--olive-100) 55%, var(--color-bg));
+  border-left-color: var(--olive-500);
+  color: var(--color-text);
+}
+
 /* Month-over-month delta on stat boxes ---------------------------------------- */
 
 .stat-delta {
