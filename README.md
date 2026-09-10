@@ -62,7 +62,11 @@ npm --prefix backend run build     # tsc — precisa compilar sem erros
 npm --prefix frontend run build    # tsc -b && vite build
 ```
 
-Não existe suíte de testes automatizados ainda — a verificação é manual, seguindo o roteiro acima (registro, grupo, transação conjunta e pessoal, metas, orçamento, dívidas, relatórios) contra o emulador.
+```
+npm run test:backend               # suíte automatizada (backend/src/**/*.test.ts), sobe e desliga o emulador sozinha
+```
+
+Além disso, siga o roteiro manual acima (registro, grupo, transação conjunta e pessoal, metas, orçamento, dívidas, relatórios) contra o emulador pra pegar o que os testes não cobrem. O CI (`.github/workflows/ci.yml`) roda os três — build do backend, testes e build do frontend — em todo push e pull request.
 
 ## Fluxo de trabalho (branches, commits, deploy)
 
@@ -81,14 +85,20 @@ frontend/src/auth/           # AuthContext (Firebase Auth)
 ## O que já existe
 
 - Auth via Firebase (Google + e-mail/senha), perfil criado automaticamente no primeiro login (`POST /api/me/bootstrap`).
-- Grupos sem limite de pessoas: criar, convidar por link, aceitar convite, sair do grupo (`/api/groups`).
-- Transações: criar (split igualitário entre quantos membros o grupo tiver), listar (filtro por mês/conta), editar, excluir, saldo "quem deve quem" par a par, resumo mensal por categoria/pagador.
+- Grupos sem limite de pessoas: criar, convidar por link, aceitar convite, sair do grupo, remover outro integrante (`/api/groups`).
+- Transações: criar (split igualitário entre quantos membros o grupo tiver), listar (filtro por mês/conta/texto), editar (inclusive conta e pagador), excluir, cancelar ou editar o valor de uma série recorrente (só as ocorrências futuras), saldo "quem deve quem" par a par, resumo mensal e anual por categoria/pagador, exportar CSV (do mês ou tudo).
+- Categorias: as padrão valem pra qualquer grupo; as criadas pelo grupo podem ser renomeadas, trocar de emoji ou ser excluídas.
 - Metas (`/api/goals`): criar, listar, contribuir, remover.
 - Orçamento (`/api/budgets`): teto mensal (geral ou por categoria) com gasto já calculado.
-- Dívidas/parcelamentos (`/api/debts`): criar, marcar parcela como paga.
-- Modelo de privacidade: contas/transações/dívidas pessoais só visíveis ao dono; itens da conta conjunta visíveis a qualquer membro do grupo.
-- Frontend completo: Painel (individual), Par (conjunto, com orçamento e saldo por pessoa), Nova transação, Metas, Relatórios (com gráficos), Conta (membros, contas, convite, desvincular).
+- Dívidas/parcelamentos (`/api/debts`): criar (com dia de vencimento opcional), marcar parcela como paga.
+- Cartões (`/api/cards`): compras, fatura atual, lembrete de vencimento.
+- Lembretes por e-mail (`/api/reminders/run`, chamado por um cron externo diário): avisa 3 dias antes do vencimento de fatura de cartão ou parcela de dívida, com dedupe pra nunca mandar duas vezes.
+- Modelo de privacidade: contas/transações/dívidas pessoais só visíveis ao dono; itens da conta conjunta visíveis a qualquer membro do grupo — essa é a proteção de dados privados do app (não existe nem está planejado um bloqueio por PIN/biometria no nível de tela; a privacidade já é por dado, não por tela).
+- Frontend completo: Painel (individual, com widgets e cache instantâneo entre meses já visitados), Par (conjunto, com orçamento e saldo por pessoa), Nova transação, Metas, Cartões, Dívidas, Lista de compras, Investimentos, Relatórios (gráficos, busca, visão anual, exportar), Conta (membros, contas, categorias, convite, desvincular). PWA com service worker (funciona offline pro shell, dados sempre vêm da rede).
+- Suíte de testes automatizados (vitest, contra o emulador) e CI no GitHub Actions rodando type-check + testes + build em todo push/PR.
 
 ## O que falta (próximas etapas)
 
-Contas recorrentes (aluguel/assinaturas), alertas inteligentes, refresh token / rotação de sessão mais robusta, testes automatizados, CI rodando `build` em cada PR.
+- **Contas recorrentes de verdade (aluguel/assinaturas)**: hoje "recorrência" é só criar N ocorrências futuras de uma vez na hora do lançamento — não existe um cadastro de "assinatura ativa" que gera o lançamento sozinha mês a mês, indefinidamente, até você cancelar.
+- **Alertas inteligentes**: hoje só existe o lembrete por e-mail de vencimento (cartão/dívida). Não existe nada que avise sobre padrão de gasto (ex.: "no ritmo atual você estoura o orçamento de Mercado em 5 dias" ou "gastou 40% a mais em Lazer que a média dos últimos meses").
+- **Refresh token / rotação de sessão mais robusta**: o SDK do Firebase já renova o token sozinho em segundo plano, mas isso pausa em aba inativa (token pode ficar velho até você voltar) e o backend não verifica revogação (`checkRevoked`) nem existe um "sair de todos os dispositivos".

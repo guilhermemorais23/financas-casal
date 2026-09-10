@@ -11,6 +11,7 @@ import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { MonthPicker } from "../components/MonthPicker";
+import { RowActionsMenu } from "../components/RowActionsMenu";
 import { SplitStatusPill } from "../components/SplitStatusPill";
 import { TrendSparkline } from "../components/TrendSparkline";
 import { AppLayout } from "../layouts/AppLayout";
@@ -154,6 +155,13 @@ interface DashboardResponse {
   goalHighlight: GoalHighlight | null;
   nextInvoice: NextInvoice | null;
   trend6m: MonthlyTrendPoint[];
+  alerts: AlertRow[];
+}
+
+interface AlertRow {
+  id: string;
+  severity: "info" | "warning" | "critical";
+  message: string;
 }
 
 function daysUntil(dateStr: string): number {
@@ -218,6 +226,7 @@ export function DashboardPage() {
   );
   const [nextInvoice, setNextInvoice] = useState<NextInvoice | null>(() => readCache(staticKey("nextInvoice")));
   const [trend6m, setTrend6m] = useState<MonthlyTrendPoint[]>(() => readCache(monthKey("trend6m")) ?? []);
+  const [alerts, setAlerts] = useState<AlertRow[]>(() => readCache(monthKey("alerts")) ?? []);
   const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
@@ -250,6 +259,7 @@ export function DashboardPage() {
       setGoalHighlight(data.goalHighlight);
       setNextInvoice(data.nextInvoice);
       setTrend6m(data.trend6m);
+      setAlerts(data.alerts);
     }
 
     writeCache(sKey("group"), data.group);
@@ -266,6 +276,7 @@ export function DashboardPage() {
     writeCache(mKey("categoryBudgets"), data.categoryBudgets);
     writeCache(mKey("dailyTrend"), data.dailyTrend);
     writeCache(mKey("trend6m"), data.trend6m);
+    writeCache(mKey("alerts"), data.alerts);
     // The whole response, one key -- lets load() below check "do we already
     // have this month?" with a single readCache instead of guessing from
     // one field. This is what prefetchMonth's warm-up actually pays off:
@@ -562,6 +573,18 @@ export function DashboardPage() {
 
         <div className="dashboard-grid">
           <div className="dashboard-col">
+            {alerts.length > 0 && (
+              <div className="card">
+                <p className="card-title">Alertas</p>
+                <ul className="alerts-list">
+                  {alerts.map((alert) => (
+                    <li key={alert.id} className={`alert-item severity-${alert.severity}`}>
+                      {alert.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className={`card budget-card${cap ? "" : " is-empty"}`}>
               <span className="stat-card-circle" />
               <span className="stat-card-circle stat-card-circle-2" />
@@ -720,9 +743,19 @@ export function DashboardPage() {
                     const capSeverity = capRawPercent >= 100 ? "over" : capRawPercent >= 80 ? "warning" : "good";
                     return (
                       <div className="category-gauge-item" key={row.categoryId ?? "none"}>
-                        <CircularProgress percent={percent} size={72} strokeWidth={7} color={color}>
-                          <span className="category-gauge-emoji">{row.categoryEmoji ?? "✨"}</span>
-                        </CircularProgress>
+                        {row.categoryId ? (
+                          <CircularProgress percent={percent} size={72} strokeWidth={7} color={color}>
+                            <span className="category-gauge-emoji">{row.categoryEmoji ?? "✨"}</span>
+                          </CircularProgress>
+                        ) : (
+                          // "Sem categoria" isn't a category to track against
+                          // a teto -- a colored progress ring here implied a
+                          // goal that doesn't exist. A plain dashed circle
+                          // reads as "uncategorized", not as a broken gauge.
+                          <div className="category-gauge-uncategorized" style={{ width: 72, height: 72 }}>
+                            <span className="category-gauge-emoji">✨</span>
+                          </div>
+                        )}
                         <span className="category-gauge-name">{row.categoryName ?? "Sem categoria"}</span>
                         <span className="category-gauge-amount">{formatCurrency(value)}</span>
                         {categoryCap ? (
@@ -857,36 +890,35 @@ export function DashboardPage() {
                             >
                               ✎
                             </button>
-                            {tx.recurringGroupId && (
-                              <>
-                                <button
-                                  type="button"
-                                  className="btn-icon"
-                                  title="Editar valor da recorrência"
-                                  onClick={() => setEditingRecurringTx(tx)}
-                                >
-                                  ✏️🔁
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn-icon"
-                                  title="Cancelar recorrência"
-                                  disabled={deletingId === tx.id}
-                                  onClick={() => handleCancelRecurring(tx.id)}
-                                >
-                                  🔁🚫
-                                </button>
-                              </>
-                            )}
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              title="Excluir"
-                              disabled={deletingId === tx.id}
-                              onClick={() => handleDelete(tx.id)}
-                            >
-                              🗑
-                            </button>
+                            <RowActionsMenu
+                              actions={[
+                                ...(tx.recurringGroupId
+                                  ? [
+                                      {
+                                        key: "edit-recurring",
+                                        label: "Editar valor da recorrência",
+                                        icon: "✏️🔁",
+                                        onClick: () => setEditingRecurringTx(tx),
+                                      },
+                                      {
+                                        key: "cancel-recurring",
+                                        label: "Cancelar recorrência",
+                                        icon: "🔁🚫",
+                                        disabled: deletingId === tx.id,
+                                        onClick: () => handleCancelRecurring(tx.id),
+                                      },
+                                    ]
+                                  : []),
+                                {
+                                  key: "delete",
+                                  label: "Excluir",
+                                  icon: "🗑",
+                                  disabled: deletingId === tx.id,
+                                  danger: true,
+                                  onClick: () => handleDelete(tx.id),
+                                },
+                              ]}
+                            />
                           </div>
                         </li>
                       ))}

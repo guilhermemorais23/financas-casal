@@ -32,6 +32,7 @@ const DashboardPage = namedLazy(() => import("./pages/DashboardPage"), "Dashboar
 const ParPage = namedLazy(() => import("./pages/ParPage"), "ParPage");
 const NewTransactionPage = namedLazy(() => import("./pages/NewTransactionPage"), "NewTransactionPage");
 const DebtsPage = namedLazy(() => import("./pages/DebtsPage"), "DebtsPage");
+const RecurringBillsPage = namedLazy(() => import("./pages/RecurringBillsPage"), "RecurringBillsPage");
 const CardsPage = namedLazy(() => import("./pages/CardsPage"), "CardsPage");
 const GoalsPage = namedLazy(() => import("./pages/GoalsPage"), "GoalsPage");
 const ReportsPage = namedLazy(() => import("./pages/ReportsPage"), "ReportsPage");
@@ -88,6 +89,14 @@ function App() {
               element={
                 <ProtectedRoute requireGroup>
                   <DebtsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/recurring-bills"
+              element={
+                <ProtectedRoute requireGroup>
+                  <RecurringBillsPage />
                 </ProtectedRoute>
               }
             />

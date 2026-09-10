@@ -1,3 +1,4 @@
+import { getAlertsForUser, type AlertItem } from "../alerts/alerts.service";
 import { getGroupForUser } from "../groups/groups.service";
 import { listDebts } from "../debts/debts.service";
 import { getCategoryBudgets, getCurrentBudget } from "../budgets/budgets.service";
@@ -78,8 +79,13 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   // sibling service function (and addMonths) actually expects.
   const { periodMonth } = parseMonthRange(monthParam);
   const month = periodMonth.slice(0, 7);
+  // Alerts (budget pace, category spikes, upcoming due dates) are always
+  // about *today*, not whatever month the Painel happens to be showing --
+  // computing them while browsing March makes no sense, so they're only
+  // fetched at all when `month` is the real current month.
+  const isCurrentMonth = month === new Date().toISOString().slice(0, 7);
 
-  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m] =
+  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts] =
     await Promise.all([
       listTransactions(userId, 8, month),
       listDebts(userId),
@@ -105,6 +111,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
       // hero card below no longer needs its own two 100-row fetches just to
       // sum two numbers each.
       getMonthlyTrendForUser(userId, month),
+      isCurrentMonth ? getAlertsForUser(userId) : Promise.resolve<AlertItem[]>([]),
     ]);
 
   // trend6m's window always includes both of these (monthsBack defaults to
@@ -128,5 +135,6 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     goalHighlight: pickGoalHighlight(goals),
     nextInvoice: pickNextInvoice(cards),
     trend6m,
+    alerts,
   };
 }

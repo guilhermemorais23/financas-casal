@@ -9,7 +9,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiRequest } from "../api/client";
+import { apiRequest, setTokenRefresher } from "../api/client";
 import { firebaseAuth } from "../firebase";
 
 export interface AuthUser {
@@ -35,6 +35,7 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  revokeAllSessions: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -92,6 +93,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
+  // Gives api/client.ts a way to force a fresh ID token (used to retry a
+  // request that came back 401 because the cached token had gone stale --
+  // see apiRequest). Registered once; setToken is a stable setState
+  // reference, so this never needs to re-run.
+  useEffect(() => {
+    setTokenRefresher(async () => {
+      const current = firebaseAuth.currentUser;
+      if (!current) return null;
+      const fresh = await current.getIdToken(true);
+      setToken(fresh);
+      return fresh;
+    });
+    return () => setTokenRefresher(null);
+  }, []);
+
+  // Firebase's own background refresh runs on a timer that browsers throttle
+  // (or pause outright) while the tab is hidden -- come back to a tab left
+  // open for a while and the cached token can already be past its ~1h
+  // expiry. Force a refresh right when the tab regains focus, instead of
+  // waiting for the first API call to hit a 401 and retry reactively.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible") {
+        firebaseAuth.currentUser?.getIdToken(true).then(setToken).catch(() => {});
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
   const refreshUser = useCallback(async () => {
     if (!token) return;
     const profile = await fetchProfile(token);
@@ -140,9 +171,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendPasswordResetEmail(firebaseAuth, email);
   }, []);
 
+  // Invalidates every refresh token Firebase has issued for this account
+  // (backend: auth.revokeRefreshTokens) -- every other signed-in device
+  // loses its session the next time it's checked. Signs this device out
+  // locally too, right away, instead of waiting for its own token to be
+  // rejected on the next request.
+  const revokeAllSessions = useCallback(async () => {
+    if (!token) return;
+    await apiRequest("/me/revoke-sessions", { method: "POST", token });
+    await signOut(firebaseAuth);
+  }, [token]);
+
   const value = useMemo(
-    () => ({ user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser, resetPassword }),
-    [user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser, resetPassword]
+    () => ({
+      user,
+      token,
+      isLoading,
+      login,
+      loginWithGoogle,
+      register,
+      logout,
+      refreshUser,
+      resetPassword,
+      revokeAllSessions,
+    }),
+    [user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser, resetPassword, revokeAllSessions]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
