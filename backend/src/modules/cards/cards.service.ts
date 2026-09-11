@@ -6,13 +6,14 @@ import { addMonths, dateForDayInMonth } from "../../utils/month";
 import {
   deleteCard,
   deletePurchase,
+  findAllPurchasesByCardId,
   findCardById,
   findCardsVisibleTo,
   findPurchaseById,
   findPurchasesByCardAndStatement,
   findStatement,
   insertCard,
-  insertPurchase,
+  insertPurchaseSeries,
   setStatementPaid,
   updateCard,
   type CardRow,
@@ -25,14 +26,24 @@ export class ForbiddenError extends Error {}
 export class InvalidBuyerError extends Error {}
 export class InvalidCategoryError extends Error {}
 export class StatementAlreadyPaidError extends Error {}
+export class InvalidLimitError extends Error {}
+export class InvalidInstallmentsError extends Error {}
 
 export type CardScope = "personal" | "joint";
+
+// Whatever the purchase form offers -- 1x through 12x, but only a curated
+// set of "round" counts (matches how a card statement itself would phrase
+// it), not every integer in between. Enforced here too, not just as a
+// frontend <select> affordance, so the API contract actually says what's
+// allowed.
+export const ALLOWED_INSTALLMENT_COUNTS = [1, 2, 3, 4, 6, 12];
 
 export interface CreateCardInput {
   name: string;
   closingDay: number;
   dueDay: number;
   scope: CardScope;
+  limit: number | null;
 }
 
 export interface CardStatementSummary {
@@ -46,6 +57,28 @@ export interface CardStatementSummary {
 export interface CardWithSummary extends CardRow {
   scope: CardScope;
   currentStatement: CardStatementSummary;
+  // Only computed when the card actually has a limit -- a card without one
+  // does the extra findAllPurchasesByCardId + per-month statement reads for
+  // nothing, and the frontend has nothing to draw a bar against anyway.
+  limitUsed: string | null;
+}
+
+// Sum of every installment (any statement month, including ones months in
+// the future) whose statement hasn't been marked paid yet -- a parcelado
+// purchase locks its FULL amount against the limit the moment it's made,
+// same as a real card, and only frees each installment's share back up as
+// that specific month's fatura gets paid off.
+async function computeLimitUsed(cardId: string): Promise<number> {
+  const purchases = await findAllPurchasesByCardId(cardId);
+  if (purchases.length === 0) return 0;
+
+  const months = [...new Set(purchases.map((purchase) => purchase.statementMonth))];
+  const statements = await Promise.all(months.map((month) => findStatement(cardId, month)));
+  const paidMonths = new Set(months.filter((_, index) => statements[index]?.isPaid));
+
+  return purchases
+    .filter((purchase) => !paidMonths.has(purchase.statementMonth))
+    .reduce((sum, purchase) => sum + Math.round(Number(purchase.amount) * 100), 0);
 }
 
 // Purchases on days 1..closingDay belong to the statement labeled with that
@@ -109,6 +142,10 @@ export async function createCard(userId: string, input: CreateCardInput) {
   const groupId = await requireGroupId(userId);
   const ownerUserId = input.scope === "joint" ? null : userId;
 
+  if (input.limit !== null && input.limit <= 0) {
+    throw new InvalidLimitError();
+  }
+
   return insertCard({
     groupId,
     ownerUserId,
@@ -116,6 +153,7 @@ export async function createCard(userId: string, input: CreateCardInput) {
     name: input.name,
     closingDay: input.closingDay,
     dueDay: input.dueDay,
+    limit: input.limit,
   });
 }
 
@@ -126,14 +164,16 @@ export async function listCards(userId: string): Promise<CardWithSummary[]> {
   return Promise.all(
     cards.map(async (card) => {
       const month = currentStatementMonth(card.closingDay);
-      const [purchases, statement] = await Promise.all([
+      const [purchases, statement, limitUsedCents] = await Promise.all([
         findPurchasesByCardAndStatement(card.id, month),
         findStatement(card.id, month),
+        card.limit !== null ? computeLimitUsed(card.id) : Promise.resolve(null),
       ]);
       return {
         ...card,
         scope: card.ownerUserId ? "personal" : ("joint" as CardScope),
         currentStatement: summarizePurchases(card, month, purchases, statement?.isPaid ?? false),
+        limitUsed: limitUsedCents !== null ? (limitUsedCents / 100).toFixed(2) : null,
       };
     })
   );
@@ -157,10 +197,18 @@ export interface AddPurchaseInput {
   categoryId: string | null;
   buyerId: string;
   purchaseDate: string;
+  // 1 = à vista (the default, and the only option before parcelamento
+  // existed) -- anything else generates that many installments, one per
+  // consecutive statement month starting from this purchase's own.
+  installments: number;
 }
 
 export async function addPurchase(userId: string, cardId: string, input: AddPurchaseInput) {
   const { groupId, card } = await requireManageableCard(userId, cardId);
+
+  if (!ALLOWED_INSTALLMENT_COUNTS.includes(input.installments)) {
+    throw new InvalidInstallmentsError();
+  }
 
   const members = await findMembersByGroupId(groupId);
   if (!members.some((member) => member.id === input.buyerId)) {
@@ -170,20 +218,28 @@ export async function addPurchase(userId: string, cardId: string, input: AddPurc
     throw new InvalidCategoryError();
   }
 
-  const statementMonth = statementMonthFor(input.purchaseDate, card.closingDay);
-  const statement = await findStatement(cardId, statementMonth);
+  const firstStatementMonth = statementMonthFor(input.purchaseDate, card.closingDay);
+  const statement = await findStatement(cardId, firstStatementMonth);
   if (statement?.isPaid) {
     throw new StatementAlreadyPaidError();
   }
 
-  return insertPurchase(cardId, {
-    description: input.description,
-    amount: input.amount,
-    categoryId: input.categoryId,
-    buyerId: input.buyerId,
-    purchaseDate: input.purchaseDate,
-    statementMonth,
-  });
+  const statementMonths = Array.from({ length: input.installments }, (_, index) =>
+    addMonths(firstStatementMonth, index)
+  );
+
+  return insertPurchaseSeries(
+    cardId,
+    {
+      description: input.description,
+      amount: input.amount,
+      categoryId: input.categoryId,
+      buyerId: input.buyerId,
+      purchaseDate: input.purchaseDate,
+      count: input.installments,
+    },
+    statementMonths
+  );
 }
 
 export async function removePurchase(userId: string, cardId: string, purchaseId: string) {
@@ -286,9 +342,12 @@ export async function setStatementPaidForUser(
 export async function updateCardForUser(
   userId: string,
   cardId: string,
-  input: { name: string; closingDay: number; dueDay: number }
+  input: { name: string; closingDay: number; dueDay: number; limit?: number | null }
 ) {
   await requireManageableCard(userId, cardId);
+  if (input.limit !== undefined && input.limit !== null && input.limit <= 0) {
+    throw new InvalidLimitError();
+  }
   return updateCard(cardId, input);
 }
 

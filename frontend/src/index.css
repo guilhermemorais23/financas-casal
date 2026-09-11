@@ -2036,7 +2036,8 @@ input:focus {
 }
 
 .private-badge,
-.recurring-badge {
+.recurring-badge,
+.installment-badge {
   font-size: 0.65rem;
   padding: 0.1rem 0.4rem;
 }
