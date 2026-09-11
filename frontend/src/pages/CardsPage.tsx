@@ -37,6 +37,8 @@ interface CardRow {
   closingDay: number;
   dueDay: number;
   currentStatement: StatementSummary;
+  limit: string | null;
+  limitUsed: string | null;
 }
 
 interface PurchaseRow {
@@ -46,7 +48,11 @@ interface PurchaseRow {
   categoryId: string | null;
   buyerId: string;
   purchaseDate: string;
+  installmentNumber: number;
+  installmentsCount: number;
 }
+
+const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 6, 12];
 
 interface StatementDetail extends StatementSummary {
   purchases: PurchaseRow[];
@@ -64,6 +70,7 @@ export function CardsPage() {
   const [name, setName] = useState("");
   const [closingDay, setClosingDay] = useState("28");
   const [dueDay, setDueDay] = useState("5");
+  const [limit, setLimit] = useState("");
   const [scope, setScope] = useState<"personal" | "joint">("joint");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -77,6 +84,7 @@ export function CardsPage() {
   const [purchaseCategoryId, setPurchaseCategoryId] = useState("");
   const [purchaseBuyerId, setPurchaseBuyerId] = useState(user?.id ?? "");
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [purchaseInstallments, setPurchaseInstallments] = useState("1");
   const [isAddingPurchase, setIsAddingPurchase] = useState(false);
 
   async function loadCards() {
@@ -103,8 +111,13 @@ export function CardsPage() {
     setError(null);
     const parsedClosing = Number(closingDay);
     const parsedDue = Number(dueDay);
+    const parsedLimit = limit.trim() ? Number(limit.replace(",", ".")) : null;
     if (!name.trim() || !(parsedClosing >= 1 && parsedClosing <= 31) || !(parsedDue >= 1 && parsedDue <= 31)) {
       setError("Informe nome, dia de fechamento e dia de vencimento (1 a 31).");
+      return;
+    }
+    if (parsedLimit !== null && !(parsedLimit > 0)) {
+      setError("O limite, se preenchido, precisa ser maior que zero.");
       return;
     }
 
@@ -113,11 +126,12 @@ export function CardsPage() {
       await apiRequest("/cards", {
         method: "POST",
         token,
-        body: { name: name.trim(), closingDay: parsedClosing, dueDay: parsedDue, scope },
+        body: { name: name.trim(), closingDay: parsedClosing, dueDay: parsedDue, scope, limit: parsedLimit },
       });
       setName("");
       setClosingDay("28");
       setDueDay("5");
+      setLimit("");
       await loadCards();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar o cartão");
@@ -190,11 +204,13 @@ export function CardsPage() {
           categoryId: purchaseCategoryId || null,
           buyerId: purchaseBuyerId,
           purchaseDate,
+          installments: Number(purchaseInstallments),
         },
       });
       setPurchaseDescription("");
       setPurchaseAmount("");
       setPurchaseCategoryId("");
+      setPurchaseInstallments("1");
       setIsAddingPurchase(false);
       await loadStatement(cardId, statementMonth);
       await loadCards();
@@ -246,6 +262,11 @@ export function CardsPage() {
   function renderCard(card: CardRow) {
     const isExpanded = expandedCardId === card.id;
     const s = card.currentStatement;
+    const limitCents = card.limit !== null ? Number(card.limit) : null;
+    const limitUsedCents = card.limitUsed !== null ? Number(card.limitUsed) : null;
+    const limitRawPercent = limitCents && limitUsedCents !== null ? (limitUsedCents / limitCents) * 100 : 0;
+    const limitPercent = Math.min(100, limitRawPercent);
+    const limitTone = limitRawPercent >= 100 ? "over" : limitRawPercent >= 80 ? "warning" : "";
     return (
       <div key={card.id} className="card debt-card">
         <div className="section-header">
@@ -268,6 +289,20 @@ export function CardsPage() {
             {s.isPaid ? "✓ paga" : `vence ${monthYearLabel(s.month)}`}
           </span>
         </div>
+
+        {limitCents !== null && limitUsedCents !== null && (
+          <>
+            <div className="goal-amounts" style={{ marginTop: "0.6rem" }}>
+              <span className="debt-mini-value">Limite {formatCurrency(limitCents)}</span>
+              <span className="debt-mini-remaining">
+                disponível {formatCurrency(Math.max(0, limitCents - limitUsedCents))}
+              </span>
+            </div>
+            <div className="progress-track thin">
+              <div className={`progress-fill ${limitTone}`} style={{ width: `${limitPercent}%` }} />
+            </div>
+          </>
+        )}
 
         {s.byPerson.length > 0 && (
           <div className="stat-row wrap" style={{ marginTop: "0.75rem" }}>
@@ -328,7 +363,14 @@ export function CardsPage() {
                       <li key={purchase.id} className="transaction-row">
                         <span className="transaction-icon">{category?.emoji ?? "🧾"}</span>
                         <div className="transaction-info">
-                          <span className="transaction-desc">{purchase.description}</span>
+                          <span className="transaction-desc">
+                            {purchase.description}
+                            {purchase.installmentsCount > 1 && (
+                              <span className="badge installment-badge">
+                                {purchase.installmentNumber}/{purchase.installmentsCount}
+                              </span>
+                            )}
+                          </span>
                           <span className="transaction-meta">
                             {memberName(purchase.buyerId)} · {category?.name ?? "Sem categoria"}
                           </span>
@@ -421,6 +463,25 @@ export function CardsPage() {
                             required
                           />
                         </div>
+                        <div className="field">
+                          <label htmlFor={`purchase-installments-${card.id}`}>Parcelas</label>
+                          <select
+                            id={`purchase-installments-${card.id}`}
+                            value={purchaseInstallments}
+                            onChange={(e) => setPurchaseInstallments(e.target.value)}
+                          >
+                            {INSTALLMENT_OPTIONS.map((count) => (
+                              <option key={count} value={count}>
+                                {count === 1 ? "1x (à vista)" : `${count}x`}
+                              </option>
+                            ))}
+                          </select>
+                          {card.limit !== null && Number(purchaseInstallments) > 1 && (
+                            <p className="field-hint">
+                              O valor total trava no limite agora -- só libera conforme cada fatura mensal é paga.
+                            </p>
+                          )}
+                        </div>
                         <div style={{ display: "flex", gap: "0.5rem" }}>
                           <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
                             {isSubmitting ? "Salvando..." : "Lançar compra"}
@@ -511,6 +572,18 @@ export function CardsPage() {
                 value={dueDay}
                 onChange={(e) => setDueDay(e.target.value)}
               />
+            </div>
+
+            <div className="field">
+              <label htmlFor="card-limit">Limite (opcional)</label>
+              <input
+                id="card-limit"
+                inputMode="decimal"
+                placeholder="0,00"
+                value={limit}
+                onChange={(e) => setLimit(e.target.value)}
+              />
+              <p className="field-hint">Se preencher, a gente acompanha quanto do limite já está comprometido.</p>
             </div>
 
             {error && (
