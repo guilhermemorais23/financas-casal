@@ -5,13 +5,15 @@ import { db } from "../../db/firestore";
 import {
   InvalidAccountError,
   createTransaction,
+  deleteTransactionForUser,
   getBalance,
+  getMonthlySummaryForUser,
   getYearlySummaryForUser,
   setSplitSettledForUser,
   updateRecurringForUser,
   updateTransactionForUser,
 } from "./transactions.service";
-import { findTransactionById } from "./transactions.repository";
+import { findTransactionById, getAccountBalances } from "./transactions.repository";
 
 describe("createTransaction: equal split", () => {
   it("creates one split doc per member, dividing evenly", async () => {
@@ -230,5 +232,41 @@ describe("paymentMethod", () => {
       splitType: "none",
     });
     expect(tx.paymentMethod).toBeNull();
+  });
+});
+
+describe("cached reads stay correct after writes", () => {
+  it("account balance and month summary reflect a new transaction, an edit and a delete", async () => {
+    const { userAId, groupId, personalAccountId } = await createTestGroup();
+    const month = todayISO().slice(0, 7);
+    const balanceOf = async () =>
+      ((await getAccountBalances(groupId)).find((row) => row.accountId === personalAccountId)?.balanceCents ?? 0) / 100;
+    const spentOf = async () => Number((await getMonthlySummaryForUser(userAId, month, "visible")).total);
+
+    // Warm both caches while the group is still empty.
+    expect(await balanceOf()).toBe(0);
+    expect(await spentOf()).toBe(0);
+
+    const tx = await createTransaction(userAId, {
+      accountId: personalAccountId,
+      categoryId: null,
+      payerId: userAId,
+      description: "cache check",
+      amount: 100,
+      transactionType: "expense",
+      occurredAt: todayISO(),
+      isPrivate: false,
+      splitType: "none",
+    });
+    expect(await balanceOf()).toBe(-100);
+    expect(await spentOf()).toBe(100);
+
+    await updateTransactionForUser(userAId, tx.id, { amount: 40 });
+    expect(await balanceOf()).toBe(-40);
+    expect(await spentOf()).toBe(40);
+
+    await deleteTransactionForUser(userAId, tx.id);
+    expect(await balanceOf()).toBe(0);
+    expect(await spentOf()).toBe(0);
   });
 });

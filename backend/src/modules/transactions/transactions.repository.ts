@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
 import { findVisibleCategories } from "../categories/categories.repository";
 import { fromCents, toCents } from "../../utils/money";
+import { invalidateTransactionReads, memoizeReads } from "../../utils/readCache";
 
 export type SplitType = "none" | "equal" | "proportional" | "by_category" | "custom";
 export type TransactionType = "expense" | "income";
@@ -151,6 +152,7 @@ export async function insertTransactionSeries(
     });
   });
   await batch.commit();
+  invalidateTransactionReads();
 
   const docs = await Promise.all(refs.map((ref) => ref.get()));
   return docs.map(toTransactionRow);
@@ -163,6 +165,7 @@ export async function setTransactionSettled(
 ): Promise<TransactionRow> {
   const ref = transactionsCol.doc(transactionId);
   await ref.update({ isSettled, settlementTransactionId, updatedAt: FieldValue.serverTimestamp() });
+  invalidateTransactionReads();
   const doc = await ref.get();
   return toTransactionRow(doc);
 }
@@ -182,6 +185,7 @@ export async function deleteTransactionsBatch(transactionIds: string[]): Promise
   const batch = db.batch();
   transactionIds.forEach((id) => batch.delete(transactionsCol.doc(id)));
   await batch.commit();
+  invalidateTransactionReads();
 }
 
 // Doc ID = userId within the subcollection -- matches SQL's
@@ -204,6 +208,7 @@ export async function insertSplits(
     });
   }
   await batch.commit();
+  invalidateTransactionReads();
 }
 
 export async function deleteSplitsForTransaction(transactionId: string): Promise<void> {
@@ -212,6 +217,7 @@ export async function deleteSplitsForTransaction(transactionId: string): Promise
   const batch = db.batch();
   snapshot.docs.forEach((doc) => batch.delete(doc.ref));
   await batch.commit();
+  invalidateTransactionReads();
 }
 
 export async function findTransactionsVisibleTo(
@@ -276,6 +282,7 @@ export async function findTransactionById(transactionId: string): Promise<Transa
 export async function deleteTransaction(transactionId: string): Promise<void> {
   await deleteSplitsForTransaction(transactionId);
   await transactionsCol.doc(transactionId).delete();
+  invalidateTransactionReads();
 }
 
 export async function updateTransaction(
@@ -312,6 +319,7 @@ export async function updateTransaction(
   if (fields.accountOwnerId !== undefined) update.accountOwnerId = fields.accountOwnerId;
 
   await transactionsCol.doc(transactionId).update(update);
+  invalidateTransactionReads();
   const doc = await transactionsCol.doc(transactionId).get();
   return toTransactionRow(doc);
 }
@@ -323,7 +331,11 @@ export interface AccountBalanceRow {
 
 // Net of income minus expense per account, computed fresh from the
 // transaction log each time (no stored running balance -- see schema notes).
-export async function getAccountBalances(groupId: string): Promise<AccountBalanceRow[]> {
+export function getAccountBalances(groupId: string): Promise<AccountBalanceRow[]> {
+  return memoizeReads(`balances:${groupId}`, () => loadAccountBalances(groupId));
+}
+
+async function loadAccountBalances(groupId: string): Promise<AccountBalanceRow[]> {
   const snapshot = await transactionsCol.where("groupId", "==", groupId).select("accountId", "amountCents", "transactionType").get();
   const balances = new Map<string, number>();
   for (const doc of snapshot.docs) {
@@ -353,7 +365,19 @@ export type SummaryScope = "joint" | "visible";
 // "visible": joint + the requester's own personal account -- matches exactly
 // what findTransactionsVisibleTo returns, so a page showing both a category
 // breakdown and an extrato (Relatórios) never has one contradict the other.
-async function fetchExpenseDocsForSummary(
+function fetchExpenseDocsForSummary(
+  groupId: string,
+  requestingUserId: string,
+  monthStart: string,
+  monthEnd: string,
+  scope: SummaryScope
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  return memoizeReads(`summaryDocs:${groupId}:${requestingUserId}:${monthStart}:${monthEnd}:${scope}`, () =>
+    loadExpenseDocsForSummary(groupId, requestingUserId, monthStart, monthEnd, scope)
+  );
+}
+
+async function loadExpenseDocsForSummary(
   groupId: string,
   requestingUserId: string,
   monthStart: string,
@@ -451,7 +475,19 @@ export interface DailySeriesPoint {
 // the composite indexes that already exist for the extrato -- no new index
 // needed. Unlike fetchExpenseDocsForSummary this pulls both income and
 // expense docs, since the daily series charts both.
-async function fetchDocsForDateRange(
+function fetchDocsForDateRange(
+  groupId: string,
+  requestingUserId: string,
+  monthStart: string,
+  monthEnd: string,
+  scope: SummaryScope
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  return memoizeReads(`rangeDocs:${groupId}:${requestingUserId}:${monthStart}:${monthEnd}:${scope}`, () =>
+    loadDocsForDateRange(groupId, requestingUserId, monthStart, monthEnd, scope)
+  );
+}
+
+async function loadDocsForDateRange(
   groupId: string,
   requestingUserId: string,
   monthStart: string,
@@ -489,7 +525,18 @@ async function fetchDocsForDateRange(
 // means. Same equality+range field combo as fetchDocsForDateRange's "own"
 // branch above, so this reuses an index that already exists instead of
 // needing a new composite index deployed.
-export async function findOwnDocsForRange(
+export function findOwnDocsForRange(
+  groupId: string,
+  userId: string,
+  rangeStart: string,
+  rangeEnd: string
+): Promise<{ month: string; amountCents: number; transactionType: TransactionType }[]> {
+  return memoizeReads(`ownDocs:${groupId}:${userId}:${rangeStart}:${rangeEnd}`, () =>
+    loadOwnDocsForRange(groupId, userId, rangeStart, rangeEnd)
+  );
+}
+
+async function loadOwnDocsForRange(
   groupId: string,
   userId: string,
   rangeStart: string,
@@ -640,7 +687,11 @@ export interface BalanceRow {
 // always COLLECTION-scoped to its one parent doc) -- N reads instead of 1,
 // but N here is "unsettled equal-split expenses in the group", nowhere
 // near a scale where that matters for a couple/small-group app.
-export async function getBalanceRows(groupId: string): Promise<BalanceRow[]> {
+export function getBalanceRows(groupId: string): Promise<BalanceRow[]> {
+  return memoizeReads(`balanceRows:${groupId}`, () => loadBalanceRows(groupId));
+}
+
+async function loadBalanceRows(groupId: string): Promise<BalanceRow[]> {
   const txSnapshot = await transactionsCol
     .where("groupId", "==", groupId)
     .where("transactionType", "==", "expense")
