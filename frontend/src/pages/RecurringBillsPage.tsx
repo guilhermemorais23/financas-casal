@@ -6,6 +6,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import { formatCurrency } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { useConfirm } from "../components/ConfirmDialog";
 
 interface AccountRow {
   id: string;
@@ -42,6 +43,7 @@ interface RecurringBillRow {
 
 export function RecurringBillsPage() {
   const { user, token } = useAuth();
+  const confirm = useConfirm();
   const cacheKey = `recurring-bills:${user?.id ?? "anon"}`;
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
@@ -182,9 +184,11 @@ export function RecurringBillsPage() {
   }
 
   async function handleDelete(billId: string) {
-    const confirmed = window.confirm(
-      "Excluir essa conta fixa? Os lançamentos que ela já gerou continuam no extrato -- só para de gerar novos."
-    );
+    const confirmed = await confirm({
+      title: "Excluir essa conta fixa?",
+      body: "Os lançamentos que ela já gerou continuam no extrato. Ela só para de gerar novos.",
+      confirmLabel: "Excluir conta",
+    });
     if (!confirmed) return;
 
     setBusyId(billId);

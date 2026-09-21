@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { readCache, writeCache } from "../utils/pageCache";
+import { useConfirm } from "../components/ConfirmDialog";
 
 interface AccountRow {
   id: string;
@@ -33,6 +34,7 @@ interface ShoppingItemRow {
 export function ShoppingListPage() {
   const { user, token } = useAuth();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const cacheKey = `shopping:${user?.id ?? "anon"}`;
 
   const [items, setItems] = useState<ShoppingItemRow[] | null>(() => readCache(cacheKey));
@@ -130,7 +132,11 @@ export function ShoppingListPage() {
   }
 
   async function handleDelete(itemId: string) {
-    const confirmed = window.confirm("Remover esse item da lista?");
+    const confirmed = await confirm({
+      title: "Remover esse item?",
+      body: "Ele sai da lista de compras.",
+      confirmLabel: "Remover",
+    });
     if (!confirmed) return;
     try {
       await apiRequest(`/shopping/${itemId}`, { method: "DELETE", token });

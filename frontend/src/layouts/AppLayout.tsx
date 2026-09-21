@@ -108,6 +108,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         <div className="app-sidebar-brand">
           <Brand />
         </div>
+        <div className="app-sidebar-scroll">
         <nav className="app-nav">
           {NAV_ITEMS.map((item) => (
             <NavLink
@@ -166,6 +167,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
             />
           </div>
         )}
+        </div>
 
         <div className="app-sidebar-footer">
           <div className="app-sidebar-footer-row">

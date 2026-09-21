@@ -7,6 +7,7 @@ import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
 import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { useConfirm } from "../components/ConfirmDialog";
 
 interface InstallmentRow {
   id: string;
@@ -35,6 +36,7 @@ interface DebtRow {
 
 export function DebtsPage() {
   const { user, token } = useAuth();
+  const confirm = useConfirm();
   const cacheKey = `debts:${user?.id ?? "anon"}`;
 
   const [debts, setDebts] = useState<DebtRow[] | null>(() => readCache(cacheKey));
@@ -118,9 +120,11 @@ export function DebtsPage() {
 
   async function toggleInstallment(debt: DebtRow, installment: InstallmentRow) {
     if (installment.isPaid) {
-      const confirmed = window.confirm(
-        "Desfazer o pagamento dessa parcela? O lançamento gerado por ela some do extrato."
-      );
+      const confirmed = await confirm({
+        title: "Desfazer o pagamento?",
+        body: "O lançamento gerado por essa parcela some do extrato.",
+        confirmLabel: "Desfazer pagamento",
+      });
       if (!confirmed) return;
     }
 
@@ -137,9 +141,11 @@ export function DebtsPage() {
   }
 
   async function handleDelete(debtId: string) {
-    const confirmed = window.confirm(
-      "Excluir essa dívida? Isso também remove as parcelas e os lançamentos gerados por ela."
-    );
+    const confirmed = await confirm({
+      title: "Excluir essa dívida?",
+      body: "Isso também remove as parcelas e os lançamentos gerados por ela.",
+      confirmLabel: "Excluir dívida",
+    });
     if (!confirmed) return;
 
     try {

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PageSkeleton } from "./components/Skeleton";
+import { ConfirmProvider } from "./components/ConfirmDialog";
 import { ToastProvider } from "./components/ToastProvider";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { LoginPage } from "./pages/LoginPage";
@@ -44,6 +45,7 @@ const ShoppingListPage = namedLazy(() => import("./pages/ShoppingListPage"), "Sh
 function App() {
   return (
     <ToastProvider>
+      <ConfirmProvider>
       <AuthProvider>
         <ErrorBoundary>
         <Suspense fallback={<PageSkeleton />}>
@@ -160,6 +162,7 @@ function App() {
         </Suspense>
         </ErrorBoundary>
       </AuthProvider>
+      </ConfirmProvider>
     </ToastProvider>
   );
 }

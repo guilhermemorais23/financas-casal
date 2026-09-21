@@ -3,7 +3,8 @@ import { formatCurrency } from "../utils/format";
 
 // Counts up (or down) from whatever it last showed to the new value, so a
 // month switch or a fresh load reads as motion instead of a value just
-// appearing -- matches prefers-reduced-motion by skipping straight to the
+// appearing. Kept short (250ms): it answers a tap, and a long count-up read
+// as the app being slow to react -- matches prefers-reduced-motion by skipping straight to the
 // final value.
 export function AnimatedNumber({ value }: { value: number }) {
   const [display, setDisplay] = useState(value);
@@ -22,7 +23,7 @@ export function AnimatedNumber({ value }: { value: number }) {
     const to = value;
     if (from === to) return;
 
-    const duration = 700;
+    const duration = 250;
     const start = performance.now();
 
     function step(now: number) {

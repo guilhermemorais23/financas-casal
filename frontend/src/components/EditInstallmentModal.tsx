@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { formatCurrency } from "../utils/format";
+import { useConfirm } from "./ConfirmDialog";
 
 export interface EditableInstallment {
   debtId: string;
@@ -22,6 +23,7 @@ export function EditInstallmentModal({
   onSaved: () => void;
 }) {
   const { token } = useAuth();
+  const confirm = useConfirm();
 
   const [referenceMonth, setReferenceMonth] = useState(installment.referenceMonth);
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +50,11 @@ export function EditInstallmentModal({
   }
 
   async function handleUndo() {
-    const confirmed = window.confirm(
-      "Desfazer o pagamento dessa parcela? O lançamento gerado por ela some do extrato."
-    );
+    const confirmed = await confirm({
+      title: "Desfazer o pagamento?",
+      body: "O lançamento gerado por essa parcela some do extrato.",
+      confirmLabel: "Desfazer pagamento",
+    });
     if (!confirmed) return;
 
     setIsUndoing(true);

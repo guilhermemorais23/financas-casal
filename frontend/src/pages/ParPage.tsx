@@ -8,8 +8,12 @@ import { SplitStatusPill } from "../components/SplitStatusPill";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, personTint, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, parseLocalDate } from "../utils/format";
+import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { readCache, writeCache } from "../utils/pageCache";
+import { whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useToast } from "../components/ToastProvider";
 
 interface AccountRow {
   id: string;
@@ -79,6 +83,8 @@ interface BalanceResponse {
 
 export function ParPage() {
   const { user, token } = useAuth();
+  const confirm = useConfirm();
+  const { showToast } = useToast();
   const cacheKey = (name: string) => `par:${name}:${user?.id ?? "anon"}`;
 
   const [group, setGroup] = useState<GroupResponse | null>(() => readCache(cacheKey("group")));
@@ -90,7 +96,7 @@ export function ParPage() {
   );
   const [isLoading, setIsLoading] = useState(!group);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -104,6 +110,7 @@ export function ParPage() {
     // transaction just added to "Nossa conta" took a beat to show up here.
     const knownJointAccountId = group?.accounts.find((a) => a.type === "joint")?.id;
 
+    await whenWritesSettled();
     const groupPromise = apiRequest<GroupResponse>("/groups/me", { token });
     const summaryPromise = apiRequest<SummaryResponse>(`/transactions/summary?month=${month}`, { token });
     const balancePromise = apiRequest<BalanceResponse>("/transactions/balance", { token });
@@ -127,7 +134,7 @@ export function ParPage() {
     setSummary(summaryRes);
     setBalance(balanceRes);
     setBudget(budgetRes);
-    setTransactions(txRes);
+    setTransactions(txRes.filter((row) => !isDeferredPending(`tx:${row.id}`)));
     writeCache(cacheKey("group"), groupRes);
     writeCache(cacheKey("summary"), summaryRes);
     writeCache(cacheKey("balance"), balanceRes);
@@ -140,20 +147,43 @@ export function ParPage() {
     load();
   }, [token]);
 
-  async function handleDelete(id: string) {
-    const confirmed = window.confirm("Excluir esse lançamento?");
+  // Delete with Desfazer (see utils/deferredDelete.ts): the row leaves the
+  // list right away, the request goes out once the undo window closes.
+  async function handleDelete(tx: TransactionListRow) {
+    const confirmed = await confirm({
+      title: `Excluir “${tx.description}”?`,
+      body: `${formatCurrency(Number(tx.amount))} sai da conta conjunta. Você ainda vai poder desfazer por alguns segundos.`,
+      confirmLabel: "Excluir",
+    });
     if (!confirmed) return;
 
-    setDeletingId(id);
     setError(null);
-    try {
-      await apiRequest(`/transactions/${id}`, { method: "DELETE", token });
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
-    } finally {
-      setDeletingId(null);
-    }
+    const snapshot = transactions;
+    const key = `tx:${tx.id}`;
+    setLeavingIds((current) => new Set(current).add(tx.id));
+    window.setTimeout(() => {
+      setTransactions((current) => current?.filter((row) => row.id !== tx.id) ?? current);
+      setLeavingIds((current) => {
+        const next = new Set(current);
+        next.delete(tx.id);
+        return next;
+      });
+    }, 280);
+    scheduleDeferred(key, async () => {
+      try {
+        await apiRequest(`/transactions/${tx.id}`, { method: "DELETE", token });
+        await load();
+      } catch (err) {
+        setTransactions(snapshot);
+        setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
+      }
+    });
+    showToast(`“${tx.description}” excluído`, {
+      actionLabel: "Desfazer",
+      onAction: () => {
+        if (cancelDeferred(key)) setTransactions(snapshot);
+      },
+    });
   }
 
   // Local list update SplitStatusPill drives directly (optimistic flip,
@@ -346,7 +376,7 @@ export function ParPage() {
           )}
           <ul className="transaction-list">
             {transactions?.map((tx) => (
-              <li key={tx.id} className="transaction-row">
+              <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
                 <span
                   className="transaction-icon"
                   style={{ background: tint(categoryColor(tx.categoryId)) }}
@@ -384,8 +414,7 @@ export function ParPage() {
                     type="button"
                     className="btn-icon"
                     title="Excluir"
-                    disabled={deletingId === tx.id}
-                    onClick={() => handleDelete(tx.id)}
+                    onClick={() => handleDelete(tx)}
                   >
                     🗑
                   </button>

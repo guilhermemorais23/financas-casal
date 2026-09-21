@@ -8,11 +8,14 @@ import { EditTransactionModal } from "../components/EditTransactionModal";
 import { MonthPicker } from "../components/MonthPicker";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { SplitStatusPill } from "../components/SplitStatusPill";
+import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay, monthLongName } from "../utils/format";
+import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { readCache, writeCache } from "../utils/pageCache";
+import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 
 interface CategorySummaryRow {
@@ -108,6 +111,7 @@ function buildGroups(rows: TransactionListRow[], mode: GroupMode): TxGroup[] {
 export function ReportsPage() {
   const { user, token } = useAuth();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [isExporting, setIsExporting] = useState(false);
   const cacheKey = (name: string, forMonth: string) => `reports:${name}:${forMonth}:${user?.id ?? "anon"}`;
 
@@ -128,7 +132,7 @@ export function ReportsPage() {
     readCache(cacheKey("transactions", month))
   );
   const [isLoading, setIsLoading] = useState(!summary);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
@@ -165,20 +169,21 @@ export function ReportsPage() {
       });
   }, [token, selectedYear, showYearly]);
 
-  async function load(selectedMonth: string) {
-    setIsLoading(true);
+  async function load(selectedMonth: string, options?: { silent?: boolean }) {
+    if (!options?.silent) setIsLoading(true);
     const cached = readCache<SummaryResponse>(cacheKey("summary", selectedMonth));
     if (cached) {
       setSummary(cached);
       setTransactions(readCache(cacheKey("transactions", selectedMonth)));
     }
     try {
+      await whenWritesSettled();
       const [summaryRes, txRes] = await Promise.all([
         apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
         apiRequest<TransactionListRow[]>(`/transactions?limit=500&month=${selectedMonth}`, { token }),
       ]);
       setSummary(summaryRes);
-      setTransactions(txRes);
+      setTransactions(txRes.filter((row) => !isDeferredPending(`tx:${row.id}`)));
       writeCache(cacheKey("summary", selectedMonth), summaryRes);
       writeCache(cacheKey("transactions", selectedMonth), txRes);
     } catch (err) {
@@ -187,6 +192,12 @@ export function ReportsPage() {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    const refetch = () => void load(month, { silent: true });
+    window.addEventListener(DATA_CHANGED_EVENT, refetch);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, refetch);
+  }, [token, month]);
 
   useEffect(() => {
     load(month);
@@ -223,35 +234,93 @@ export function ReportsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    const confirmed = window.confirm("Excluir esse lançamento?");
-    if (!confirmed) return;
-
-    setDeletingId(id);
-    setError(null);
-    try {
-      await apiRequest(`/transactions/${id}`, { method: "DELETE", token });
-      await load(month);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
-    } finally {
-      setDeletingId(null);
+  // Instant local update for a removed row (exit animation, then out of the
+  // list, and the category slice shrinks) -- the server confirms in the
+  // background, nothing here waits on the network.
+  function removeLocally(tx: TransactionListRow) {
+    const amount = Number(tx.amount);
+    setLeavingIds((current) => new Set(current).add(tx.id));
+    window.setTimeout(() => {
+      setTransactions((current) => current?.filter((row) => row.id !== tx.id) ?? current);
+      setLeavingIds((current) => {
+        const next = new Set(current);
+        next.delete(tx.id);
+        return next;
+      });
+    }, 280);
+    if (tx.transactionType === "expense") {
+      setSummary((current) =>
+        current
+          ? {
+              total: String(Math.max(0, Number(current.total) - amount)),
+              byCategory: current.byCategory
+                .map((row) =>
+                  row.categoryId === tx.categoryId
+                    ? { ...row, total: String(Math.max(0, Number(row.total) - amount)) }
+                    : row
+                )
+                .filter((row) => Number(row.total) > 0),
+            }
+          : current
+      );
     }
   }
 
-  async function handleCancelRecurring(id: string) {
-    const confirmed = window.confirm("Cancelar essa recorrência? Este lançamento e os dos próximos meses somem.");
+  // Delete with Desfazer: the request only goes out once the undo window
+  // closes (utils/deferredDelete.ts), so undoing never recreates anything.
+  async function handleDelete(tx: TransactionListRow) {
+    const confirmed = await confirm({
+      title: `Excluir “${tx.description}”?`,
+      body: `${formatCurrency(Number(tx.amount))} sai do extrato e dos totais do mês. Você ainda vai poder desfazer por alguns segundos.`,
+      confirmLabel: "Excluir",
+    });
     if (!confirmed) return;
 
-    setDeletingId(id);
     setError(null);
+    const snapshot = { transactions, summary };
+    const key = `tx:${tx.id}`;
+    const targetMonth = month;
+    removeLocally(tx);
+    scheduleDeferred(key, async () => {
+      try {
+        await apiRequest(`/transactions/${tx.id}`, { method: "DELETE", token });
+        await load(targetMonth, { silent: true });
+      } catch (err) {
+        setTransactions(snapshot.transactions);
+        setSummary(snapshot.summary);
+        setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
+      }
+    });
+    showToast(`“${tx.description}” excluído`, {
+      actionLabel: "Desfazer",
+      onAction: () => {
+        if (cancelDeferred(key)) {
+          setTransactions(snapshot.transactions);
+          setSummary(snapshot.summary);
+        }
+      },
+    });
+  }
+
+  async function handleCancelRecurring(tx: TransactionListRow) {
+    const confirmed = await confirm({
+      title: `Cancelar a recorrência de “${tx.description}”?`,
+      body: "Este lançamento e os dos próximos meses somem. Os que já aconteceram continuam no extrato.",
+      confirmLabel: "Cancelar recorrência",
+    });
+    if (!confirmed) return;
+
+    setError(null);
+    const snapshot = { transactions, summary };
+    removeLocally(tx);
     try {
-      await apiRequest(`/transactions/${id}/recurring`, { method: "DELETE", token });
-      await load(month);
+      await apiRequest(`/transactions/${tx.id}/recurring`, { method: "DELETE", token });
+      showToast("Recorrência cancelada");
+      await load(month, { silent: true });
     } catch (err) {
+      setTransactions(snapshot.transactions);
+      setSummary(snapshot.summary);
       setError(err instanceof ApiError ? err.message : "Não foi possível cancelar a recorrência");
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -328,7 +397,7 @@ export function ReportsPage() {
 
   function renderTransactionRow(tx: TransactionListRow) {
     return (
-        <li key={tx.id} className="transaction-row">
+        <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
           <span
             className="transaction-icon"
             style={{ background: tint(categoryColor(tx.categoryId)) }}
@@ -379,8 +448,7 @@ export function ReportsPage() {
                         key: "cancel-recurring",
                         label: "Cancelar recorrência",
                         icon: "🔁🚫",
-                        disabled: deletingId === tx.id,
-                        onClick: () => handleCancelRecurring(tx.id),
+                        onClick: () => handleCancelRecurring(tx),
                       },
                     ]
                   : []),
@@ -388,9 +456,8 @@ export function ReportsPage() {
                   key: "delete",
                   label: "Excluir",
                   icon: "🗑",
-                  disabled: deletingId === tx.id,
                   danger: true,
-                  onClick: () => handleDelete(tx.id),
+                  onClick: () => handleDelete(tx),
                 },
               ]}
             />
