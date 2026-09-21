@@ -4,6 +4,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmojiPicker } from "../components/EmojiPicker";
 import { useToast } from "../components/ToastProvider";
+import { saveTransactionInBackground } from "../utils/optimisticTransactions";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency } from "../utils/format";
 import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
@@ -64,7 +65,6 @@ export function NewTransactionPage() {
   const [isSavingCategory, setIsSavingCategory] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function loadCategories() {
     const categoriesRes = await apiRequest<CategoryRow[]>("/categories", { token });
@@ -129,42 +129,56 @@ export function NewTransactionPage() {
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await apiRequest("/transactions", {
-        method: "POST",
-        token,
-        body: {
-          description: description.trim(),
-          amount: parsedAmount,
-          accountId,
-          categoryId: categoryId || null,
-          payerId,
-          transactionType,
-          occurredAt,
-          splitType: isIncome ? "none" : splitType,
-          isPrivate: isIncome ? false : isPrivate,
-          paymentMethod: paymentMethod || null,
-          recurringMonths: isRecurring ? parsedMonths : null,
-        },
-      });
-      showToast(
-        isRecurring
-          ? `${isIncome ? "Receita" : "Despesa"} recorrente salva (${parsedMonths} meses)`
-          : isIncome
-            ? "Receita salva"
-            : "Despesa salva"
-      );
-      navigate("/dashboard");
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : `Não foi possível salvar ${isIncome ? "a entrada" : "a despesa"}`
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+    // Optimistic save: leave the form and show the result right away, the
+    // POST finishes in the background (and offers "Tentar de novo" if the
+    // server rejects it) -- see utils/optimisticTransactions.ts.
+    const account = accounts.find((a) => a.id === accountId);
+    const category = categories.find((c) => c.id === categoryId);
+    const payload = {
+      description: description.trim(),
+      amount: parsedAmount,
+      accountId,
+      categoryId: categoryId || null,
+      payerId,
+      transactionType,
+      occurredAt,
+      splitType: isIncome ? "none" : splitType,
+      isPrivate: isIncome ? false : isPrivate,
+      paymentMethod: paymentMethod || null,
+      recurringMonths: isRecurring ? parsedMonths : null,
+    };
+    saveTransactionInBackground({
+      token,
+      userId: user?.id ?? "",
+      payload,
+      showToast,
+      optimistic: {
+        id: `pending-${Date.now()}`,
+        description: payload.description,
+        amount: String(parsedAmount),
+        transactionType,
+        occurredAt,
+        categoryId: categoryId || null,
+        categoryName: category?.name ?? null,
+        categoryEmoji: category?.emoji ?? null,
+        isPrivate: payload.isPrivate,
+        recurringGroupId: null,
+        splitType: payload.splitType,
+        isSettled: false,
+        accountId,
+        accountType: account?.type ?? "personal",
+        paymentMethod: paymentMethod || null,
+        payerId,
+      },
+    });
+    showToast(
+      isRecurring
+        ? `${isIncome ? "Receita" : "Despesa"} recorrente salva (${parsedMonths} meses)`
+        : isIncome
+          ? "Receita salva"
+          : "Despesa salva"
+    );
+    navigate("/dashboard");
   }
 
   return (
@@ -363,8 +377,8 @@ export function NewTransactionPage() {
             </p>
           )}
 
-          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? "Salvando..." : isIncome ? "Salvar entrada" : "Salvar despesa"}
+          <button type="submit" className="btn btn-primary">
+            {isIncome ? "Salvar entrada" : "Salvar despesa"}
           </button>
         </form>
       </div>

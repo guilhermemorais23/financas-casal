@@ -5,6 +5,9 @@ import { NewGoalModal } from "../components/NewGoalModal";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, parseLocalDate } from "../utils/format";
+import { useConfirm } from "../components/ConfirmDialog";
+import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
+import { trackWrite, whenWritesSettled } from "../utils/pendingWrites";
 
 interface GoalRow {
   id: string;
@@ -20,54 +23,79 @@ interface GoalRow {
 export function GoalsPage() {
   const { token } = useAuth();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [goals, setGoals] = useState<GoalRow[] | null>(null);
   const [contributions, setContributions] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [contributingId, setContributingId] = useState<string | null>(null);
 
   async function loadGoals() {
+    await whenWritesSettled();
     const result = await apiRequest<GoalRow[]>("/goals", { token });
-    setGoals(result);
+    setGoals(result.filter((goal) => !isDeferredPending(`goal:${goal.id}`)));
   }
 
   useEffect(() => {
     loadGoals();
   }, [token]);
 
-  async function handleContribute(goalId: string) {
-    if (contributingId) return;
+  // Optimistic: the goal's progress bar and the input clear the moment you
+  // tap "Adicionar"; the request runs in the background and, if the server
+  // refuses, the previous value comes back with an error.
+  function handleContribute(goalId: string) {
     const raw = contributions[goalId];
     const amount = Number((raw ?? "").replace(",", "."));
     if (!(amount > 0)) return;
 
-    setContributingId(goalId);
-    try {
-      await apiRequest(`/goals/${goalId}/contribute`, {
-        method: "POST",
-        token,
-        body: { amount },
+    setError(null);
+    const before = goals;
+    setContributions((prev) => ({ ...prev, [goalId]: "" }));
+    setGoals(
+      (current) =>
+        current?.map((goal) =>
+          goal.id === goalId ? { ...goal, currentAmount: String(Number(goal.currentAmount) + amount) } : goal
+        ) ?? current
+    );
+    showToast("Valor adicionado à meta");
+
+    trackWrite(apiRequest(`/goals/${goalId}/contribute`, { method: "POST", token, body: { amount } }))
+      .then(() => loadGoals())
+      .catch((err) => {
+        setGoals(before);
+        setContributions((prev) => ({ ...prev, [goalId]: raw ?? "" }));
+        setError(err instanceof ApiError ? err.message : "Não foi possível contribuir");
       });
-      setContributions((prev) => ({ ...prev, [goalId]: "" }));
-      await loadGoals();
-      showToast("Valor adicionado à meta");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível contribuir");
-    } finally {
-      setContributingId(null);
-    }
   }
 
-  async function handleDelete(goalId: string) {
-    const confirmed = window.confirm("Excluir essa meta? O progresso salvo também será perdido.");
+  // Delete with Desfazer (utils/deferredDelete.ts): the card leaves the list
+  // at once, the DELETE goes out after the undo window.
+  async function handleDelete(goal: GoalRow) {
+    const confirmed = await confirm({
+      title: `Excluir a meta “${goal.name}”?`,
+      body: "O progresso salvo também será perdido. Você ainda vai poder desfazer por alguns segundos.",
+      confirmLabel: "Excluir meta",
+    });
     if (!confirmed) return;
 
-    try {
-      await apiRequest(`/goals/${goalId}`, { method: "DELETE", token });
-      await loadGoals();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível remover a meta");
-    }
+    setError(null);
+    const before = goals;
+    const key = `goal:${goal.id}`;
+    setGoals((current) => current?.filter((row) => row.id !== goal.id) ?? current);
+    scheduleDeferred(key, async () => {
+      try {
+        await apiRequest(`/goals/${goal.id}`, { method: "DELETE", token });
+        await loadGoals();
+      } catch (err) {
+        setGoals(before);
+        setError(err instanceof ApiError ? err.message : "Não foi possível remover a meta");
+      }
+    });
+    showToast(`Meta “${goal.name}” excluída`, {
+      actionLabel: "Desfazer",
+      onAction: () => {
+        if (cancelDeferred(key)) setGoals(before);
+      },
+    });
   }
 
   return (
@@ -102,7 +130,7 @@ export function GoalsPage() {
                   {goal.emoji ?? "🎯"} {goal.name}
                   {goal.achievedAt && <span className="badge goal-achieved">Concluída!</span>}
                 </p>
-                <button type="button" className="btn-icon" onClick={() => handleDelete(goal.id)} title="Remover meta">
+                <button type="button" className="btn-icon" onClick={() => handleDelete(goal)} title="Remover meta">
                   ✕
                 </button>
               </div>
@@ -129,9 +157,8 @@ export function GoalsPage() {
                     type="button"
                     className="btn btn-outline"
                     onClick={() => handleContribute(goal.id)}
-                    disabled={contributingId === goal.id}
                   >
-                    {contributingId === goal.id ? "Adicionando..." : "Adicionar"}
+                    Adicionar
                   </button>
                 </div>
               )}

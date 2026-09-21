@@ -4,7 +4,10 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AccumulatedSpendingChart, type DailyTrendPoint } from "../components/AccumulatedSpendingChart";
 import { AnimatedNumber } from "../components/AnimatedNumber";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useToast } from "../components/ToastProvider";
 import { DashboardSkeleton } from "../components/Skeleton";
+import { Icon } from "../components/Icon";
 import { EmptyState } from "../components/EmptyState";
 import { CircularProgress } from "../components/CircularProgress";
 import { EditRecurringModal } from "../components/EditRecurringModal";
@@ -26,7 +29,9 @@ import {
   percentChange,
   previousMonthParam,
 } from "../utils/format";
+import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { readCache, writeCache } from "../utils/pageCache";
+import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 
 interface AccountWithBalance {
@@ -182,6 +187,8 @@ function dueLabel(days: number): string {
 
 export function DashboardPage() {
   const { user, token } = useAuth();
+  const confirm = useConfirm();
+  const { showToast } = useToast();
   // Kept in the URL (not just local state) so the sidebar in AppLayout --
   // which fetches its own "spending this month" widgets -- can read the
   // same selected month instead of always defaulting to the real current
@@ -206,7 +213,9 @@ export function DashboardPage() {
   const [personalPrevMonthTotals, setPersonalPrevMonthTotals] = useState<MonthTotals>(
     () => readCache(monthKey("personalPrevMonthTotals")) ?? { income: 0, expense: 0 }
   );
-  const [recent, setRecent] = useState<TransactionListRow[]>(() => readCache(monthKey("recent")) ?? []);
+  const [recent, setRecent] = useState<TransactionListRow[]>(
+    () => (readCache<TransactionListRow[]>(monthKey("recent")) ?? []).filter((row) => !isDeferredPending(`tx:${row.id}`))
+  );
   const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[]>(() => readCache(monthKey("dailyTrend")) ?? []);
   const [debts, setDebts] = useState<DebtRow[]>(() => readCache(staticKey("debts")) ?? []);
   const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(monthKey("summary")));
@@ -233,7 +242,9 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Rows playing their exit animation (see .is-leaving in index.css) before
+  // they're actually dropped from `recent`.
+  const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
 
   const idle = (cb: () => void) =>
     typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(cb) : setTimeout(cb, 300);
@@ -250,7 +261,7 @@ export function DashboardPage() {
       setGroup(data.group);
       setPersonalMonthTotals(data.personalMonthTotals);
       setPersonalPrevMonthTotals(data.personalPrevMonthTotals);
-      setRecent(data.recent);
+      setRecent(data.recent.filter((row) => !isDeferredPending(`tx:${row.id}`)));
       setDebts(data.debts);
       setSummary(data.summary);
       setJointSummary(data.jointSummary);
@@ -310,7 +321,7 @@ export function DashboardPage() {
   // flashing back to "open", a deleted transaction reappearing) before the
   // fresh fetch corrects it again. A plain month switch still wants the
   // cache-first paint -- that's the whole point of the neighbor prefetch.
-  async function load(selectedMonth: string, options?: { skipCache?: boolean }) {
+  async function load(selectedMonth: string, options?: { skipCache?: boolean; silent?: boolean }) {
     setError(null);
     const mKeyLocal = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
     const cached = options?.skipCache ? null : readCache<DashboardResponse>(mKeyLocal("full"));
@@ -320,11 +331,15 @@ export function DashboardPage() {
       // below) -- paint instantly, no loading state at all, then quietly
       // refetch underneath to catch anything that changed since.
       applyDashboard(selectedMonth, cached, false);
-    } else if (selectedMonth === activeMonthRef.current) {
+    } else if (selectedMonth === activeMonthRef.current && !options?.silent) {
       setIsLoading(true);
     }
 
     try {
+      // An optimistic write still in flight (a just-saved transaction) must
+      // land first, or this GET could answer without it and erase what the
+      // cache already showed.
+      await whenWritesSettled();
       const data = await apiRequest<DashboardResponse>(`/dashboard?month=${selectedMonth}`, { token });
       // The user may have already switched to a different month while this
       // was in flight -- an abandoned month's response is discarded instead
@@ -387,35 +402,112 @@ export function DashboardPage() {
     load(month);
   }, [token, month]);
 
-  async function handleDelete(id: string) {
-    const confirmed = window.confirm("Excluir esse lançamento?");
-    if (!confirmed) return;
+  // An optimistic write that failed asks every screen to re-fetch the truth.
+  useEffect(() => {
+    const refetch = () => void load(month, { skipCache: true, silent: true });
+    window.addEventListener(DATA_CHANGED_EVENT, refetch);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, refetch);
+  }, [token, month]);
 
-    setDeletingId(id);
-    setError(null);
-    try {
-      await apiRequest(`/transactions/${id}`, { method: "DELETE", token });
-      await load(month, { skipCache: true });
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
-    } finally {
-      setDeletingId(null);
+  // Instant local update for a removed row: the row plays its exit
+  // animation, then leaves `recent`, and the month totals/category slice it
+  // contributed to shrink right away. The server confirms in the background
+  // (see the callers) -- nothing here waits on the network.
+  function removeLocally(tx: TransactionListRow) {
+    const amount = Number(tx.amount);
+    const sign = tx.transactionType === "expense" ? "expense" : "income";
+    const account = group?.accounts.find((a) => a.id === tx.accountId);
+    setLeavingIds((current) => new Set(current).add(tx.id));
+    window.setTimeout(() => {
+      setRecent((current) => current.filter((row) => row.id !== tx.id));
+      setLeavingIds((current) => {
+        const next = new Set(current);
+        next.delete(tx.id);
+        return next;
+      });
+    }, 280);
+    if (account?.type === "personal") {
+      setPersonalMonthTotals((current) => ({ ...current, [sign]: Math.max(0, current[sign] - amount) }));
+    }
+    if (tx.transactionType === "expense") {
+      setSummary((current) =>
+        current
+          ? {
+              total: String(Math.max(0, Number(current.total) - amount)),
+              byCategory: current.byCategory
+                .map((row) =>
+                  row.categoryId === tx.categoryId
+                    ? { ...row, total: String(Math.max(0, Number(row.total) - amount)) }
+                    : row
+                )
+                .filter((row) => Number(row.total) > 0),
+            }
+          : current
+      );
     }
   }
 
-  async function handleCancelRecurring(id: string) {
-    const confirmed = window.confirm("Cancelar essa recorrência? Este lançamento e os dos próximos meses somem.");
+  function restoreSnapshot(snapshot: {
+    recent: TransactionListRow[];
+    personalMonthTotals: MonthTotals;
+    summary: SummaryResponse | null;
+  }) {
+    setRecent(snapshot.recent);
+    setPersonalMonthTotals(snapshot.personalMonthTotals);
+    setSummary(snapshot.summary);
+  }
+
+  // Delete with Desfazer: the request is only sent once the undo window
+  // closes (see utils/deferredDelete.ts), so undoing never has to recreate
+  // anything on the server.
+  async function handleDelete(tx: TransactionListRow) {
+    const confirmed = await confirm({
+      title: `Excluir “${tx.description}”?`,
+      body: `${formatCurrency(Number(tx.amount))} sai do extrato e dos totais do mês. Você ainda vai poder desfazer por alguns segundos.`,
+      confirmLabel: "Excluir",
+    });
     if (!confirmed) return;
 
-    setDeletingId(id);
     setError(null);
+    const snapshot = { recent, personalMonthTotals, summary };
+    const key = `tx:${tx.id}`;
+    const targetMonth = month;
+    removeLocally(tx);
+    scheduleDeferred(key, async () => {
+      try {
+        await apiRequest(`/transactions/${tx.id}`, { method: "DELETE", token });
+        await load(targetMonth, { skipCache: true, silent: true });
+      } catch (err) {
+        restoreSnapshot(snapshot);
+        setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
+      }
+    });
+    showToast(`“${tx.description}” excluído`, {
+      actionLabel: "Desfazer",
+      onAction: () => {
+        if (cancelDeferred(key)) restoreSnapshot(snapshot);
+      },
+    });
+  }
+
+  async function handleCancelRecurring(tx: TransactionListRow) {
+    const confirmed = await confirm({
+      title: `Cancelar a recorrência de “${tx.description}”?`,
+      body: "Este lançamento e os dos próximos meses somem. Os que já aconteceram continuam no extrato.",
+      confirmLabel: "Cancelar recorrência",
+    });
+    if (!confirmed) return;
+
+    setError(null);
+    const snapshot = { recent, personalMonthTotals, summary };
+    removeLocally(tx);
     try {
-      await apiRequest(`/transactions/${id}/recurring`, { method: "DELETE", token });
-      await load(month, { skipCache: true });
+      await apiRequest(`/transactions/${tx.id}/recurring`, { method: "DELETE", token });
+      showToast("Recorrência cancelada");
+      await load(month, { skipCache: true, silent: true });
     } catch (err) {
+      restoreSnapshot(snapshot);
       setError(err instanceof ApiError ? err.message : "Não foi possível cancelar a recorrência");
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -430,7 +522,7 @@ export function DashboardPage() {
   // hooks (useMemo), and hook calls can't be conditional. Cheap arithmetic
   // (percentChange, budget math) stays as plain consts; the array-heavy work
   // (filtering/reducing up to 100 rows, regrouping by day) is memoized so
-  // opening/closing a modal (editingTx/deletingId) doesn't redo it for no
+  // opening/closing a modal (editingTx) doesn't redo it for no
   // reason -- none of those state changes affect this derived data.
   const income = personalMonthTotals.income;
   const expense = personalMonthTotals.expense;
@@ -852,7 +944,7 @@ export function DashboardPage() {
                     <Fragment key={dayGroup.label}>
                       <li className="date-group-header">{dayGroup.label}</li>
                       {dayGroup.items.map((tx) => (
-                        <li key={tx.id} className="transaction-row">
+                        <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
                           <span
                             className="transaction-icon"
                             style={{ background: tint(categoryColor(tx.categoryId)) }}
@@ -891,7 +983,7 @@ export function DashboardPage() {
                               title="Editar"
                               onClick={() => setEditingTx(tx)}
                             >
-                              ✎
+                              <Icon name="pencil" />
                             </button>
                             <RowActionsMenu
                               actions={[
@@ -900,25 +992,23 @@ export function DashboardPage() {
                                       {
                                         key: "edit-recurring",
                                         label: "Editar valor da recorrência",
-                                        icon: "✏️🔁",
+                                        icon: "pencil" as const,
                                         onClick: () => setEditingRecurringTx(tx),
                                       },
                                       {
                                         key: "cancel-recurring",
                                         label: "Cancelar recorrência",
-                                        icon: "🔁🚫",
-                                        disabled: deletingId === tx.id,
-                                        onClick: () => handleCancelRecurring(tx.id),
+                                        icon: "repeatOff" as const,
+                                        onClick: () => handleCancelRecurring(tx),
                                       },
                                     ]
                                   : []),
                                 {
                                   key: "delete",
                                   label: "Excluir",
-                                  icon: "🗑",
-                                  disabled: deletingId === tx.id,
+                                  icon: "trash" as const,
                                   danger: true,
-                                  onClick: () => handleDelete(tx.id),
+                                  onClick: () => handleDelete(tx),
                                 },
                               ]}
                             />
