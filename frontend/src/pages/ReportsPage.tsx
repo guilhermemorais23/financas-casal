@@ -5,7 +5,6 @@ import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
 import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
-import { IncomeExpenseDonut } from "../components/IncomeExpenseDonut";
 import { MonthPicker } from "../components/MonthPicker";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { SplitStatusPill } from "../components/SplitStatusPill";
@@ -14,7 +13,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay, monthLongName } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
-import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
+import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 
 interface CategorySummaryRow {
   categoryId: string | null;
@@ -55,8 +54,55 @@ interface TransactionListRow {
   splitType: "none" | "equal";
   isSettled: boolean;
   accountId: string;
+  accountType: "personal" | "joint";
   paymentMethod: PaymentMethod | null;
   payerId: string;
+}
+
+type GroupMode = "day" | "category" | "payment";
+
+interface TxGroup {
+  key: string;
+  label: string;
+  icon: string | null;
+  items: TransactionListRow[];
+  expense: number;
+  income: number;
+}
+
+function makeGroup(key: string, label: string, icon: string | null, items: TransactionListRow[]): TxGroup {
+  let expense = 0;
+  let income = 0;
+  for (const tx of items) {
+    if (tx.transactionType === "income") income += Number(tx.amount);
+    else expense += Number(tx.amount);
+  }
+  return { key, label, icon, items, expense, income };
+}
+
+// One collapsible section per day / category / forma de pagamento, each with
+// its own count and subtotal -- a month with hundreds of lançamentos reads as
+// a handful of headers first, details on demand.
+function buildGroups(rows: TransactionListRow[], mode: GroupMode): TxGroup[] {
+  if (mode === "day") {
+    return groupByDay(rows).map((group) => makeGroup(group.label, group.label, null, group.items));
+  }
+  const buckets = new Map<string, TransactionListRow[]>();
+  for (const tx of rows) {
+    const key = mode === "category" ? (tx.categoryId ?? "none") : (tx.paymentMethod ?? "none");
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(tx);
+    else buckets.set(key, [tx]);
+  }
+  return [...buckets.entries()]
+    .map(([key, items]) => {
+      if (mode === "category") {
+        return makeGroup(key, items[0].categoryName ?? "Sem categoria", items[0].categoryEmoji ?? "✨", items);
+      }
+      const option = PAYMENT_METHOD_OPTIONS.find((o) => o.value === key);
+      return makeGroup(key, option?.label ?? "Não informado", option?.icon ?? "❔", items);
+    })
+    .sort((a, b) => b.expense - a.expense || b.income - a.income);
 }
 
 export function ReportsPage() {
@@ -88,6 +134,14 @@ export function ReportsPage() {
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [groupBy, setGroupBy] = useState<GroupMode>("day");
+  const [typeFilter, setTypeFilter] = useState<"expense" | "income" | null>(null);
+  const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | "none" | null>(null);
+  const [accountFilter, setAccountFilter] = useState<"personal" | "joint" | null>(null);
+  // Per-group open/closed the user toggled by hand; anything not in here
+  // falls back to the default in isGroupOpen below.
+  const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
+  const [showYearly, setShowYearly] = useState(false);
 
   const [selectedYear, setSelectedYear] = useState(() => Number(month.slice(0, 4)));
   const [yearSummary, setYearSummary] = useState<YearlySummaryResponse | null>(() =>
@@ -95,6 +149,8 @@ export function ReportsPage() {
   );
 
   useEffect(() => {
+    // Collapsed by default -- don't fetch a whole year until it's opened.
+    if (!showYearly) return;
     const yearCacheKey = `reports:year:${selectedYear}:${user?.id ?? "anon"}`;
     const cached = readCache<YearlySummaryResponse>(yearCacheKey);
     if (cached) setYearSummary(cached);
@@ -107,7 +163,7 @@ export function ReportsPage() {
         // Best-effort widget -- a failed fetch just leaves whatever was
         // there (cached or null) instead of showing an error banner.
       });
-  }, [token, selectedYear]);
+  }, [token, selectedYear, showYearly]);
 
   async function load(selectedMonth: string) {
     setIsLoading(true);
@@ -119,7 +175,7 @@ export function ReportsPage() {
     try {
       const [summaryRes, txRes] = await Promise.all([
         apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
-        apiRequest<TransactionListRow[]>(`/transactions?limit=100&month=${selectedMonth}`, { token }),
+        apiRequest<TransactionListRow[]>(`/transactions?limit=500&month=${selectedMonth}`, { token }),
       ]);
       setSummary(summaryRes);
       setTransactions(txRes);
@@ -135,6 +191,7 @@ export function ReportsPage() {
   useEffect(() => {
     load(month);
     setSelectedCategoryId(null);
+    setGroupOverrides({});
   }, [token, month]);
 
   async function handleExport() {
@@ -214,11 +271,35 @@ export function ReportsPage() {
         const matchesCategory = selectedCategoryId === "none" ? tx.categoryId === null : tx.categoryId === selectedCategoryId;
         if (!matchesCategory) return false;
       }
+      if (typeFilter && tx.transactionType !== typeFilter) return false;
+      if (paymentFilter && (tx.paymentMethod ?? "none") !== paymentFilter) return false;
+      if (accountFilter && tx.accountType !== accountFilter) return false;
       if (normalizedQuery && !tx.description.toLowerCase().includes(normalizedQuery)) return false;
       return true;
     });
-  }, [transactions, selectedCategoryId, searchQuery]);
-  const transactionGroups = useMemo(() => groupByDay(visibleTransactions), [visibleTransactions]);
+  }, [transactions, selectedCategoryId, searchQuery, typeFilter, paymentFilter, accountFilter]);
+  const hasActiveFilter =
+    selectedCategoryId !== null ||
+    typeFilter !== null ||
+    paymentFilter !== null ||
+    accountFilter !== null ||
+    searchQuery.trim() !== "";
+  const groups = useMemo(() => buildGroups(visibleTransactions, groupBy), [visibleTransactions, groupBy]);
+  const visibleTotals = useMemo(() => makeGroup("all", "", null, visibleTransactions), [visibleTransactions]);
+  // Default: with a filter on, results are few and the point is to read them
+  // -- everything open. Otherwise only the 3 most recent days start open and
+  // category/payment views start collapsed so the subtotals are what you see.
+  function isGroupOpen(group: TxGroup, index: number): boolean {
+    const override = groupOverrides[`${groupBy}:${group.key}`];
+    if (override !== undefined) return override;
+    return hasActiveFilter || (groupBy === "day" && index < 3);
+  }
+  function toggleGroup(group: TxGroup, index: number) {
+    setGroupOverrides((current) => ({ ...current, [`${groupBy}:${group.key}`]: !isGroupOpen(group, index) }));
+  }
+  function setAllGroups(open: boolean) {
+    setGroupOverrides(Object.fromEntries(groups.map((group) => [`${groupBy}:${group.key}`, open])));
+  }
   const selectedCategoryLabel = selectedCategoryId
     ? summary?.byCategory.find((row) => (row.categoryId ?? "none") === selectedCategoryId)
     : null;
@@ -244,6 +325,79 @@ export function ReportsPage() {
       })),
     [summary]
   );
+
+  function renderTransactionRow(tx: TransactionListRow) {
+    return (
+        <li key={tx.id} className="transaction-row">
+          <span
+            className="transaction-icon"
+            style={{ background: tint(categoryColor(tx.categoryId)) }}
+          >
+            {tx.categoryEmoji ?? "💸"}
+          </span>
+          <div className="transaction-info">
+            <span className="transaction-desc">
+              {tx.description}
+              {tx.isPrivate && <span className="badge private-badge">privado</span>}
+              {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
+            </span>
+            <span className="transaction-meta">
+              {tx.categoryName ?? "Sem categoria"}
+              {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
+              {tx.splitType === "equal" && (
+                <SplitStatusPill
+                  token={token}
+                  transactionId={tx.id}
+                  totalAmount={Number(tx.amount)}
+                  isSettled={tx.isSettled}
+                  onOptimisticChange={(next) => setTransactionSettled(tx.id, next)}
+                  onSettled={() => load(month)}
+                  onError={(message) => setError(message)}
+                />
+              )}
+            </span>
+          </div>
+          <span className={`transaction-amount ${tx.transactionType}`}>
+            {tx.transactionType === "income" ? "+" : "-"}
+            {formatCurrency(Number(tx.amount))}
+          </span>
+          <div className="transaction-row-actions">
+            <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
+              ✎
+            </button>
+            <RowActionsMenu
+              actions={[
+                ...(tx.recurringGroupId
+                  ? [
+                      {
+                        key: "edit-recurring",
+                        label: "Editar valor da recorrência",
+                        icon: "✏️🔁",
+                        onClick: () => setEditingRecurringTx(tx),
+                      },
+                      {
+                        key: "cancel-recurring",
+                        label: "Cancelar recorrência",
+                        icon: "🔁🚫",
+                        disabled: deletingId === tx.id,
+                        onClick: () => handleCancelRecurring(tx.id),
+                      },
+                    ]
+                  : []),
+                {
+                  key: "delete",
+                  label: "Excluir",
+                  icon: "🗑",
+                  disabled: deletingId === tx.id,
+                  danger: true,
+                  onClick: () => handleDelete(tx.id),
+                },
+              ]}
+            />
+          </div>
+        </li>
+    );
+  }
 
   return (
     <AppLayout>
@@ -274,20 +428,225 @@ export function ReportsPage() {
           </div>
         </div>
 
+        <div className="stat-row wrap">
+          <div className="stat-box tone-good">
+            <p className="label">Entrada</p>
+            <p className="value-sm income-text">{formatCurrency(incomeTotal)}</p>
+          </div>
+          <div className="stat-box tone-warm">
+            <p className="label">Saída</p>
+            <p className="value-sm">{formatCurrency(expenseTotal)}</p>
+          </div>
+          <div className="stat-box">
+            <p className="label">Saldo do mês</p>
+            <p className={`value-sm${incomeTotal - expenseTotal >= 0 ? " income-text" : ""}`}>
+              {formatCurrency(incomeTotal - expenseTotal)}
+            </p>
+            <p className="stat-delta neutral">conta pessoal + conjunta</p>
+          </div>
+        </div>
+
+        <div className="card">
+          <p className="card-title">Por categoria</p>
+          {summary && summary.byCategory.length === 0 ? (
+            <p className="empty-state">Nenhuma despesa neste mês.</p>
+          ) : (
+            <CategoryPieChart
+              slices={pieSlices}
+              selectedId={selectedCategoryId}
+              onSelect={setSelectedCategoryId}
+            />
+          )}
+        </div>
+
         <div className="card">
           <div className="section-header">
-            <p className="card-title">Visão anual</p>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <button type="button" className="btn-icon" onClick={() => setSelectedYear((y) => y - 1)} title="Ano anterior">
-                ◀
+            <p className="card-title">
+              Extrato
+              {selectedCategoryLabel && ` · ${selectedCategoryLabel.categoryEmoji ?? "✨"} ${selectedCategoryLabel.categoryName ?? "Sem categoria"}`}
+            </p>
+            {hasActiveFilter && (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setSelectedCategoryId(null);
+                  setTypeFilter(null);
+                  setPaymentFilter(null);
+                  setAccountFilter(null);
+                  setSearchQuery("");
+                }}
+              >
+                × Limpar filtros
               </button>
-              <strong>{selectedYear}</strong>
-              <button type="button" className="btn-icon" onClick={() => setSelectedYear((y) => y + 1)} title="Próximo ano">
-                ▶
-              </button>
-            </div>
+            )}
           </div>
-          {yearSummary && (
+          {transactions && transactions.length > 0 && (
+            <div className="report-toolbar">
+              <input
+                type="search"
+                placeholder="Buscar por descrição..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Buscar lançamentos por descrição"
+              />
+              <div className="segmented">
+                {(
+                  [
+                    ["day", "Por dia"],
+                    ["category", "Por categoria"],
+                    ["payment", "Por pagamento"],
+                  ] as [GroupMode, string][]
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`segmented-option${groupBy === mode ? " active" : ""}`}
+                    onClick={() => {
+                      setGroupBy(mode);
+                      setGroupOverrides({});
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="chip-row">
+                <button
+                  type="button"
+                  className={`filter-chip${typeFilter === "expense" ? " active" : ""}`}
+                  onClick={() => setTypeFilter((c) => (c === "expense" ? null : "expense"))}
+                >
+                  Despesas
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${typeFilter === "income" ? " active" : ""}`}
+                  onClick={() => setTypeFilter((c) => (c === "income" ? null : "income"))}
+                >
+                  Receitas
+                </button>
+                <span className="filter-chip-sep" aria-hidden="true" />
+                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`filter-chip${paymentFilter === option.value ? " active" : ""}`}
+                    onClick={() => setPaymentFilter((c) => (c === option.value ? null : option.value))}
+                  >
+                    {option.icon} {option.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`filter-chip${paymentFilter === "none" ? " active" : ""}`}
+                  onClick={() => setPaymentFilter((c) => (c === "none" ? null : "none"))}
+                >
+                  Sem forma informada
+                </button>
+                <span className="filter-chip-sep" aria-hidden="true" />
+                <button
+                  type="button"
+                  className={`filter-chip${accountFilter === "personal" ? " active" : ""}`}
+                  onClick={() => setAccountFilter((c) => (c === "personal" ? null : "personal"))}
+                >
+                  Pessoal
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${accountFilter === "joint" ? " active" : ""}`}
+                  onClick={() => setAccountFilter((c) => (c === "joint" ? null : "joint"))}
+                >
+                  Conjunta
+                </button>
+              </div>
+              <div className="report-summary-line">
+                <span>
+                  {visibleTotals.items.length} lançamento{visibleTotals.items.length === 1 ? "" : "s"}
+                  {visibleTotals.expense > 0 && <> · saiu <strong>{formatCurrency(visibleTotals.expense)}</strong></>}
+                  {visibleTotals.income > 0 && (
+                    <> · entrou <strong className="income-text">{formatCurrency(visibleTotals.income)}</strong></>
+                  )}
+                </span>
+                {groups.length > 1 && (
+                  <span className="report-summary-actions">
+                    <button type="button" className="link-button" onClick={() => setAllGroups(true)}>
+                      Expandir tudo
+                    </button>
+                    <button type="button" className="link-button" onClick={() => setAllGroups(false)}>
+                      Recolher tudo
+                    </button>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {error && (
+            <p className="alert" role="alert">
+              {error}
+            </p>
+          )}
+          {transactions && transactions.length > 0 && visibleTransactions.length === 0 && (
+            <p className="empty-state">Nada encontrado com esses filtros.</p>
+          )}
+          {transactions && transactions.length === 0 && (
+            <p className="empty-state">Nenhuma transação neste mês.</p>
+          )}
+          <ul className="transaction-list">
+            {groups.map((group, index) => {
+              const open = isGroupOpen(group, index);
+              return (
+                <Fragment key={`${groupBy}:${group.key}`}>
+                  <li className="report-group">
+                    <button
+                      type="button"
+                      className="report-group-header"
+                      onClick={() => toggleGroup(group, index)}
+                      aria-expanded={open}
+                    >
+                      <span className="report-group-chevron">{open ? "▾" : "▸"}</span>
+                      <span className="report-group-label">
+                        {group.icon && `${group.icon} `}
+                        {group.label}
+                      </span>
+                      <span className="report-group-count">{group.items.length}</span>
+                      <span className="report-group-total">
+                        {group.expense > 0 && <span>−{formatCurrency(group.expense)}</span>}
+                        {group.income > 0 && <span className="income-text">+{formatCurrency(group.income)}</span>}
+                      </span>
+                    </button>
+                  </li>
+                  {open && group.items.map((tx) => renderTransactionRow(tx))}
+                </Fragment>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="card">
+          <div className="section-header">
+            <button
+              type="button"
+              className="report-group-header report-card-toggle"
+              onClick={() => setShowYearly((open) => !open)}
+              aria-expanded={showYearly}
+            >
+              <span className="report-group-chevron">{showYearly ? "▾" : "▸"}</span>
+              <span className="card-title">Visão anual</span>
+            </button>
+            {showYearly && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <button type="button" className="btn-icon" onClick={() => setSelectedYear((y) => y - 1)} title="Ano anterior">
+                  ◀
+                </button>
+                <strong>{selectedYear}</strong>
+                <button type="button" className="btn-icon" onClick={() => setSelectedYear((y) => y + 1)} title="Próximo ano">
+                  ▶
+                </button>
+              </div>
+            )}
+          </div>
+          {showYearly && yearSummary && (
             <>
               <p className="card-subtitle">
                 Total do ano: <strong className="income-text">{formatCurrency(Number(yearSummary.totalIncome))}</strong>{" "}
@@ -323,142 +682,6 @@ export function ReportsPage() {
               </ul>
             </>
           )}
-        </div>
-
-        <div className="card">
-          <p className="card-title">Receita x Gasto</p>
-          {transactions && transactions.length === 0 ? (
-            <p className="empty-state">Nenhuma transação neste mês.</p>
-          ) : (
-            <IncomeExpenseDonut income={incomeTotal} expense={expenseTotal} />
-          )}
-        </div>
-
-        <div className="card">
-          <p className="card-title">Por categoria</p>
-          {summary && summary.byCategory.length === 0 ? (
-            <p className="empty-state">Nenhuma despesa neste mês.</p>
-          ) : (
-            <CategoryPieChart
-              slices={pieSlices}
-              selectedId={selectedCategoryId}
-              onSelect={setSelectedCategoryId}
-            />
-          )}
-        </div>
-
-        <div className="card">
-          <div className="section-header">
-            <p className="card-title">
-              Extrato
-              {selectedCategoryLabel && ` · ${selectedCategoryLabel.categoryEmoji ?? "✨"} ${selectedCategoryLabel.categoryName ?? "Sem categoria"}`}
-            </p>
-            {selectedCategoryId && (
-              <button type="button" className="link-button" onClick={() => setSelectedCategoryId(null)}>
-                × Limpar filtro
-              </button>
-            )}
-          </div>
-          {transactions && transactions.length > 0 && (
-            <input
-              type="search"
-              placeholder="Buscar por descrição..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ marginBottom: "0.85rem" }}
-              aria-label="Buscar lançamentos por descrição"
-            />
-          )}
-          {error && (
-            <p className="alert" role="alert">
-              {error}
-            </p>
-          )}
-          {transactions && transactions.length > 0 && visibleTransactions.length === 0 && (
-            <p className="empty-state">
-              {searchQuery.trim() ? `Nada encontrado pra "${searchQuery.trim()}".` : "Nenhuma transação nessa categoria."}
-            </p>
-          )}
-          {transactions && transactions.length === 0 && (
-            <p className="empty-state">Nenhuma transação neste mês.</p>
-          )}
-          <ul className="transaction-list">
-            {transactionGroups.map((dayGroup) => (
-              <Fragment key={dayGroup.label}>
-                <li className="date-group-header">{dayGroup.label}</li>
-                {dayGroup.items.map((tx) => (
-                  <li key={tx.id} className="transaction-row">
-                    <span
-                      className="transaction-icon"
-                      style={{ background: tint(categoryColor(tx.categoryId)) }}
-                    >
-                      {tx.categoryEmoji ?? "💸"}
-                    </span>
-                    <div className="transaction-info">
-                      <span className="transaction-desc">
-                        {tx.description}
-                        {tx.isPrivate && <span className="badge private-badge">privado</span>}
-                        {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
-                      </span>
-                      <span className="transaction-meta">
-                        {tx.categoryName ?? "Sem categoria"}
-                        {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
-                        {tx.splitType === "equal" && (
-                          <SplitStatusPill
-                            token={token}
-                            transactionId={tx.id}
-                            totalAmount={Number(tx.amount)}
-                            isSettled={tx.isSettled}
-                            onOptimisticChange={(next) => setTransactionSettled(tx.id, next)}
-                            onSettled={() => load(month)}
-                            onError={(message) => setError(message)}
-                          />
-                        )}
-                      </span>
-                    </div>
-                    <span className={`transaction-amount ${tx.transactionType}`}>
-                      {tx.transactionType === "income" ? "+" : "-"}
-                      {formatCurrency(Number(tx.amount))}
-                    </span>
-                    <div className="transaction-row-actions">
-                      <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
-                        ✎
-                      </button>
-                      <RowActionsMenu
-                        actions={[
-                          ...(tx.recurringGroupId
-                            ? [
-                                {
-                                  key: "edit-recurring",
-                                  label: "Editar valor da recorrência",
-                                  icon: "✏️🔁",
-                                  onClick: () => setEditingRecurringTx(tx),
-                                },
-                                {
-                                  key: "cancel-recurring",
-                                  label: "Cancelar recorrência",
-                                  icon: "🔁🚫",
-                                  disabled: deletingId === tx.id,
-                                  onClick: () => handleCancelRecurring(tx.id),
-                                },
-                              ]
-                            : []),
-                          {
-                            key: "delete",
-                            label: "Excluir",
-                            icon: "🗑",
-                            disabled: deletingId === tx.id,
-                            danger: true,
-                            onClick: () => handleDelete(tx.id),
-                          },
-                        ]}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </Fragment>
-            ))}
-          </ul>
         </div>
       </div>
 

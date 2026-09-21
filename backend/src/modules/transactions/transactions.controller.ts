@@ -104,7 +104,9 @@ export async function createTransactionHandler(req: Request, res: Response) {
 }
 
 export async function listTransactionsHandler(req: Request, res: Response) {
-  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  // 500, not 100: the Relatórios page builds its totals and groupings from this
+  // list, so a busy month cut off at 100 rows made every number wrong.
+  const limit = Math.min(Number(req.query.limit) || 20, 500);
   const month = typeof req.query.month === "string" ? req.query.month : undefined;
   const accountId = typeof req.query.accountId === "string" ? req.query.accountId : undefined;
 
