@@ -14,6 +14,8 @@ import { groupsRouter } from "./modules/groups/groups.routes";
 import { quotesRouter } from "./modules/quotes/quotes.routes";
 import { recurringBillsRouter } from "./modules/recurringBills/recurringBills.routes";
 import { remindersRouter } from "./modules/reminders/reminders.routes";
+import { publicSharesRouter, sharesRouter } from "./modules/shares/shares.routes";
+import { statementsRouter } from "./modules/statements/statements.routes";
 import { shoppingRouter } from "./modules/shopping/shopping.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
 import {
@@ -86,6 +88,9 @@ export function createApp() {
   app.use("/api/reminders", remindersRouter);
   app.use("/api/recurring-bills", recurringBillsRouter);
   app.use("/api/alerts", alertsRouter);
+  app.use("/api/shares", sharesRouter);
+  app.use("/api/statements", statementsRouter);
+  app.use("/api/public/shares", publicSharesRouter);
 
   app.use(errorHandler);
 
