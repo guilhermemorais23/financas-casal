@@ -20,6 +20,7 @@ import {
   insertTransactionSeries,
   setTransactionSettled,
   updateTransaction,
+  type PaymentMethod,
   type SplitType,
   type SummaryScope,
   type TransactionType,
@@ -52,6 +53,7 @@ export interface CreateTransactionInput {
   occurredAt: string;
   isPrivate: boolean;
   splitType: SplitType;
+  paymentMethod?: PaymentMethod | null;
   // When set, generates `months` occurrences (this one plus months-1 more,
   // one per month, same day-of-month clamped to shorter months) in one go
   // instead of just this single transaction.
@@ -105,6 +107,7 @@ export async function createTransaction(userId: string, input: CreateTransaction
       transactionType: input.transactionType,
       isPrivate: input.isPrivate,
       splitType: input.splitType,
+      paymentMethod: input.paymentMethod ?? null,
     },
     occurredAtDates
   );
@@ -400,6 +403,7 @@ export interface UpdateTransactionInput {
   occurredAt?: string;
   payerId?: string;
   accountId?: string;
+  paymentMethod?: PaymentMethod | null;
 }
 
 export async function updateTransactionForUser(
@@ -447,6 +451,7 @@ export async function updateTransactionForUser(
     categoryId: input.categoryId,
     occurredAt: input.occurredAt,
     payerId: input.payerId,
+    paymentMethod: input.paymentMethod,
     ...accountFields,
   });
 

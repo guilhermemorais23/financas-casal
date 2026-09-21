@@ -9,6 +9,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, personTint, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, parseLocalDate } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 
 interface AccountRow {
   id: string;
@@ -36,6 +37,7 @@ interface TransactionListRow {
   occurredAt: string;
   payerId: string;
   accountId: string;
+  paymentMethod: PaymentMethod | null;
   categoryId: string | null;
   categoryName: string | null;
   categoryEmoji: string | null;
@@ -354,7 +356,8 @@ export function ParPage() {
                 <div className="transaction-info">
                   <span className="transaction-desc">{tx.description}</span>
                   <span className="transaction-meta">
-                    {memberName(tx.payerId)} · {tx.categoryName ?? "Sem categoria"} ·{" "}
+                    {memberName(tx.payerId)} · {tx.categoryName ?? "Sem categoria"}
+                    {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`} ·{" "}
                     {parseLocalDate(tx.occurredAt).toLocaleDateString("pt-BR")}
                     {tx.splitType === "equal" && (
                       <SplitStatusPill

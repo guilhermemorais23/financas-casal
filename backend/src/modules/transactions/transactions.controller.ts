@@ -26,7 +26,12 @@ import {
   updateRecurringForUser,
   updateTransactionForUser,
 } from "./transactions.service";
-import type { SplitType, TransactionType } from "./transactions.repository";
+import { PAYMENT_METHODS, type PaymentMethod, type SplitType, type TransactionType } from "./transactions.repository";
+
+// undefined = not sent, null = "não informado" (clears it on update).
+function isValidPaymentMethod(value: unknown): boolean {
+  return value === undefined || value === null || PAYMENT_METHODS.includes(value as PaymentMethod);
+}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -44,6 +49,7 @@ export async function createTransactionHandler(req: Request, res: Response) {
     isPrivate,
     splitType,
     recurringMonths,
+    paymentMethod,
   } = req.body ?? {};
 
   if (
@@ -54,10 +60,11 @@ export async function createTransactionHandler(req: Request, res: Response) {
     typeof amount !== "number" ||
     amount <= 0 ||
     (transactionType !== undefined && transactionType !== "expense" && transactionType !== "income") ||
-    (recurringMonths !== undefined && recurringMonths !== null && typeof recurringMonths !== "number")
+    (recurringMonths !== undefined && recurringMonths !== null && typeof recurringMonths !== "number") ||
+    !isValidPaymentMethod(paymentMethod)
   ) {
     res.status(400).json({
-      error: "accountId, payerId, description, amount and occurredAt are required",
+      error: "accountId, payerId, description, amount and occurredAt are required; paymentMethod (if set) must be credit, debit, pix or cash",
     });
     return;
   }
@@ -73,6 +80,7 @@ export async function createTransactionHandler(req: Request, res: Response) {
       occurredAt,
       isPrivate: Boolean(isPrivate),
       splitType: (splitType as SplitType) ?? "none",
+      paymentMethod: (paymentMethod as PaymentMethod | null | undefined) ?? null,
       recurring: typeof recurringMonths === "number" ? { months: recurringMonths } : undefined,
     });
     res.status(201).json(transaction);
@@ -189,7 +197,14 @@ export async function getYearlySummaryHandler(req: Request, res: Response) {
   }
 }
 
-const CSV_HEADER = ["Data", "Descricao", "Categoria", "Tipo", "Valor", "Conta", "Privado"];
+const CSV_HEADER = ["Data", "Descricao", "Categoria", "Tipo", "Valor", "Conta", "Pagamento", "Privado"];
+
+const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  credit: "Credito",
+  debit: "Debito",
+  pix: "Pix",
+  cash: "Dinheiro",
+};
 
 export async function exportTransactionsHandler(req: Request, res: Response) {
   const month = typeof req.query.month === "string" ? req.query.month : undefined;
@@ -203,6 +218,7 @@ export async function exportTransactionsHandler(req: Request, res: Response) {
       tx.transactionType === "income" ? "Receita" : "Despesa",
       tx.amount,
       tx.accountType === "joint" ? "Conjunta" : "Pessoal",
+      tx.paymentMethod ? PAYMENT_METHOD_LABEL[tx.paymentMethod] : "",
       tx.isPrivate ? "Sim" : "Nao",
     ]);
     const csv = toCsv([CSV_HEADER, ...rows]);
@@ -226,7 +242,8 @@ export async function exportTransactionsHandler(req: Request, res: Response) {
 }
 
 export async function updateTransactionHandler(req: Request, res: Response) {
-  const { description, amount, transactionType, categoryId, occurredAt, payerId, accountId } = req.body ?? {};
+  const { description, amount, transactionType, categoryId, occurredAt, payerId, accountId, paymentMethod } =
+    req.body ?? {};
 
   if (
     (description !== undefined && !isNonEmptyString(description)) ||
@@ -235,7 +252,8 @@ export async function updateTransactionHandler(req: Request, res: Response) {
     (occurredAt !== undefined && !isNonEmptyString(occurredAt)) ||
     (categoryId !== undefined && categoryId !== null && !isNonEmptyString(categoryId)) ||
     (payerId !== undefined && !isNonEmptyString(payerId)) ||
-    (accountId !== undefined && !isNonEmptyString(accountId))
+    (accountId !== undefined && !isNonEmptyString(accountId)) ||
+    !isValidPaymentMethod(paymentMethod)
   ) {
     res.status(400).json({ error: "invalid transaction update" });
     return;
@@ -250,6 +268,7 @@ export async function updateTransactionHandler(req: Request, res: Response) {
       occurredAt,
       payerId,
       accountId,
+      paymentMethod: paymentMethod as PaymentMethod | null | undefined,
     });
     res.status(200).json(transaction);
   } catch (err) {

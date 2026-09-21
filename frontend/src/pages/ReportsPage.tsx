@@ -14,6 +14,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay, monthLongName } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 
 interface CategorySummaryRow {
   categoryId: string | null;
@@ -54,6 +55,7 @@ interface TransactionListRow {
   splitType: "none" | "equal";
   isSettled: boolean;
   accountId: string;
+  paymentMethod: PaymentMethod | null;
   payerId: string;
 }
 
@@ -400,6 +402,7 @@ export function ReportsPage() {
                       </span>
                       <span className="transaction-meta">
                         {tx.categoryName ?? "Sem categoria"}
+                        {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
                         {tx.splitType === "equal" && (
                           <SplitStatusPill
                             token={token}

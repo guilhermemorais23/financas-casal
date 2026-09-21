@@ -186,3 +186,49 @@ describe("getYearlySummaryForUser", () => {
     expect(summary.totalIncome).toBe("3000.00");
   });
 });
+
+describe("paymentMethod", () => {
+  it("is stored on create, editable, and clearable back to null", async () => {
+    const { userAId, personalAccountId } = await createTestGroup();
+    const tx = await createTransaction(userAId, {
+      accountId: personalAccountId,
+      categoryId: null,
+      payerId: userAId,
+      description: "tênis",
+      amount: 200,
+      transactionType: "expense",
+      occurredAt: todayISO(),
+      isPrivate: false,
+      splitType: "none",
+      paymentMethod: "credit",
+    });
+    expect(tx.paymentMethod).toBe("credit");
+
+    const toPix = await updateTransactionForUser(userAId, tx.id, { paymentMethod: "pix" });
+    expect(toPix.paymentMethod).toBe("pix");
+
+    // Editing something else must leave it alone...
+    const renamed = await updateTransactionForUser(userAId, tx.id, { description: "tênis novo" });
+    expect(renamed.paymentMethod).toBe("pix");
+
+    // ...and null explicitly clears it.
+    const cleared = await updateTransactionForUser(userAId, tx.id, { paymentMethod: null });
+    expect(cleared.paymentMethod).toBeNull();
+  });
+
+  it("defaults to null when not informed", async () => {
+    const { userAId, personalAccountId } = await createTestGroup();
+    const tx = await createTransaction(userAId, {
+      accountId: personalAccountId,
+      categoryId: null,
+      payerId: userAId,
+      description: "café",
+      amount: 8,
+      transactionType: "expense",
+      occurredAt: todayISO(),
+      isPrivate: false,
+      splitType: "none",
+    });
+    expect(tx.paymentMethod).toBeNull();
+  });
+});

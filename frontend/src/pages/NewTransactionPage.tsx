@@ -6,6 +6,7 @@ import { EmojiPicker } from "../components/EmojiPicker";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency } from "../utils/format";
+import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
 
 interface AccountRow {
   id: string;
@@ -44,6 +45,7 @@ export function NewTransactionPage() {
   const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [splitType, setSplitType] = useState<"none" | "equal">("none");
   const [isPrivate, setIsPrivate] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringMonths, setRecurringMonths] = useState("12");
 
@@ -142,6 +144,7 @@ export function NewTransactionPage() {
           occurredAt,
           splitType: isIncome ? "none" : splitType,
           isPrivate: isIncome ? false : isPrivate,
+          paymentMethod: paymentMethod || null,
           recurringMonths: isRecurring ? parsedMonths : null,
         },
       });
@@ -280,6 +283,22 @@ export function NewTransactionPage() {
               {members.map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.id === user?.id ? "Você" : member.displayName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="payment-method">{isIncome ? "Forma de recebimento" : "Forma de pagamento"} (opcional)</label>
+            <select
+              id="payment-method"
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod | "")}
+            >
+              <option value="">Não informado</option>
+              {PAYMENT_METHOD_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.icon} {option.label}
                 </option>
               ))}
             </select>
