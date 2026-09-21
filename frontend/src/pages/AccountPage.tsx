@@ -9,6 +9,7 @@ import { personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
+import { ImportStatementModal } from "../components/ImportStatementModal";
 
 interface AccountRow {
   id: string;
@@ -71,6 +72,7 @@ export function AccountPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isRevokingSessions, setIsRevokingSessions] = useState(false);
   const [telegramCode, setTelegramCode] = useState<string | null>(null);
@@ -393,6 +395,31 @@ export function AccountPage() {
             ))}
           </ul>
         </div>
+
+        <div className="card">
+          <p className="card-title">Contas conectadas</p>
+          <p className="card-subtitle">
+            Traga os lançamentos do seu banco sem digitar. Hoje pelo arquivo do extrato; conectando a conta, eles entram
+            sozinhos.
+          </p>
+          <div className="connect-actions">
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsImportOpen(true)}>
+              <Icon name="upload" />
+              Importar extrato
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => showToast("Open Finance chega em breve. Por enquanto, importe o extrato do banco.")}
+            >
+              <Icon name="bank" />
+              Conectar conta
+              <span className="pill-soon">Em breve</span>
+            </button>
+          </div>
+        </div>
+
+        {isImportOpen && <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load()} />}
 
         <div className="card form-card">
           <p className="card-title">Orçamento do mês</p>

@@ -27,6 +27,7 @@ function namedLazy<K extends string>(loader: () => Promise<Record<K, ComponentTy
 // the chunk after that, same as any other lazy import. LoginPage stays
 // eager -- it's the one screen nearly everyone hits on the coldest possible
 // load, so there's nothing to gain deferring it.
+const SharedReportPage = lazy(() => import("./pages/SharedReportPage"));
 const RegisterPage = namedLazy(() => import("./pages/RegisterPage"), "RegisterPage");
 const GroupSetupPage = namedLazy(() => import("./pages/GroupSetupPage"), "GroupSetupPage");
 const DashboardPage = namedLazy(() => import("./pages/DashboardPage"), "DashboardPage");
@@ -53,6 +54,7 @@ function App() {
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/r/:token" element={<SharedReportPage />} />
             <Route
               path="/group-setup"
               element={

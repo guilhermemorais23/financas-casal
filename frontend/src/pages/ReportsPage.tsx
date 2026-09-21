@@ -2,9 +2,11 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiDownload, apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { CategoryPieChart } from "../components/CategoryPieChart";
+import { CategoryBars } from "../components/CategoryBars";
 import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
+import { ExportMenu } from "../components/ExportMenu";
+import { ImportStatementModal } from "../components/ImportStatementModal";
 import { Icon } from "../components/Icon";
 import { MonthPicker } from "../components/MonthPicker";
 import { RowActionsMenu } from "../components/RowActionsMenu";
@@ -13,9 +15,10 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
-import { currentMonthParam, formatCurrency, groupByDay, monthLongName } from "../utils/format";
+import { currentMonthParam, formatCurrency, groupByDay, monthLongName, previousMonthParam } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { readCache, writeCache } from "../utils/pageCache";
+import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 
@@ -147,6 +150,10 @@ export function ReportsPage() {
   // falls back to the default in isGroupOpen below.
   const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
   const [showYearly, setShowYearly] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  // Previous month's total spending, only to write the one-line insight
+  // under the numbers ("gastou X% menos que em agosto").
+  const [prevExpenseTotal, setPrevExpenseTotal] = useState<number | null>(null);
 
   const [selectedYear, setSelectedYear] = useState(() => Number(month.slice(0, 4)));
   const [yearSummary, setYearSummary] = useState<YearlySummaryResponse | null>(() =>
@@ -195,6 +202,20 @@ export function ReportsPage() {
   }
 
   useEffect(() => {
+    let cancelled = false;
+    apiRequest<SummaryResponse>(`/transactions/summary?month=${previousMonthParam(month)}&scope=visible`, { token })
+      .then((res) => {
+        if (!cancelled) setPrevExpenseTotal(Number(res.total));
+      })
+      .catch(() => {
+        if (!cancelled) setPrevExpenseTotal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, month]);
+
+  useEffect(() => {
     const refetch = () => void load(month, { silent: true });
     window.addEventListener(DATA_CHANGED_EVENT, refetch);
     return () => window.removeEventListener(DATA_CHANGED_EVENT, refetch);
@@ -232,6 +253,62 @@ export function ReportsPage() {
       setError(err instanceof ApiError ? err.message : "Não foi possível exportar");
     } finally {
       setIsExporting(false);
+    }
+  }
+
+  function handlePdf() {
+    if (!transactions || !summary) return;
+    const opened = printMonthReport({
+      title: `${monthLongName(month)} de ${month.slice(0, 4)}`,
+      ownerName: user?.displayName ?? "",
+      incomeTotal,
+      expenseTotal,
+      categories: summary.byCategory.map((row) => ({
+        label: row.categoryName ?? "Sem categoria",
+        emoji: row.categoryEmoji,
+        value: Number(row.total),
+      })),
+      rows: transactions
+        .slice()
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+        .map((tx) => ({
+          occurredAt: tx.occurredAt,
+          description: tx.description,
+          categoryLabel: tx.categoryName ?? "Sem categoria",
+          amount: Number(tx.amount),
+          transactionType: tx.transactionType,
+        })),
+    });
+    if (opened) showToast("Na tela de impressão, escolha “Salvar como PDF”");
+    else setError("O navegador bloqueou a janela do PDF. Libere pop-ups para este site e tente de novo.");
+  }
+
+  async function handleShare() {
+    setError(null);
+    try {
+      const share = await apiRequest<{ id: string; expiresAt: string }>("/shares", {
+        method: "POST",
+        token,
+        body: { month },
+      });
+      const url = `${window.location.origin}/r/${share.id}`;
+      let copied = true;
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        copied = false;
+      }
+      showToast(copied ? "Link copiado · vale por 7 dias" : `Link criado: ${url}`, {
+        actionLabel: "Revogar",
+        durationMs: copied ? 6000 : 12000,
+        onAction: () => {
+          apiRequest(`/shares/${share.id}`, { method: "DELETE", token })
+            .then(() => showToast("Link revogado"))
+            .catch(() => showToast("Não foi possível revogar o link"));
+        },
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível criar o link");
     }
   }
 
@@ -396,6 +473,22 @@ export function ReportsPage() {
     [summary]
   );
 
+  const insight = useMemo(() => {
+    if (!summary || expenseTotal <= 0) return null;
+    const parts: string[] = [];
+    if (prevExpenseTotal && prevExpenseTotal > 0) {
+      const change = Math.round(((expenseTotal - prevExpenseTotal) / prevExpenseTotal) * 100);
+      const prevName = monthLongName(previousMonthParam(month));
+      if (change === 0) parts.push(`Você gastou o mesmo que em ${prevName}.`);
+      else parts.push(`Você gastou ${Math.abs(change)}% ${change < 0 ? "menos" : "mais"} que em ${prevName}.`);
+    }
+    const top = summary.byCategory.slice().sort((a, b) => Number(b.total) - Number(a.total))[0];
+    if (top && Number(top.total) > 0) {
+      parts.push(`${top.categoryName ?? "Sem categoria"} pesa ${Math.round((Number(top.total) / expenseTotal) * 100)}% das saídas.`);
+    }
+    return parts.length > 0 ? parts.join(" ") : null;
+  }, [summary, expenseTotal, prevExpenseTotal, month]);
+
   function renderTransactionRow(tx: TransactionListRow) {
     return (
         <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
@@ -475,24 +568,16 @@ export function ReportsPage() {
           <h1>Relatórios</h1>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <MonthPicker value={month} onChange={setMonth} />
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={handleExport}
-              disabled={isExporting || !transactions || transactions.length === 0}
-              title="Baixar os lançamentos deste mês em CSV"
-            >
-              {isExporting ? "Baixando..." : "⬇ CSV"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={handleExportAll}
-              disabled={isExporting}
-              title="Baixar todos os lançamentos de todos os meses em CSV"
-            >
-              ⬇ Tudo
-            </button>
+            <ExportMenu
+              monthLabel={monthLongName(month)}
+              busy={isExporting}
+              disabled={!transactions || transactions.length === 0}
+              onPdf={handlePdf}
+              onCsvMonth={handleExport}
+              onCsvAll={handleExportAll}
+              onShare={handleShare}
+              onImport={() => setIsImportOpen(true)}
+            />
           </div>
         </div>
 
@@ -514,16 +599,19 @@ export function ReportsPage() {
           </div>
         </div>
 
+        {insight && (
+          <p className="report-insight">
+            <Icon name="spark" />
+            <span>{insight}</span>
+          </p>
+        )}
+
         <div className="card">
           <p className="card-title">Por categoria</p>
           {summary && summary.byCategory.length === 0 ? (
             <p className="empty-state">Nenhuma despesa neste mês.</p>
           ) : (
-            <CategoryPieChart
-              slices={pieSlices}
-              selectedId={selectedCategoryId}
-              onSelect={setSelectedCategoryId}
-            />
+            <CategoryBars slices={pieSlices} selectedId={selectedCategoryId} onSelect={setSelectedCategoryId} />
           )}
         </div>
 
@@ -752,6 +840,8 @@ export function ReportsPage() {
           )}
         </div>
       </div>
+
+      {isImportOpen && <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { silent: true })} />}
 
       {editingTx && (
         <EditTransactionModal
