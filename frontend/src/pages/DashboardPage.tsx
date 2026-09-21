@@ -340,12 +340,11 @@ export function DashboardPage() {
       // tick so it never competes with what's actually on screen.
       const prevMonth = previousMonthParam(selectedMonth);
       const nextMonth = nextMonthParam(selectedMonth);
-      const neighborMonths = [
-        prevMonth,
-        previousMonthParam(prevMonth),
-        nextMonth,
-        nextMonthParam(nextMonth),
-      ];
+      // Only the two adjacent months: each prefetch is a whole dashboard
+      // bundle (hundreds of Firestore reads), and the free plan's daily read
+      // quota was being exhausted (login itself started failing with
+      // "Internal server error") with four of them fired on every load.
+      const neighborMonths = [prevMonth, nextMonth];
       idle(() => {
         neighborMonths.forEach((neighborMonth) => prefetchMonth(neighborMonth));
       });
