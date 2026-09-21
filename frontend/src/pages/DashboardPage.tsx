@@ -261,7 +261,8 @@ export function DashboardPage() {
       setGoalHighlight(data.goalHighlight);
       setNextInvoice(data.nextInvoice);
       setTrend6m(data.trend6m);
-      setAlerts(data.alerts);
+      // ?? []: a response cached by an older build has no `alerts` at all.
+      setAlerts(data.alerts ?? []);
     }
 
     writeCache(sKey("group"), data.group);
@@ -278,7 +279,7 @@ export function DashboardPage() {
     writeCache(mKey("categoryBudgets"), data.categoryBudgets);
     writeCache(mKey("dailyTrend"), data.dailyTrend);
     writeCache(mKey("trend6m"), data.trend6m);
-    writeCache(mKey("alerts"), data.alerts);
+    writeCache(mKey("alerts"), data.alerts ?? []);
     // The whole response, one key -- lets load() below check "do we already
     // have this month?" with a single readCache instead of guessing from
     // one field. This is what prefetchMonth's warm-up actually pays off:
