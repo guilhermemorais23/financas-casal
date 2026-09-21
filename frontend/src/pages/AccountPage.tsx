@@ -7,6 +7,9 @@ import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
+import { Icon } from "../components/Icon";
+import { useConfirm } from "../components/ConfirmDialog";
+import { ImportStatementModal } from "../components/ImportStatementModal";
 
 interface AccountRow {
   id: string;
@@ -52,6 +55,7 @@ export function AccountPage() {
   const { user, token, logout, refreshUser, revokeAllSessions } = useAuth();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [group, setGroup] = useState<GroupResponse | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
   const [capInput, setCapInput] = useState("");
@@ -68,6 +72,7 @@ export function AccountPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isRevokingSessions, setIsRevokingSessions] = useState(false);
   const [telegramCode, setTelegramCode] = useState<string | null>(null);
@@ -121,9 +126,11 @@ export function AccountPage() {
   }
 
   async function handleDeleteCategory(categoryId: string) {
-    const confirmed = window.confirm(
-      "Excluir essa categoria? Lançamentos que já usam ela ficam sem categoria, mas não são apagados."
-    );
+    const confirmed = await confirm({
+      title: "Excluir categoria?",
+      body: "Lançamentos que já usam ela ficam sem categoria, mas não são apagados.",
+      confirmLabel: "Excluir",
+    });
     if (!confirmed) return;
 
     setError(null);
@@ -215,9 +222,11 @@ export function AccountPage() {
   }
 
   async function handleRemoveMember(memberId: string, memberName: string) {
-    const confirmed = window.confirm(
-      `Remover ${memberName} do grupo? A conta pessoal dela some do grupo, mas nada é apagado -- ela pode criar ou entrar em outro grupo depois.`
-    );
+    const confirmed = await confirm({
+      title: `Remover ${memberName} do grupo?`,
+      body: "A conta pessoal some do grupo, mas nada é apagado. A pessoa pode criar ou entrar em outro grupo depois.",
+      confirmLabel: "Remover",
+    });
     if (!confirmed) return;
 
     setError(null);
@@ -233,9 +242,11 @@ export function AccountPage() {
   }
 
   async function handleLeaveGroup() {
-    const confirmed = window.confirm(
-      "Desvincular sua conta desse grupo? Você continua usando o app individualmente e pode criar ou entrar em outro grupo depois."
-    );
+    const confirmed = await confirm({
+      title: "Desvincular sua conta?",
+      body: "Você continua usando o app individualmente e pode criar ou entrar em outro grupo depois.",
+      confirmLabel: "Desvincular",
+    });
     if (!confirmed) return;
 
     setError(null);
@@ -251,9 +262,11 @@ export function AccountPage() {
   }
 
   async function handleRevokeSessions() {
-    const confirmed = window.confirm(
-      "Sair de todos os dispositivos? Qualquer outra sessão aberta (celular, outro navegador) é desconectada, e você também sai daqui."
-    );
+    const confirmed = await confirm({
+      title: "Sair de todos os dispositivos?",
+      body: "Qualquer outra sessão aberta (celular, outro navegador) é desconectada, e você também sai daqui.",
+      confirmLabel: "Sair de tudo",
+    });
     if (!confirmed) return;
 
     setError(null);
@@ -339,7 +352,7 @@ export function AccountPage() {
                       disabled={removingMemberId === member.id}
                       onClick={() => handleRemoveMember(member.id, member.displayName)}
                     >
-                      🗑
+                      <Icon name="trash" />
                     </button>
                   )}
                 </li>
@@ -382,6 +395,31 @@ export function AccountPage() {
             ))}
           </ul>
         </div>
+
+        <div className="card">
+          <p className="card-title">Contas conectadas</p>
+          <p className="card-subtitle">
+            Traga os lançamentos do seu banco sem digitar. Hoje pelo arquivo do extrato; conectando a conta, eles entram
+            sozinhos.
+          </p>
+          <div className="connect-actions">
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsImportOpen(true)}>
+              <Icon name="upload" />
+              Importar extrato
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => showToast("Open Finance chega em breve. Por enquanto, importe o extrato do banco.")}
+            >
+              <Icon name="bank" />
+              Conectar conta
+              <span className="pill-soon">Em breve</span>
+            </button>
+          </div>
+        </div>
+
+        {isImportOpen && <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load()} />}
 
         <div className="card form-card">
           <p className="card-title">Orçamento do mês</p>
@@ -467,7 +505,7 @@ export function AccountPage() {
                         title="Editar"
                         onClick={() => startEditCategory(category)}
                       >
-                        ✎
+                        <Icon name="pencil" />
                       </button>
                       <button
                         type="button"
@@ -476,7 +514,7 @@ export function AccountPage() {
                         disabled={categoryActionId === category.id}
                         onClick={() => handleDeleteCategory(category.id)}
                       >
-                        🗑
+                        <Icon name="trash" />
                       </button>
                     </>
                   )}

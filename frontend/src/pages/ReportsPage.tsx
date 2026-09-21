@@ -2,17 +2,24 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiDownload, apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { CategoryPieChart } from "../components/CategoryPieChart";
+import { CategoryBars } from "../components/CategoryBars";
 import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
+import { ExportMenu } from "../components/ExportMenu";
+import { ImportStatementModal } from "../components/ImportStatementModal";
+import { Icon } from "../components/Icon";
 import { MonthPicker } from "../components/MonthPicker";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { SplitStatusPill } from "../components/SplitStatusPill";
+import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
-import { currentMonthParam, formatCurrency, groupByDay, monthLongName } from "../utils/format";
+import { currentMonthParam, formatCurrency, groupByDay, monthLongName, previousMonthParam } from "../utils/format";
+import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { readCache, writeCache } from "../utils/pageCache";
+import { printMonthReport } from "../utils/printReport";
+import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 
 interface CategorySummaryRow {
@@ -108,6 +115,7 @@ function buildGroups(rows: TransactionListRow[], mode: GroupMode): TxGroup[] {
 export function ReportsPage() {
   const { user, token } = useAuth();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [isExporting, setIsExporting] = useState(false);
   const cacheKey = (name: string, forMonth: string) => `reports:${name}:${forMonth}:${user?.id ?? "anon"}`;
 
@@ -128,7 +136,7 @@ export function ReportsPage() {
     readCache(cacheKey("transactions", month))
   );
   const [isLoading, setIsLoading] = useState(!summary);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
@@ -142,6 +150,10 @@ export function ReportsPage() {
   // falls back to the default in isGroupOpen below.
   const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
   const [showYearly, setShowYearly] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  // Previous month's total spending, only to write the one-line insight
+  // under the numbers ("gastou X% menos que em agosto").
+  const [prevExpenseTotal, setPrevExpenseTotal] = useState<number | null>(null);
 
   const [selectedYear, setSelectedYear] = useState(() => Number(month.slice(0, 4)));
   const [yearSummary, setYearSummary] = useState<YearlySummaryResponse | null>(() =>
@@ -165,20 +177,21 @@ export function ReportsPage() {
       });
   }, [token, selectedYear, showYearly]);
 
-  async function load(selectedMonth: string) {
-    setIsLoading(true);
+  async function load(selectedMonth: string, options?: { silent?: boolean }) {
+    if (!options?.silent) setIsLoading(true);
     const cached = readCache<SummaryResponse>(cacheKey("summary", selectedMonth));
     if (cached) {
       setSummary(cached);
       setTransactions(readCache(cacheKey("transactions", selectedMonth)));
     }
     try {
+      await whenWritesSettled();
       const [summaryRes, txRes] = await Promise.all([
         apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
         apiRequest<TransactionListRow[]>(`/transactions?limit=500&month=${selectedMonth}`, { token }),
       ]);
       setSummary(summaryRes);
-      setTransactions(txRes);
+      setTransactions(txRes.filter((row) => !isDeferredPending(`tx:${row.id}`)));
       writeCache(cacheKey("summary", selectedMonth), summaryRes);
       writeCache(cacheKey("transactions", selectedMonth), txRes);
     } catch (err) {
@@ -187,6 +200,26 @@ export function ReportsPage() {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest<SummaryResponse>(`/transactions/summary?month=${previousMonthParam(month)}&scope=visible`, { token })
+      .then((res) => {
+        if (!cancelled) setPrevExpenseTotal(Number(res.total));
+      })
+      .catch(() => {
+        if (!cancelled) setPrevExpenseTotal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, month]);
+
+  useEffect(() => {
+    const refetch = () => void load(month, { silent: true });
+    window.addEventListener(DATA_CHANGED_EVENT, refetch);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, refetch);
+  }, [token, month]);
 
   useEffect(() => {
     load(month);
@@ -223,35 +256,149 @@ export function ReportsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    const confirmed = window.confirm("Excluir esse lançamento?");
-    if (!confirmed) return;
+  function handlePdf() {
+    if (!transactions || !summary) return;
+    const opened = printMonthReport({
+      title: `${monthLongName(month)} de ${month.slice(0, 4)}`,
+      ownerName: user?.displayName ?? "",
+      incomeTotal,
+      expenseTotal,
+      categories: summary.byCategory.map((row) => ({
+        label: row.categoryName ?? "Sem categoria",
+        emoji: row.categoryEmoji,
+        value: Number(row.total),
+      })),
+      rows: transactions
+        .slice()
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+        .map((tx) => ({
+          occurredAt: tx.occurredAt,
+          description: tx.description,
+          categoryLabel: tx.categoryName ?? "Sem categoria",
+          amount: Number(tx.amount),
+          transactionType: tx.transactionType,
+        })),
+    });
+    if (opened) showToast("Na tela de impressão, escolha “Salvar como PDF”");
+    else setError("O navegador bloqueou a janela do PDF. Libere pop-ups para este site e tente de novo.");
+  }
 
-    setDeletingId(id);
+  async function handleShare() {
     setError(null);
     try {
-      await apiRequest(`/transactions/${id}`, { method: "DELETE", token });
-      await load(month);
+      const share = await apiRequest<{ id: string; expiresAt: string }>("/shares", {
+        method: "POST",
+        token,
+        body: { month },
+      });
+      const url = `${window.location.origin}/r/${share.id}`;
+      let copied = true;
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        copied = false;
+      }
+      showToast(copied ? "Link copiado · vale por 7 dias" : `Link criado: ${url}`, {
+        actionLabel: "Revogar",
+        durationMs: copied ? 6000 : 12000,
+        onAction: () => {
+          apiRequest(`/shares/${share.id}`, { method: "DELETE", token })
+            .then(() => showToast("Link revogado"))
+            .catch(() => showToast("Não foi possível revogar o link"));
+        },
+      });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
-    } finally {
-      setDeletingId(null);
+      setError(err instanceof ApiError ? err.message : "Não foi possível criar o link");
     }
   }
 
-  async function handleCancelRecurring(id: string) {
-    const confirmed = window.confirm("Cancelar essa recorrência? Este lançamento e os dos próximos meses somem.");
+  // Instant local update for a removed row (exit animation, then out of the
+  // list, and the category slice shrinks) -- the server confirms in the
+  // background, nothing here waits on the network.
+  function removeLocally(tx: TransactionListRow) {
+    const amount = Number(tx.amount);
+    setLeavingIds((current) => new Set(current).add(tx.id));
+    window.setTimeout(() => {
+      setTransactions((current) => current?.filter((row) => row.id !== tx.id) ?? current);
+      setLeavingIds((current) => {
+        const next = new Set(current);
+        next.delete(tx.id);
+        return next;
+      });
+    }, 280);
+    if (tx.transactionType === "expense") {
+      setSummary((current) =>
+        current
+          ? {
+              total: String(Math.max(0, Number(current.total) - amount)),
+              byCategory: current.byCategory
+                .map((row) =>
+                  row.categoryId === tx.categoryId
+                    ? { ...row, total: String(Math.max(0, Number(row.total) - amount)) }
+                    : row
+                )
+                .filter((row) => Number(row.total) > 0),
+            }
+          : current
+      );
+    }
+  }
+
+  // Delete with Desfazer: the request only goes out once the undo window
+  // closes (utils/deferredDelete.ts), so undoing never recreates anything.
+  async function handleDelete(tx: TransactionListRow) {
+    const confirmed = await confirm({
+      title: `Excluir “${tx.description}”?`,
+      body: `${formatCurrency(Number(tx.amount))} sai do extrato e dos totais do mês. Você ainda vai poder desfazer por alguns segundos.`,
+      confirmLabel: "Excluir",
+    });
     if (!confirmed) return;
 
-    setDeletingId(id);
     setError(null);
+    const snapshot = { transactions, summary };
+    const key = `tx:${tx.id}`;
+    const targetMonth = month;
+    removeLocally(tx);
+    scheduleDeferred(key, async () => {
+      try {
+        await apiRequest(`/transactions/${tx.id}`, { method: "DELETE", token });
+        await load(targetMonth, { silent: true });
+      } catch (err) {
+        setTransactions(snapshot.transactions);
+        setSummary(snapshot.summary);
+        setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
+      }
+    });
+    showToast(`“${tx.description}” excluído`, {
+      actionLabel: "Desfazer",
+      onAction: () => {
+        if (cancelDeferred(key)) {
+          setTransactions(snapshot.transactions);
+          setSummary(snapshot.summary);
+        }
+      },
+    });
+  }
+
+  async function handleCancelRecurring(tx: TransactionListRow) {
+    const confirmed = await confirm({
+      title: `Cancelar a recorrência de “${tx.description}”?`,
+      body: "Este lançamento e os dos próximos meses somem. Os que já aconteceram continuam no extrato.",
+      confirmLabel: "Cancelar recorrência",
+    });
+    if (!confirmed) return;
+
+    setError(null);
+    const snapshot = { transactions, summary };
+    removeLocally(tx);
     try {
-      await apiRequest(`/transactions/${id}/recurring`, { method: "DELETE", token });
-      await load(month);
+      await apiRequest(`/transactions/${tx.id}/recurring`, { method: "DELETE", token });
+      showToast("Recorrência cancelada");
+      await load(month, { silent: true });
     } catch (err) {
+      setTransactions(snapshot.transactions);
+      setSummary(snapshot.summary);
       setError(err instanceof ApiError ? err.message : "Não foi possível cancelar a recorrência");
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -326,9 +473,25 @@ export function ReportsPage() {
     [summary]
   );
 
+  const insight = useMemo(() => {
+    if (!summary || expenseTotal <= 0) return null;
+    const parts: string[] = [];
+    if (prevExpenseTotal && prevExpenseTotal > 0) {
+      const change = Math.round(((expenseTotal - prevExpenseTotal) / prevExpenseTotal) * 100);
+      const prevName = monthLongName(previousMonthParam(month));
+      if (change === 0) parts.push(`Você gastou o mesmo que em ${prevName}.`);
+      else parts.push(`Você gastou ${Math.abs(change)}% ${change < 0 ? "menos" : "mais"} que em ${prevName}.`);
+    }
+    const top = summary.byCategory.slice().sort((a, b) => Number(b.total) - Number(a.total))[0];
+    if (top && Number(top.total) > 0) {
+      parts.push(`${top.categoryName ?? "Sem categoria"} pesa ${Math.round((Number(top.total) / expenseTotal) * 100)}% das saídas.`);
+    }
+    return parts.length > 0 ? parts.join(" ") : null;
+  }, [summary, expenseTotal, prevExpenseTotal, month]);
+
   function renderTransactionRow(tx: TransactionListRow) {
     return (
-        <li key={tx.id} className="transaction-row">
+        <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
           <span
             className="transaction-icon"
             style={{ background: tint(categoryColor(tx.categoryId)) }}
@@ -363,7 +526,7 @@ export function ReportsPage() {
           </span>
           <div className="transaction-row-actions">
             <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
-              ✎
+              <Icon name="pencil" />
             </button>
             <RowActionsMenu
               actions={[
@@ -372,25 +535,23 @@ export function ReportsPage() {
                       {
                         key: "edit-recurring",
                         label: "Editar valor da recorrência",
-                        icon: "✏️🔁",
+                        icon: "pencil" as const,
                         onClick: () => setEditingRecurringTx(tx),
                       },
                       {
                         key: "cancel-recurring",
                         label: "Cancelar recorrência",
-                        icon: "🔁🚫",
-                        disabled: deletingId === tx.id,
-                        onClick: () => handleCancelRecurring(tx.id),
+                        icon: "repeatOff" as const,
+                        onClick: () => handleCancelRecurring(tx),
                       },
                     ]
                   : []),
                 {
                   key: "delete",
                   label: "Excluir",
-                  icon: "🗑",
-                  disabled: deletingId === tx.id,
+                  icon: "trash" as const,
                   danger: true,
-                  onClick: () => handleDelete(tx.id),
+                  onClick: () => handleDelete(tx),
                 },
               ]}
             />
@@ -407,24 +568,16 @@ export function ReportsPage() {
           <h1>Relatórios</h1>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <MonthPicker value={month} onChange={setMonth} />
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={handleExport}
-              disabled={isExporting || !transactions || transactions.length === 0}
-              title="Baixar os lançamentos deste mês em CSV"
-            >
-              {isExporting ? "Baixando..." : "⬇ CSV"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={handleExportAll}
-              disabled={isExporting}
-              title="Baixar todos os lançamentos de todos os meses em CSV"
-            >
-              ⬇ Tudo
-            </button>
+            <ExportMenu
+              monthLabel={monthLongName(month)}
+              busy={isExporting}
+              disabled={!transactions || transactions.length === 0}
+              onPdf={handlePdf}
+              onCsvMonth={handleExport}
+              onCsvAll={handleExportAll}
+              onShare={handleShare}
+              onImport={() => setIsImportOpen(true)}
+            />
           </div>
         </div>
 
@@ -446,16 +599,19 @@ export function ReportsPage() {
           </div>
         </div>
 
+        {insight && (
+          <p className="report-insight">
+            <Icon name="spark" />
+            <span>{insight}</span>
+          </p>
+        )}
+
         <div className="card">
           <p className="card-title">Por categoria</p>
           {summary && summary.byCategory.length === 0 ? (
             <p className="empty-state">Nenhuma despesa neste mês.</p>
           ) : (
-            <CategoryPieChart
-              slices={pieSlices}
-              selectedId={selectedCategoryId}
-              onSelect={setSelectedCategoryId}
-            />
+            <CategoryBars slices={pieSlices} selectedId={selectedCategoryId} onSelect={setSelectedCategoryId} />
           )}
         </div>
 
@@ -684,6 +840,8 @@ export function ReportsPage() {
           )}
         </div>
       </div>
+
+      {isImportOpen && <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { silent: true })} />}
 
       {editingTx && (
         <EditTransactionModal

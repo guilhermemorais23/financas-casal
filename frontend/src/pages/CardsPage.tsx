@@ -5,6 +5,8 @@ import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
 import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { Icon } from "../components/Icon";
+import { useConfirm } from "../components/ConfirmDialog";
 
 interface MemberRow {
   id: string;
@@ -60,6 +62,7 @@ interface StatementDetail extends StatementSummary {
 
 export function CardsPage() {
   const { user, token } = useAuth();
+  const confirm = useConfirm();
   const cacheKey = `cards:${user?.id ?? "anon"}`;
 
   const [cards, setCards] = useState<CardRow[] | null>(() => readCache(cacheKey));
@@ -141,9 +144,11 @@ export function CardsPage() {
   }
 
   async function handleDeleteCard(cardId: string) {
-    const confirmed = window.confirm(
-      "Excluir esse cartão? Isso também remove as compras e as faturas pagas geradas por ele."
-    );
+    const confirmed = await confirm({
+      title: "Excluir esse cartão?",
+      body: "Isso também remove as compras e as faturas pagas geradas por ele.",
+      confirmLabel: "Excluir cartão",
+    });
     if (!confirmed) return;
     try {
       await apiRequest(`/cards/${cardId}`, { method: "DELETE", token });
@@ -234,11 +239,14 @@ export function CardsPage() {
   async function handleToggleStatementPaid(card: CardRow) {
     const isPaid = statement?.isPaid ?? card.currentStatement.isPaid;
     if (!isPaid) {
-      const confirmed = window.confirm(
-        `Marcar a fatura de ${monthYearLabel(statementMonth)} como paga? Isso lança uma despesa de ${formatCurrency(
+      const confirmed = await confirm({
+        title: `Marcar a fatura de ${monthYearLabel(statementMonth)} como paga?`,
+        body: `Isso lança uma despesa de ${formatCurrency(
           Number(statement?.total ?? card.currentStatement.total)
-        )} dividida entre quem comprou o quê.`
-      );
+        )} dividida entre quem comprou o quê.`,
+        confirmLabel: "Marcar como paga",
+        tone: "primary",
+      });
       if (!confirmed) return;
     }
     try {
@@ -386,7 +394,7 @@ export function CardsPage() {
                               title="Remover compra"
                               onClick={() => handleDeletePurchase(card.id, purchase.id)}
                             >
-                              🗑
+                              <Icon name="trash" />
                             </button>
                           </div>
                         )}

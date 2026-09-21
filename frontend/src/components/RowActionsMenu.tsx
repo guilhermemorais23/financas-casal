@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon, type IconName } from "./Icon";
 
 export interface RowAction {
   key: string;
   label: string;
-  icon: string;
+  icon: IconName;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
@@ -47,7 +48,7 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        ⋮
+        <Icon name="more" />
       </button>
       {open && (
         <div className="row-actions-dropdown" role="menu">
@@ -63,7 +64,7 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
                 action.onClick();
               }}
             >
-              <span aria-hidden="true">{action.icon}</span>
+              <Icon name={action.icon} />
               {action.label}
             </button>
           ))}
