@@ -27,6 +27,7 @@ import {
   previousMonthParam,
 } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 
 interface AccountWithBalance {
   id: string;
@@ -60,6 +61,7 @@ interface TransactionListRow {
   splitType: "none" | "equal";
   isSettled: boolean;
   accountId: string;
+  paymentMethod: PaymentMethod | null;
   payerId: string;
 }
 
@@ -259,7 +261,8 @@ export function DashboardPage() {
       setGoalHighlight(data.goalHighlight);
       setNextInvoice(data.nextInvoice);
       setTrend6m(data.trend6m);
-      setAlerts(data.alerts);
+      // ?? []: a response cached by an older build has no `alerts` at all.
+      setAlerts(data.alerts ?? []);
     }
 
     writeCache(sKey("group"), data.group);
@@ -276,7 +279,7 @@ export function DashboardPage() {
     writeCache(mKey("categoryBudgets"), data.categoryBudgets);
     writeCache(mKey("dailyTrend"), data.dailyTrend);
     writeCache(mKey("trend6m"), data.trend6m);
-    writeCache(mKey("alerts"), data.alerts);
+    writeCache(mKey("alerts"), data.alerts ?? []);
     // The whole response, one key -- lets load() below check "do we already
     // have this month?" with a single readCache instead of guessing from
     // one field. This is what prefetchMonth's warm-up actually pays off:
@@ -337,12 +340,11 @@ export function DashboardPage() {
       // tick so it never competes with what's actually on screen.
       const prevMonth = previousMonthParam(selectedMonth);
       const nextMonth = nextMonthParam(selectedMonth);
-      const neighborMonths = [
-        prevMonth,
-        previousMonthParam(prevMonth),
-        nextMonth,
-        nextMonthParam(nextMonth),
-      ];
+      // Only the two adjacent months: each prefetch is a whole dashboard
+      // bundle (hundreds of Firestore reads), and the free plan's daily read
+      // quota was being exhausted (login itself started failing with
+      // "Internal server error") with four of them fired on every load.
+      const neighborMonths = [prevMonth, nextMonth];
       idle(() => {
         neighborMonths.forEach((neighborMonth) => prefetchMonth(neighborMonth));
       });
@@ -864,6 +866,7 @@ export function DashboardPage() {
                             </span>
                             <span className="transaction-meta">
                               {tx.categoryName ?? "Sem categoria"}
+                              {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
                               {tx.splitType === "equal" && (
                                 <SplitStatusPill
                                   token={token}

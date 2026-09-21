@@ -1970,6 +1970,124 @@ input:focus {
   padding-top: 0;
 }
 
+/* Relatórios: filtros e grupos recolhíveis ------------------------------------ */
+
+.report-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.report-toolbar .segmented {
+  margin-bottom: 0;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.filter-chip {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.filter-chip:hover {
+  color: var(--color-text);
+}
+
+.filter-chip.active {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}
+
+.filter-chip-sep {
+  width: 1px;
+  height: 1.1rem;
+  background: var(--color-border);
+  margin: 0 0.15rem;
+}
+
+.report-summary-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.report-summary-actions {
+  display: flex;
+  gap: 0.9rem;
+}
+
+.report-group {
+  list-style: none;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.report-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0.7rem 0;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.report-group-chevron {
+  width: 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.report-group-label {
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+}
+
+.report-group-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-bg-soft);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+.report-group-total {
+  display: flex;
+  gap: 0.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.report-card-toggle {
+  width: auto;
+  padding: 0;
+}
+
 /* Transaction list ----------------------------------------------------------- */
 
 .transaction-list {

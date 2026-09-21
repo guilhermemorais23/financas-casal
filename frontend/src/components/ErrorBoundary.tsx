@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { clearCache } from "../utils/pageCache";
 
 interface Props {
   children: ReactNode;
@@ -21,6 +22,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(): State {
     return { hasError: true };
+  }
+
+  // A render crash is very often bad cached data (see pageCache.ts) -- drop
+  // it so "Recarregar" actually recovers instead of crashing again on the
+  // same stale entry.
+  componentDidCatch() {
+    clearCache();
   }
 
   render() {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
 
 interface CategoryRow {
   id: string;
@@ -29,6 +30,7 @@ export interface EditableTransaction {
   occurredAt: string;
   accountId: string;
   payerId: string;
+  paymentMethod: PaymentMethod | null;
 }
 
 export function EditTransactionModal({
@@ -54,6 +56,7 @@ export function EditTransactionModal({
   const [occurredAt, setOccurredAt] = useState(transaction.occurredAt.slice(0, 10));
   const [accountId, setAccountId] = useState(transaction.accountId);
   const [payerId, setPayerId] = useState(transaction.payerId);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">(transaction.paymentMethod ?? "");
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,6 +92,7 @@ export function EditTransactionModal({
           occurredAt,
           accountId,
           payerId,
+          paymentMethod: paymentMethod || null,
         },
       });
       onSaved();
@@ -191,6 +195,24 @@ export function EditTransactionModal({
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="edit-payment-method">
+              {transactionType === "income" ? "Forma de recebimento" : "Forma de pagamento"}
+            </label>
+            <select
+              id="edit-payment-method"
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod | "")}
+            >
+              <option value="">Não informado</option>
+              {PAYMENT_METHOD_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.icon} {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {error && (
