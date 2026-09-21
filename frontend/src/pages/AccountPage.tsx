@@ -7,6 +7,7 @@ import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
+import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 
 interface AccountRow {
@@ -349,7 +350,7 @@ export function AccountPage() {
                       disabled={removingMemberId === member.id}
                       onClick={() => handleRemoveMember(member.id, member.displayName)}
                     >
-                      🗑
+                      <Icon name="trash" />
                     </button>
                   )}
                 </li>
@@ -477,7 +478,7 @@ export function AccountPage() {
                         title="Editar"
                         onClick={() => startEditCategory(category)}
                       >
-                        ✎
+                        <Icon name="pencil" />
                       </button>
                       <button
                         type="button"
@@ -486,7 +487,7 @@ export function AccountPage() {
                         disabled={categoryActionId === category.id}
                         onClick={() => handleDeleteCategory(category.id)}
                       >
-                        🗑
+                        <Icon name="trash" />
                       </button>
                     </>
                   )}

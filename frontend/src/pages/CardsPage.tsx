@@ -5,6 +5,7 @@ import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
 import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 
 interface MemberRow {
@@ -393,7 +394,7 @@ export function CardsPage() {
                               title="Remover compra"
                               onClick={() => handleDeletePurchase(card.id, purchase.id)}
                             >
-                              🗑
+                              <Icon name="trash" />
                             </button>
                           </div>
                         )}

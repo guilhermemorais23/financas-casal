@@ -6,6 +6,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, tint } from "../utils/categoryColor";
 import { formatCurrency } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 
 interface AccountRow {
@@ -229,10 +230,10 @@ export function RecurringBillsPage() {
               {bill.isActive ? "⏸" : "▶"}
             </button>
             <button type="button" className="btn-icon" title="Editar" onClick={() => startEdit(bill)}>
-              ✎
+              <Icon name="pencil" />
             </button>
             <button type="button" className="btn-icon" title="Excluir" disabled={isBusy} onClick={() => handleDelete(bill.id)}>
-              🗑
+              <Icon name="trash" />
             </button>
           </div>
         </div>

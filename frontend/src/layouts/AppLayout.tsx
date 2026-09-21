@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { type DailyTrendPoint } from "../components/DailyTrendChart";
 import { GlobalAssistant } from "../components/GlobalAssistant";
+import { Icon, type IconName } from "../components/Icon";
 import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
 import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
 import { useTheme } from "../hooks/useTheme";
@@ -15,18 +16,18 @@ interface BudgetSummary {
   spent: number;
 }
 
-const NAV_ITEMS = [
-  { to: "/dashboard", label: "Painel", icon: "🏠" },
-  { to: "/par", label: "Par", icon: "💞" },
-  { to: "/transactions/new", label: "Nova despesa", icon: "➕" },
-  { to: "/debts", label: "Dívidas", icon: "💳" },
-  { to: "/recurring-bills", label: "Contas fixas", icon: "🔁" },
-  { to: "/cards", label: "Cartão conjunto", icon: "🧾" },
-  { to: "/shopping", label: "Lista de compras", icon: "🛒" },
-  { to: "/goals", label: "Metas", icon: "🎯" },
-  { to: "/reports", label: "Relatórios", icon: "📊" },
-  { to: "/investments", label: "Investimentos", icon: "📈" },
-  { to: "/account", label: "Conta", icon: "⚙️" },
+const NAV_ITEMS: { to: string; label: string; icon: IconName }[] = [
+  { to: "/dashboard", label: "Painel", icon: "home" },
+  { to: "/par", label: "Par", icon: "heart" },
+  { to: "/transactions/new", label: "Nova despesa", icon: "plus" },
+  { to: "/debts", label: "Dívidas", icon: "card" },
+  { to: "/recurring-bills", label: "Contas fixas", icon: "repeat" },
+  { to: "/cards", label: "Cartão conjunto", icon: "receipt" },
+  { to: "/shopping", label: "Lista de compras", icon: "cart" },
+  { to: "/goals", label: "Metas", icon: "target" },
+  { to: "/reports", label: "Relatórios", icon: "chart" },
+  { to: "/investments", label: "Investimentos", icon: "trend" },
+  { to: "/account", label: "Conta", icon: "sliders" },
 ];
 
 // Admin isn't a plain link -- it expands into a submenu (handled separately
@@ -36,12 +37,12 @@ const ADMIN_SUBLINKS = [
   { section: "logs", label: "Logs" },
 ];
 
-const BOTTOM_NAV_ITEMS = [
-  { to: "/dashboard", label: "Painel", icon: "🏠" },
-  { to: "/par", label: "Par", icon: "💞" },
-  { to: "/debts", label: "Dívidas", icon: "💳" },
-  { to: "/goals", label: "Metas", icon: "🎯" },
-  { to: "/reports", label: "Relatórios", icon: "📊" },
+const BOTTOM_NAV_ITEMS: { to: string; label: string; icon: IconName }[] = [
+  { to: "/dashboard", label: "Painel", icon: "home" },
+  { to: "/par", label: "Par", icon: "heart" },
+  { to: "/debts", label: "Dívidas", icon: "card" },
+  { to: "/goals", label: "Metas", icon: "target" },
+  { to: "/reports", label: "Relatórios", icon: "chart" },
 ];
 
 export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
@@ -51,6 +52,8 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isAdminNavOpen, setIsAdminNavOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
   const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[] | null>(null);
   const location = useLocation();
@@ -71,6 +74,22 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       .then(setDailyTrend)
       .catch(() => setDailyTrend(null));
   }, [token, sidebarMonth]);
+
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) setIsUserMenuOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsUserMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isUserMenuOpen]);
 
   useEffect(() => {
     document.body.style.overflow = isNavOpen ? "hidden" : "";
@@ -117,7 +136,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
               className={({ isActive }) => `app-nav-link${isActive ? " active" : ""}`}
               onClick={() => setIsNavOpen(false)}
             >
-              <span className="app-nav-icon">{item.icon}</span>
+              <span className="app-nav-icon"><Icon name={item.icon} /></span>
               {item.label}
             </NavLink>
           ))}
@@ -130,7 +149,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
                 onClick={() => setIsAdminNavOpen((open) => !open)}
                 aria-expanded={isAdminNavOpen}
               >
-                <span className="app-nav-icon">🛠️</span>
+                <span className="app-nav-icon"><Icon name="wrench" /></span>
                 Admin
                 <span className={`app-nav-chevron${isAdminNavOpen ? " open" : ""}`}>▾</span>
               </button>
@@ -179,37 +198,65 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
               </span>
             )}
             <span className="app-sidebar-user">{user?.displayName}</span>
-            <button
-              type="button"
-              className="theme-toggle"
-              onClick={() => setIsProfileOpen(true)}
-              title="Editar perfil"
-            >
-              ⚙️
-            </button>
-            <button
-              type="button"
-              className="theme-toggle"
-              onClick={() => {
-                setIsAssistantOpen((open) => !open);
-                setIsNavOpen(false);
-              }}
-              title="Assistente PAR."
-            >
-              💬
-            </button>
-            <button
-              type="button"
-              className="theme-toggle"
-              onClick={toggle}
-              title={theme === "dark" ? "Tema claro" : "Tema escuro"}
-            >
-              {theme === "dark" ? "☀️" : "🌙"}
-            </button>
+            <div className="user-menu-wrap" ref={userMenuRef}>
+              <button
+                type="button"
+                className="theme-toggle"
+                onClick={() => setIsUserMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={isUserMenuOpen}
+                title="Mais opções"
+              >
+                <Icon name="more" />
+              </button>
+              {isUserMenuOpen && (
+                <div className="user-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="user-menu-item"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsProfileOpen(true);
+                    }}
+                  >
+                    <Icon name="user" />
+                    Editar perfil
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="user-menu-item"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsAssistantOpen((open) => !open);
+                      setIsNavOpen(false);
+                    }}
+                  >
+                    <Icon name="chat" />
+                    Assistente PAR.
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="user-menu-item"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      toggle();
+                    }}
+                  >
+                    <Icon name={theme === "dark" ? "sun" : "moon"} />
+                    {theme === "dark" ? "Tema claro" : "Tema escuro"}
+                  </button>
+                  <div className="user-menu-sep" />
+                  <button type="button" role="menuitem" className="user-menu-item danger" onClick={logout}>
+                    <Icon name="logout" />
+                    Sair
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-          <button type="button" className="btn btn-ghost" onClick={logout}>
-            Sair
-          </button>
         </div>
       </aside>
 
@@ -223,7 +270,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
             to={item.to}
             className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}
           >
-            <span className="app-bottom-nav-icon">{item.icon}</span>
+            <span className="app-bottom-nav-icon"><Icon name={item.icon} /></span>
             {item.label}
           </NavLink>
         ))}

@@ -7,6 +7,7 @@ import { AnimatedNumber } from "../components/AnimatedNumber";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { DashboardSkeleton } from "../components/Skeleton";
+import { Icon } from "../components/Icon";
 import { EmptyState } from "../components/EmptyState";
 import { CircularProgress } from "../components/CircularProgress";
 import { EditRecurringModal } from "../components/EditRecurringModal";
@@ -982,7 +983,7 @@ export function DashboardPage() {
                               title="Editar"
                               onClick={() => setEditingTx(tx)}
                             >
-                              ✎
+                              <Icon name="pencil" />
                             </button>
                             <RowActionsMenu
                               actions={[
@@ -991,13 +992,13 @@ export function DashboardPage() {
                                       {
                                         key: "edit-recurring",
                                         label: "Editar valor da recorrência",
-                                        icon: "✏️🔁",
+                                        icon: "pencil" as const,
                                         onClick: () => setEditingRecurringTx(tx),
                                       },
                                       {
                                         key: "cancel-recurring",
                                         label: "Cancelar recorrência",
-                                        icon: "🔁🚫",
+                                        icon: "repeatOff" as const,
                                         onClick: () => handleCancelRecurring(tx),
                                       },
                                     ]
@@ -1005,7 +1006,7 @@ export function DashboardPage() {
                                 {
                                   key: "delete",
                                   label: "Excluir",
-                                  icon: "🗑",
+                                  icon: "trash" as const,
                                   danger: true,
                                   onClick: () => handleDelete(tx),
                                 },

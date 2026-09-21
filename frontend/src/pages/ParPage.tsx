@@ -12,6 +12,7 @@ import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/de
 import { readCache, writeCache } from "../utils/pageCache";
 import { whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
+import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 
@@ -408,7 +409,7 @@ export function ParPage() {
                 </span>
                 <div className="transaction-row-actions">
                   <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
-                    ✎
+                    <Icon name="pencil" />
                   </button>
                   <button
                     type="button"
@@ -416,7 +417,7 @@ export function ParPage() {
                     title="Excluir"
                     onClick={() => handleDelete(tx)}
                   >
-                    🗑
+                    <Icon name="trash" />
                   </button>
                 </div>
               </li>

@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
 import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
+import { Icon } from "../components/Icon";
 import { MonthPicker } from "../components/MonthPicker";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { SplitStatusPill } from "../components/SplitStatusPill";
@@ -432,7 +433,7 @@ export function ReportsPage() {
           </span>
           <div className="transaction-row-actions">
             <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
-              ✎
+              <Icon name="pencil" />
             </button>
             <RowActionsMenu
               actions={[
@@ -441,13 +442,13 @@ export function ReportsPage() {
                       {
                         key: "edit-recurring",
                         label: "Editar valor da recorrência",
-                        icon: "✏️🔁",
+                        icon: "pencil" as const,
                         onClick: () => setEditingRecurringTx(tx),
                       },
                       {
                         key: "cancel-recurring",
                         label: "Cancelar recorrência",
-                        icon: "🔁🚫",
+                        icon: "repeatOff" as const,
                         onClick: () => handleCancelRecurring(tx),
                       },
                     ]
@@ -455,7 +456,7 @@ export function ReportsPage() {
                 {
                   key: "delete",
                   label: "Excluir",
-                  icon: "🗑",
+                  icon: "trash" as const,
                   danger: true,
                   onClick: () => handleDelete(tx),
                 },
