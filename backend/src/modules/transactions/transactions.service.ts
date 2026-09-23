@@ -33,6 +33,9 @@ export class InvalidCategoryError extends Error {}
 export class UnsupportedSplitTypeError extends Error {}
 export class TransactionNotFoundError extends Error {}
 export class InvalidRecurrenceError extends Error {}
+// Guardar/resgatar de um cartão com limite garantido -- only changes from the
+// card itself, so the card's limit and the account never disagree.
+export class SecuredCardTransferError extends Error {}
 
 const SUPPORTED_SPLIT_TYPES: SplitType[] = ["none", "equal"];
 
@@ -202,6 +205,11 @@ export interface MonthlyTrendPoint {
   month: string; // "YYYY-MM"
   income: number;
   expense: number;
+  // Net money moved from the personal account into cartões com limite
+  // garantido this month (deposits minus resgates) -- not an expense, but it
+  // did leave the account, so the hero number subtracts it while "Saída do
+  // mês" and every report leave it out.
+  savedInCards: number;
   net: number;
 }
 
@@ -226,25 +234,28 @@ export async function getMonthlyTrendForUser(
 
   const rows = await findOwnDocsForRange(groupId, userId, rangeStart, rangeEnd);
 
-  const byMonth = new Map<string, { incomeCents: number; expenseCents: number }>();
+  const byMonth = new Map<string, { incomeCents: number; expenseCents: number; savedCents: number }>();
   for (let i = 0; i < monthsBack; i++) {
-    byMonth.set(addMonths(startMonth, i), { incomeCents: 0, expenseCents: 0 });
+    byMonth.set(addMonths(startMonth, i), { incomeCents: 0, expenseCents: 0, savedCents: 0 });
   }
   for (const row of rows) {
     const entry = byMonth.get(row.month);
     if (!entry) continue; // outside the requested window -- can't happen given the query's own range, kept defensive
-    if (row.transactionType === "income") {
+    if (row.isSecuredCardTransfer) {
+      entry.savedCents += row.transactionType === "income" ? -row.amountCents : row.amountCents;
+    } else if (row.transactionType === "income") {
       entry.incomeCents += row.amountCents;
     } else {
       entry.expenseCents += row.amountCents;
     }
   }
 
-  return Array.from(byMonth.entries()).map(([month, { incomeCents, expenseCents }]) => ({
+  return Array.from(byMonth.entries()).map(([month, { incomeCents, expenseCents, savedCents }]) => ({
     month,
     income: Number(fromCents(incomeCents)),
     expense: Number(fromCents(expenseCents)),
-    net: Number(fromCents(incomeCents - expenseCents)),
+    savedInCards: Number(fromCents(savedCents)),
+    net: Number(fromCents(incomeCents - expenseCents - savedCents)),
   }));
 }
 
@@ -260,6 +271,9 @@ export async function deleteTransactionForUser(userId: string, transactionId: st
   const transaction = await findTransactionById(transactionId);
   if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
+  }
+  if (transaction.securedCardId) {
+    throw new SecuredCardTransferError();
   }
   await deleteTransaction(transactionId);
 }
@@ -415,6 +429,9 @@ export async function updateTransactionForUser(
   const transaction = await findTransactionById(transactionId);
   if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
+  }
+  if (transaction.securedCardId) {
+    throw new SecuredCardTransferError();
   }
 
   if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {

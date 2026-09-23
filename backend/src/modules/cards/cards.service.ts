@@ -1,7 +1,13 @@
 import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { deleteTransaction, insertSplits, insertTransaction } from "../transactions/transactions.repository";
+import {
+  deleteTransaction,
+  deleteTransactionsBatch,
+  findSecuredCardTransferIds,
+  insertSplits,
+  insertTransaction,
+} from "../transactions/transactions.repository";
 import { addMonths, dateForDayInMonth } from "../../utils/month";
 import {
   deleteCard,
@@ -192,7 +198,7 @@ export async function createCard(userId: string, input: CreateCardInput) {
     throw new InvalidLimitError();
   }
 
-  return insertCard({
+  const card = await insertCard({
     groupId,
     ownerUserId,
     createdBy: userId,
@@ -201,6 +207,54 @@ export async function createCard(userId: string, input: CreateCardInput) {
     dueDay: input.dueDay,
     limit: input.limit,
     limitType: input.limitType,
+  });
+  if (card.limitType === "secured" && input.limit !== null) {
+    await recordSecuredTransfer(userId, groupId, card, "deposit", input.limit);
+  }
+  return card;
+}
+
+// The account a card's money moves through -- the owner's personal account
+// for a personal card, "Nossa Conta" for a joint one. Same rule the fatura
+// payment uses.
+async function accountForCard(groupId: string, card: CardRow) {
+  const accounts = await findAccountsByGroupId(groupId);
+  const account = card.ownerUserId
+    ? accounts.find((a) => a.type === "personal" && a.ownerUserId === card.ownerUserId)
+    : accounts.find((a) => a.type === "joint");
+  if (!account) {
+    throw new CardNotFoundError();
+  }
+  return account;
+}
+
+// Guardar no cartão = the money leaves the account (and shows up in the
+// extrato on the day it happened); resgatar = it comes back. Booked as a
+// transfer (securedCardId), so it moves the balance without counting as a
+// gasto/receita anywhere.
+async function recordSecuredTransfer(
+  userId: string,
+  groupId: string,
+  card: CardRow,
+  direction: "deposit" | "withdraw",
+  amount: number
+) {
+  const account = await accountForCard(groupId, card);
+  await insertTransaction({
+    groupId,
+    accountId: account.id,
+    accountType: account.type,
+    accountOwnerId: account.ownerUserId,
+    categoryId: null,
+    payerId: userId,
+    createdBy: userId,
+    description: direction === "deposit" ? `Guardado no cartão ${card.name}` : `Resgatado do cartão ${card.name}`,
+    amount,
+    transactionType: direction === "deposit" ? "expense" : "income",
+    occurredAt: new Date().toISOString().slice(0, 10),
+    isPrivate: false,
+    splitType: "none",
+    securedCardId: card.id,
   });
 }
 
@@ -335,13 +389,7 @@ export async function setStatementPaidForUser(
       throw new PurchaseNotFoundError();
     }
 
-    const accounts = await findAccountsByGroupId(groupId);
-    const account = card.ownerUserId
-      ? accounts.find((a) => a.type === "personal" && a.ownerUserId === card.ownerUserId)
-      : accounts.find((a) => a.type === "joint");
-    if (!account) {
-      throw new CardNotFoundError();
-    }
+    const account = await accountForCard(groupId, card);
 
     const totalAmount = purchases.reduce((sum, purchase) => sum + Number(purchase.amount), 0);
     const transaction = await insertTransaction({
@@ -413,7 +461,7 @@ export async function adjustSecuredLimit(
   cardId: string,
   input: { direction: "deposit" | "withdraw"; amount: number }
 ) {
-  const { card } = await requireManageableCard(userId, cardId);
+  const { groupId, card } = await requireManageableCard(userId, cardId);
   if (card.limitType !== "secured") {
     throw new NotSecuredCardError();
   }
@@ -428,11 +476,17 @@ export async function adjustSecuredLimit(
       throw new InsufficientAvailableLimitError();
     }
   }
-  return incrementCardLimit(cardId, input.direction === "deposit" ? amountCents : -amountCents);
+  const updated = await incrementCardLimit(cardId, input.direction === "deposit" ? amountCents : -amountCents);
+  await recordSecuredTransfer(userId, groupId, card, input.direction, amountCents / 100);
+  return updated;
 }
 
 export async function removeCard(userId: string, cardId: string) {
   await requireManageableCard(userId, cardId);
+  // Whatever was still guardado in the card goes back to the account: its
+  // guardar/resgatar entries disappear along with the card.
+  const transferIds = await findSecuredCardTransferIds(cardId);
   const linkedTransactionIds = await deleteCard(cardId);
   await Promise.all(linkedTransactionIds.map((transactionId) => deleteTransaction(transactionId)));
+  await deleteTransactionsBatch(transferIds);
 }

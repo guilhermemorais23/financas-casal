@@ -65,6 +65,9 @@ interface TransactionListRow {
   recurringGroupId: string | null;
   splitType: "none" | "equal";
   isSettled: boolean;
+  // Guardar/resgatar de um cartão com limite garantido -- managed from the
+  // card itself, so the extrato shows it without edit/delete.
+  securedCardId?: string | null;
   accountId: string;
   paymentMethod: PaymentMethod | null;
   payerId: string;
@@ -145,6 +148,9 @@ interface MonthlyTrendPoint {
 interface MonthTotals {
   income: number;
   expense: number;
+  // Net money moved into cartões com limite garantido this month -- left
+  // the account without being a gasto (see getMonthlyTrendForUser).
+  savedInCards?: number;
 }
 
 interface DashboardResponse {
@@ -526,6 +532,7 @@ export function DashboardPage() {
   // reason -- none of those state changes affect this derived data.
   const income = personalMonthTotals.income;
   const expense = personalMonthTotals.expense;
+  const savedInCards = personalMonthTotals.savedInCards ?? 0;
   const prevIncome = personalPrevMonthTotals.income;
   const prevExpense = personalPrevMonthTotals.expense;
   const incomeDelta = percentChange(income, prevIncome);
@@ -616,8 +623,15 @@ export function DashboardPage() {
           <span className="stat-card-circle stat-card-circle-2" />
           <p className="label">Você tem no mês</p>
           <p className="value">
-            <AnimatedNumber value={income - expense} />
+            <AnimatedNumber value={income - expense - savedInCards} />
           </p>
+          {savedInCards !== 0 && (
+            <p className="hero-note">
+              {savedInCards > 0
+                ? `${formatCurrency(savedInCards)} foram guardados no cartão. Não é gasto, esse dinheiro continua seu.`
+                : `${formatCurrency(-savedInCards)} voltaram do cartão com limite garantido.`}
+            </p>
+          )}
           {trend6m.length > 1 && (
             <div className="hero-trend">
               <TrendSparkline points={trend6m} />
@@ -976,43 +990,45 @@ export function DashboardPage() {
                             {tx.transactionType === "income" ? "+" : "-"}
                             {formatCurrency(Number(tx.amount))}
                           </span>
-                          <div className="transaction-row-actions">
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              title="Editar"
-                              onClick={() => setEditingTx(tx)}
-                            >
-                              <Icon name="pencil" />
-                            </button>
-                            <RowActionsMenu
-                              actions={[
-                                ...(tx.recurringGroupId
-                                  ? [
-                                      {
-                                        key: "edit-recurring",
-                                        label: "Editar valor da recorrência",
-                                        icon: "pencil" as const,
-                                        onClick: () => setEditingRecurringTx(tx),
-                                      },
-                                      {
-                                        key: "cancel-recurring",
-                                        label: "Cancelar recorrência",
-                                        icon: "repeatOff" as const,
-                                        onClick: () => handleCancelRecurring(tx),
-                                      },
-                                    ]
-                                  : []),
-                                {
-                                  key: "delete",
-                                  label: "Excluir",
-                                  icon: "trash" as const,
-                                  danger: true,
-                                  onClick: () => handleDelete(tx),
-                                },
-                              ]}
-                            />
-                          </div>
+                          {!tx.securedCardId && (
+                            <div className="transaction-row-actions">
+                              <button
+                                type="button"
+                                className="btn-icon"
+                                title="Editar"
+                                onClick={() => setEditingTx(tx)}
+                              >
+                                <Icon name="pencil" />
+                              </button>
+                              <RowActionsMenu
+                                actions={[
+                                  ...(tx.recurringGroupId
+                                    ? [
+                                        {
+                                          key: "edit-recurring",
+                                          label: "Editar valor da recorrência",
+                                          icon: "pencil" as const,
+                                          onClick: () => setEditingRecurringTx(tx),
+                                        },
+                                        {
+                                          key: "cancel-recurring",
+                                          label: "Cancelar recorrência",
+                                          icon: "repeatOff" as const,
+                                          onClick: () => handleCancelRecurring(tx),
+                                        },
+                                      ]
+                                    : []),
+                                  {
+                                    key: "delete",
+                                    label: "Excluir",
+                                    icon: "trash" as const,
+                                    danger: true,
+                                    onClick: () => handleDelete(tx),
+                                  },
+                                ]}
+                              />
+                            </div>
+                          )}
                         </li>
                       ))}
                     </Fragment>

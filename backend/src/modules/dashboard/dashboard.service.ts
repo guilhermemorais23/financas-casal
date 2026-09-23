@@ -130,7 +130,11 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     budget,
     categoryBudgets,
     dailyTrend,
-    personalMonthTotals: { income: currentMonthTotals.income, expense: currentMonthTotals.expense },
+    personalMonthTotals: {
+      income: currentMonthTotals.income,
+      expense: currentMonthTotals.expense,
+      savedInCards: currentMonthTotals.savedInCards,
+    },
     personalPrevMonthTotals: { income: prevMonthTotals.income, expense: prevMonthTotals.expense },
     goalHighlight: pickGoalHighlight(goals),
     nextInvoice: pickNextInvoice(cards),

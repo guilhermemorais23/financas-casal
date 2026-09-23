@@ -48,6 +48,13 @@ export interface TransactionRow {
   // just a flag, it's backed by a real entry in the ledger, deleted again
   // if the split is reopened. Null while isSettled is false.
   settlementTransactionId: string | null;
+  // Set only on money moved into/out of a cartão com limite garantido
+  // ("Guardar mais"/"Resgatar") -- a transfer, not spending: it changes the
+  // account balance (the money really left the account) but is skipped by
+  // every income/expense total, so reports and budgets don't count parking
+  // money in the card as a gasto. Owned by the card: deleting the card
+  // deletes these too, and they can't be edited/deleted on their own.
+  securedCardId: string | null;
 }
 
 export interface TransactionListRow extends TransactionRow {
@@ -80,6 +87,7 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
     recurringTotal: data.recurringTotal ?? null,
     isSettled: data.isSettled ?? false,
     settlementTransactionId: data.settlementTransactionId ?? null,
+    securedCardId: data.securedCardId ?? null,
   };
 }
 
@@ -103,6 +111,7 @@ export interface NewTransactionInput {
   isPrivate: boolean;
   splitType: SplitType;
   paymentMethod?: PaymentMethod | null;
+  securedCardId?: string | null;
 }
 
 export async function insertTransaction(input: NewTransactionInput): Promise<TransactionRow> {
@@ -147,6 +156,7 @@ export async function insertTransactionSeries(
       recurringTotal: isRecurring ? occurredAtDates.length : null,
       isSettled: false,
       settlementTransactionId: null,
+      securedCardId: base.securedCardId ?? null,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -177,6 +187,11 @@ export async function setTransactionSettled(
 export async function findRecurringSeries(recurringGroupId: string): Promise<TransactionRow[]> {
   const snapshot = await transactionsCol.where("recurringGroupId", "==", recurringGroupId).get();
   return snapshot.docs.map(toTransactionRow);
+}
+
+export async function findSecuredCardTransferIds(cardId: string): Promise<string[]> {
+  const snapshot = await transactionsCol.where("securedCardId", "==", cardId).select().get();
+  return snapshot.docs.map((doc) => doc.id);
 }
 
 export async function deleteTransactionsBatch(transactionIds: string[]): Promise<void> {
@@ -431,6 +446,7 @@ export async function getMonthlySummary(
 
   for (const doc of docs) {
     const data = doc.data();
+    if (data.securedCardId) continue;
     totalCents += data.amountCents;
     byPayerMap.set(data.payerId, (byPayerMap.get(data.payerId) ?? 0) + data.amountCents);
 
@@ -519,6 +535,13 @@ async function loadDocsForDateRange(
   });
 }
 
+export interface OwnRangeDoc {
+  month: string;
+  amountCents: number;
+  transactionType: TransactionType;
+  isSecuredCardTransfer: boolean;
+}
+
 // One query across the whole range, personal account only (accountOwnerId,
 // not the broader group scope the summary/daily-series queries use) --
 // matches exactly what the Painel's hero number ("Você tem no mês") already
@@ -530,7 +553,7 @@ export function findOwnDocsForRange(
   userId: string,
   rangeStart: string,
   rangeEnd: string
-): Promise<{ month: string; amountCents: number; transactionType: TransactionType }[]> {
+): Promise<OwnRangeDoc[]> {
   return memoizeReads(`ownDocs:${groupId}:${userId}:${rangeStart}:${rangeEnd}`, () =>
     loadOwnDocsForRange(groupId, userId, rangeStart, rangeEnd)
   );
@@ -541,13 +564,13 @@ async function loadOwnDocsForRange(
   userId: string,
   rangeStart: string,
   rangeEnd: string
-): Promise<{ month: string; amountCents: number; transactionType: TransactionType }[]> {
+): Promise<OwnRangeDoc[]> {
   const snapshot = await transactionsCol
     .where("groupId", "==", groupId)
     .where("accountOwnerId", "==", userId)
     .where("occurredAt", ">=", rangeStart)
     .where("occurredAt", "<", rangeEnd)
-    .select("occurredAt", "amountCents", "transactionType")
+    .select("occurredAt", "amountCents", "transactionType", "securedCardId")
     .get();
   return snapshot.docs.map((doc) => {
     const data = doc.data();
@@ -555,6 +578,7 @@ async function loadOwnDocsForRange(
       month: (data.occurredAt as string).slice(0, 7),
       amountCents: data.amountCents as number,
       transactionType: data.transactionType as TransactionType,
+      isSecuredCardTransfer: Boolean(data.securedCardId),
     };
   });
 }
@@ -582,6 +606,7 @@ export async function getDailySeries(
   for (const doc of docs) {
     const data = doc.data();
     if (!(data.isPrivate === false || data.createdBy === requestingUserId)) continue;
+    if (data.securedCardId) continue;
     const entry = byDay.get(data.occurredAt) ?? { income: 0, expense: 0 };
     if (data.transactionType === "income") {
       entry.income += data.amountCents;
@@ -643,6 +668,7 @@ export async function getYearlySummary(
   for (const doc of docs) {
     const data = doc.data();
     if (!(data.isPrivate === false || data.createdBy === requestingUserId)) continue;
+    if (data.securedCardId) continue;
     const monthKey = (data.occurredAt as string).slice(0, 7);
     const entry = byMonth.get(monthKey) ?? { income: 0, expense: 0 };
     if (data.transactionType === "income") {

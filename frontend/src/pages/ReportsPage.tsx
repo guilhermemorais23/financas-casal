@@ -60,6 +60,9 @@ interface TransactionListRow {
   recurringGroupId: string | null;
   splitType: "none" | "equal";
   isSettled: boolean;
+  // Guardar/resgatar de um cartão com limite garantido -- managed from the
+  // card itself, so the extrato shows it without edit/delete.
+  securedCardId?: string | null;
   accountId: string;
   accountType: "personal" | "joint";
   paymentMethod: PaymentMethod | null;
@@ -524,38 +527,40 @@ export function ReportsPage() {
             {tx.transactionType === "income" ? "+" : "-"}
             {formatCurrency(Number(tx.amount))}
           </span>
-          <div className="transaction-row-actions">
-            <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
-              <Icon name="pencil" />
-            </button>
-            <RowActionsMenu
-              actions={[
-                ...(tx.recurringGroupId
-                  ? [
-                      {
-                        key: "edit-recurring",
-                        label: "Editar valor da recorrência",
-                        icon: "pencil" as const,
-                        onClick: () => setEditingRecurringTx(tx),
-                      },
-                      {
-                        key: "cancel-recurring",
-                        label: "Cancelar recorrência",
-                        icon: "repeatOff" as const,
-                        onClick: () => handleCancelRecurring(tx),
-                      },
-                    ]
-                  : []),
-                {
-                  key: "delete",
-                  label: "Excluir",
-                  icon: "trash" as const,
-                  danger: true,
-                  onClick: () => handleDelete(tx),
-                },
-              ]}
-            />
-          </div>
+          {!tx.securedCardId && (
+            <div className="transaction-row-actions">
+              <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
+                <Icon name="pencil" />
+              </button>
+              <RowActionsMenu
+                actions={[
+                  ...(tx.recurringGroupId
+                    ? [
+                        {
+                          key: "edit-recurring",
+                          label: "Editar valor da recorrência",
+                          icon: "pencil" as const,
+                          onClick: () => setEditingRecurringTx(tx),
+                        },
+                        {
+                          key: "cancel-recurring",
+                          label: "Cancelar recorrência",
+                          icon: "repeatOff" as const,
+                          onClick: () => handleCancelRecurring(tx),
+                        },
+                      ]
+                    : []),
+                  {
+                    key: "delete",
+                    label: "Excluir",
+                    icon: "trash" as const,
+                    danger: true,
+                    onClick: () => handleDelete(tx),
+                  },
+                ]}
+              />
+            </div>
+          )}
         </li>
     );
   }

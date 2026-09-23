@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createTestGroup } from "../../test-helpers";
+import { getGroupForUser } from "../groups/groups.service";
+import {
+  SecuredCardTransferError,
+  deleteTransactionForUser,
+  getMonthlySummaryForUser,
+  getMonthlyTrendForUser,
+  listTransactions,
+} from "../transactions/transactions.service";
 import {
   InsufficientAvailableLimitError,
   InvalidLimitError,
@@ -9,6 +17,7 @@ import {
   createCard,
   getStatement,
   listCards,
+  removeCard,
   removePurchase,
   setStatementPaidForUser,
   updateCardForUser,
@@ -200,5 +209,36 @@ describe("cards: limite garantido", () => {
     await expect(
       adjustSecuredLimit(userAId, normal.id, { direction: "deposit", amount: 100 })
     ).rejects.toBeInstanceOf(NotSecuredCardError);
+  });
+
+  it("guardar tira da conta como transferência, não como gasto, e volta ao resgatar ou apagar o cartão", async () => {
+    const { userAId, personalAccountId } = await createTestGroup();
+    const balance = async () =>
+      (await getGroupForUser(userAId))!.accounts.find((account) => account.id === personalAccountId)!.balance;
+
+    const card = await createCard(userAId, {
+      name: "Garantido",
+      closingDay: 31,
+      dueDay: 5,
+      scope: "personal",
+      limit: 100,
+      limitType: "secured",
+    });
+    expect(await balance()).toBe(-100);
+
+    // Not spending: out of the reports, but the hero knows it left the account.
+    expect((await getMonthlySummaryForUser(userAId, undefined, "visible")).total).toBe("0.00");
+    const trend = await getMonthlyTrendForUser(userAId);
+    expect(trend[trend.length - 1]).toMatchObject({ expense: 0, savedInCards: 100, net: -100 });
+
+    const [transfer] = await listTransactions(userAId, 10);
+    expect(transfer.description).toBe("Guardado no cartão Garantido");
+    await expect(deleteTransactionForUser(userAId, transfer.id)).rejects.toBeInstanceOf(SecuredCardTransferError);
+
+    await adjustSecuredLimit(userAId, card.id, { direction: "withdraw", amount: 40 });
+    expect(await balance()).toBe(-60);
+
+    await removeCard(userAId, card.id);
+    expect(await balance()).toBe(0);
   });
 });

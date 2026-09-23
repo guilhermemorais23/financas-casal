@@ -372,6 +372,13 @@ export function CardsPage() {
             </div>
 
             {isSecured && (
+              <p className="field-hint">
+                Esse dinheiro continua seu, só fica parado como garantia. A fatura você paga com o dinheiro da conta, e
+                pagar devolve o limite.
+              </p>
+            )}
+
+            {isSecured && (
               <div className="limit-adjust-actions">
                 <button type="button" className="btn btn-outline" onClick={() => openLimitAdjust(card.id, "deposit")}>
                   Guardar mais
@@ -399,8 +406,8 @@ export function CardsPage() {
                   />
                   <p className="field-hint">
                     {limitAdjust.direction === "deposit"
-                      ? "O valor guardado vira limite na hora."
-                      : `Você pode resgatar até ${formatCurrency(available)}: o que está em compras fica preso até a fatura ser paga.`}
+                      ? "Sai da sua conta hoje e vira limite na hora."
+                      : `Volta pra sua conta. Você pode resgatar até ${formatCurrency(available)}: o que está em compras fica preso até a fatura ser paga.`}
                   </p>
                 </div>
                 {limitAdjustError && (
@@ -745,7 +752,7 @@ export function CardsPage() {
               />
               <p className="field-hint">
                 {limitType === "secured"
-                  ? "No cartão com limite garantido, o dinheiro que você guarda vira o limite. Depois dá pra guardar mais ou resgatar."
+                  ? "Esse valor sai da sua conta hoje e vira o limite do cartão. Continua sendo seu: dá pra guardar mais ou resgatar depois."
                   : "Se preencher, a gente acompanha quanto do limite já está comprometido."}
               </p>
             </div>
