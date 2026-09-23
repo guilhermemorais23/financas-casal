@@ -1370,6 +1370,13 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  min-width: 0;
+}
+
+/* .card's 380px cap is for the auth/setup forms -- on the Painel the cards
+   fill their column, otherwise wide screens get big empty gaps. */
+.dashboard-col > .card {
+  max-width: none;
 }
 
 @media (max-width: 900px) {
@@ -3902,6 +3909,7 @@ input[type="checkbox"] {
 
 .limit-adjust-actions .btn {
   flex: 1;
+  margin-top: 0;
 }
 
 .limit-adjust-form {

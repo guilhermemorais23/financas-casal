@@ -453,17 +453,22 @@ export function ReportsPage() {
   const selectedCategoryLabel = selectedCategoryId
     ? summary?.byCategory.find((row) => (row.categoryId ?? "none") === selectedCategoryId)
     : null;
-  const { incomeTotal, expenseTotal } = useMemo(
-    () => ({
-      incomeTotal: (transactions ?? [])
-        .filter((tx) => tx.transactionType === "income")
-        .reduce((sum, tx) => sum + Number(tx.amount), 0),
-      expenseTotal: (transactions ?? [])
-        .filter((tx) => tx.transactionType === "expense")
-        .reduce((sum, tx) => sum + Number(tx.amount), 0),
-    }),
-    [transactions]
-  );
+  // Guardar/resgatar no cartão garantido isn't income or spending, but it
+  // did move money out of (or back into) the account -- kept apart so
+  // Entrada/Saída match the categories and the Saldo still adds up.
+  const { incomeTotal, expenseTotal, savedInCards } = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    let saved = 0;
+    for (const tx of transactions ?? []) {
+      const amount = Number(tx.amount);
+      if (tx.securedCardId) saved += tx.transactionType === "expense" ? amount : -amount;
+      else if (tx.transactionType === "income") income += amount;
+      else expense += amount;
+    }
+    return { incomeTotal: income, expenseTotal: expense, savedInCards: saved };
+  }, [transactions]);
+  const monthBalance = incomeTotal - expenseTotal - savedInCards;
   const pieSlices = useMemo(
     () =>
       (summary?.byCategory ?? []).map((row) => ({
@@ -597,10 +602,13 @@ export function ReportsPage() {
           </div>
           <div className="stat-box">
             <p className="label">Saldo do mês</p>
-            <p className={`value-sm${incomeTotal - expenseTotal >= 0 ? " income-text" : ""}`}>
-              {formatCurrency(incomeTotal - expenseTotal)}
+            <p className={`value-sm${monthBalance >= 0 ? " income-text" : ""}`}>
+              {formatCurrency(monthBalance)}
             </p>
-            <p className="stat-delta neutral">conta pessoal + conjunta</p>
+            <p className="stat-delta neutral">
+              conta pessoal + conjunta
+              {savedInCards > 0 && ` · ${formatCurrency(savedInCards)} guardados no cartão`}
+            </p>
           </div>
         </div>
 
