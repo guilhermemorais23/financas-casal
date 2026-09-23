@@ -7,11 +7,14 @@ import {
   ForbiddenError,
   InvalidBuyerError,
   InvalidCategoryError,
+  InsufficientAvailableLimitError,
   InvalidInstallmentsError,
   InvalidLimitError,
+  NotSecuredCardError,
   PurchaseNotFoundError,
   StatementAlreadyPaidError,
   addPurchase,
+  adjustSecuredLimit,
   createCard,
   getStatement,
   listCards,
@@ -41,17 +44,19 @@ function isValidDate(value: unknown): value is string {
 }
 
 export async function createCardHandler(req: Request, res: Response) {
-  const { name, closingDay, dueDay, scope, limit } = req.body ?? {};
+  const { name, closingDay, dueDay, scope, limit, limitType } = req.body ?? {};
 
   if (
     !isNonEmptyString(name) ||
     !isValidDay(closingDay) ||
     !isValidDay(dueDay) ||
     (scope !== undefined && scope !== "personal" && scope !== "joint") ||
-    !isValidLimit(limit)
+    !isValidLimit(limit) ||
+    (limitType !== undefined && limitType !== "normal" && limitType !== "secured")
   ) {
     res.status(400).json({
-      error: "name, closingDay (1-31) and dueDay (1-31) are required; limit (if set) must be a positive number",
+      error:
+        "name, closingDay (1-31) and dueDay (1-31) are required; limit (if set) must be a positive number; limitType must be normal or secured",
     });
     return;
   }
@@ -63,6 +68,7 @@ export async function createCardHandler(req: Request, res: Response) {
       dueDay,
       scope: (scope as CardScope) ?? "joint",
       limit: limit ?? null,
+      limitType: limitType ?? "normal",
     });
     res.status(201).json(card);
   } catch (err) {
@@ -125,6 +131,45 @@ export async function updateCardHandler(req: Request, res: Response) {
     }
     if (err instanceof InvalidLimitError) {
       res.status(400).json({ error: "invalid limit" });
+      return;
+    }
+    if (err instanceof NotSecuredCardError) {
+      res.status(400).json({ error: "a secured card's limit only changes by depositing or withdrawing" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function adjustSecuredLimitHandler(req: Request, res: Response) {
+  const { direction, amount } = req.body ?? {};
+  if ((direction !== "deposit" && direction !== "withdraw") || typeof amount !== "number" || !(amount > 0)) {
+    res.status(400).json({ error: "direction (deposit | withdraw) and a positive amount are required" });
+    return;
+  }
+
+  try {
+    const card = await adjustSecuredLimit(req.user!.id, req.params.id, { direction, amount });
+    res.status(200).json(card);
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof CardNotFoundError) {
+      res.status(404).json({ error: "card not found" });
+      return;
+    }
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: "not allowed to manage this card" });
+      return;
+    }
+    if (err instanceof NotSecuredCardError) {
+      res.status(400).json({ error: "this card doesn't have a secured limit" });
+      return;
+    }
+    if (err instanceof InvalidLimitError) {
+      res.status(400).json({ error: "invalid amount" });
+      return;
+    }
+    if (err instanceof InsufficientAvailableLimitError) {
+      res.status(409).json({ error: "Não dá pra resgatar mais do que está disponível agora." });
       return;
     }
     throw err;

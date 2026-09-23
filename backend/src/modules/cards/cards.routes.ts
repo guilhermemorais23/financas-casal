@@ -3,6 +3,7 @@ import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import {
   addPurchaseHandler,
+  adjustSecuredLimitHandler,
   createCardHandler,
   deleteCardHandler,
   deletePurchaseHandler,
@@ -20,6 +21,7 @@ cardsRouter.post("/", asyncHandler(createCardHandler));
 cardsRouter.get("/", asyncHandler(listCardsHandler));
 cardsRouter.patch("/:id", asyncHandler(updateCardHandler));
 cardsRouter.delete("/:id", asyncHandler(deleteCardHandler));
+cardsRouter.post("/:id/secured-limit", asyncHandler(adjustSecuredLimitHandler));
 cardsRouter.get("/:id/statement", asyncHandler(getStatementHandler));
 cardsRouter.post("/:id/purchases", asyncHandler(addPurchaseHandler));
 cardsRouter.delete("/:id/purchases/:purchaseId", asyncHandler(deletePurchaseHandler));

@@ -14,7 +14,14 @@ export interface CardRow {
   // keeps working exactly as it did, with no limit bar shown at all, until
   // they fill one in themselves.
   limit: string | null;
+  // "secured" = cartão com limite garantido: the limit IS money the person
+  // parked in the card (it only moves through adjustSecuredLimit, never
+  // typed in directly). Cards created before this existed have no field and
+  // read back as "normal".
+  limitType: LimitType;
 }
+
+export type LimitType = "normal" | "secured";
 
 export interface PurchaseRow {
   id: string;
@@ -54,6 +61,7 @@ function toCardRow(doc: FirebaseFirestore.DocumentSnapshot): CardRow {
     closingDay: data.closingDay,
     dueDay: data.dueDay,
     limit: typeof data.limitCents === "number" ? fromCents(data.limitCents) : null,
+    limitType: data.limitType === "secured" ? "secured" : "normal",
   };
 }
 
@@ -93,6 +101,7 @@ export async function insertCard(input: {
   closingDay: number;
   dueDay: number;
   limit: number | null;
+  limitType: LimitType;
 }): Promise<CardRow> {
   const ref = await cardsCol.add({
     groupId: input.groupId,
@@ -102,6 +111,7 @@ export async function insertCard(input: {
     closingDay: input.closingDay,
     dueDay: input.dueDay,
     limitCents: input.limit !== null ? toCents(input.limit) : null,
+    limitType: input.limitType,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -148,6 +158,17 @@ export async function updateCard(
     update.limitCents = input.limit !== null ? toCents(input.limit) : null;
   }
   await ref.update(update);
+  const doc = await ref.get();
+  return toCardRow(doc);
+}
+
+// Deposit (positive) or withdrawal (negative) on a secured card's limit --
+// an increment, so two people moving money at once don't overwrite each
+// other. The "can't withdraw more than what's free" check lives in the
+// service, which knows how much of the limit purchases are holding.
+export async function incrementCardLimit(cardId: string, deltaCents: number): Promise<CardRow> {
+  const ref = cardsCol.doc(cardId);
+  await ref.update({ limitCents: FieldValue.increment(deltaCents), updatedAt: FieldValue.serverTimestamp() });
   const doc = await ref.get();
   return toCardRow(doc);
 }
