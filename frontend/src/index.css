@@ -3884,3 +3884,67 @@ input[type="checkbox"] {
   margin: 0;
   padding: 0;
 }
+
+/* Cartão com limite garantido: guardar/resgatar + "quando o limite volta" */
+.limit-adjust-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.limit-adjust-actions .btn {
+  flex: 1;
+}
+
+.limit-adjust-form {
+  margin-top: 0.75rem;
+}
+
+.limit-releases {
+  margin-top: 0.9rem;
+}
+
+.limit-releases-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 0 0 0.35rem;
+}
+
+.limit-releases ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.limit-releases li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.limit-releases li:first-child {
+  border-top: 0;
+}
+
+.limit-releases-meta {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.goal-monthly {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.goal-monthly strong {
+  font-variant-numeric: tabular-nums;
+}

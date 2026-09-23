@@ -3,7 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
-import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
+import { currentMonthParam, formatCurrency, monthYearLabel, parseLocalDate } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -41,6 +41,15 @@ interface CardRow {
   currentStatement: StatementSummary;
   limit: string | null;
   limitUsed: string | null;
+  limitType: "normal" | "secured";
+  limitReleases: LimitRelease[];
+}
+
+interface LimitRelease {
+  month: string;
+  dueDate: string;
+  amount: string;
+  availableAfter: string;
 }
 
 interface PurchaseRow {
@@ -74,6 +83,7 @@ export function CardsPage() {
   const [closingDay, setClosingDay] = useState("28");
   const [dueDay, setDueDay] = useState("5");
   const [limit, setLimit] = useState("");
+  const [limitType, setLimitType] = useState<"normal" | "secured">("normal");
   const [scope, setScope] = useState<"personal" | "joint">("joint");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -89,6 +99,12 @@ export function CardsPage() {
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [purchaseInstallments, setPurchaseInstallments] = useState("1");
   const [isAddingPurchase, setIsAddingPurchase] = useState(false);
+
+  // "Guardar mais" / "Resgatar" on a cartão com limite garantido -- one
+  // inline form at a time, tied to whichever card opened it.
+  const [limitAdjust, setLimitAdjust] = useState<{ cardId: string; direction: "deposit" | "withdraw" } | null>(null);
+  const [limitAdjustAmount, setLimitAdjustAmount] = useState("");
+  const [limitAdjustError, setLimitAdjustError] = useState<string | null>(null);
 
   async function loadCards() {
     try {
@@ -123,18 +139,23 @@ export function CardsPage() {
       setError("O limite, se preenchido, precisa ser maior que zero.");
       return;
     }
+    if (limitType === "secured" && parsedLimit === null) {
+      setError("Informe quanto você guardou no cartão -- é esse valor que vira o limite.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       await apiRequest("/cards", {
         method: "POST",
         token,
-        body: { name: name.trim(), closingDay: parsedClosing, dueDay: parsedDue, scope, limit: parsedLimit },
+        body: { name: name.trim(), closingDay: parsedClosing, dueDay: parsedDue, scope, limit: parsedLimit, limitType },
       });
       setName("");
       setClosingDay("28");
       setDueDay("5");
       setLimit("");
+      setLimitType("normal");
       await loadCards();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar o cartão");
@@ -262,6 +283,44 @@ export function CardsPage() {
     }
   }
 
+  function openLimitAdjust(cardId: string, direction: "deposit" | "withdraw") {
+    const isSameForm = limitAdjust?.cardId === cardId && limitAdjust.direction === direction;
+    setLimitAdjust(isSameForm ? null : { cardId, direction });
+    setLimitAdjustAmount("");
+    setLimitAdjustError(null);
+  }
+
+  async function handleLimitAdjust(event: FormEvent, card: CardRow, available: number) {
+    event.preventDefault();
+    if (!limitAdjust) return;
+    setLimitAdjustError(null);
+    const parsedAmount = Number(limitAdjustAmount.replace(",", "."));
+    if (!(parsedAmount > 0)) {
+      setLimitAdjustError("Informe um valor maior que zero.");
+      return;
+    }
+    if (limitAdjust.direction === "withdraw" && parsedAmount > available) {
+      setLimitAdjustError(`Dá pra resgatar até ${formatCurrency(available)} agora -- o resto está preso em faturas não pagas.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await apiRequest(`/cards/${card.id}/secured-limit`, {
+        method: "POST",
+        token,
+        body: { direction: limitAdjust.direction, amount: parsedAmount },
+      });
+      setLimitAdjust(null);
+      setLimitAdjustAmount("");
+      await loadCards();
+    } catch (err) {
+      setLimitAdjustError(err instanceof ApiError ? err.message : "Não foi possível atualizar o limite");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   function memberName(userId: string) {
     if (userId === user?.id) return "Você";
     return members.find((m) => m.id === userId)?.displayName ?? "Alguém do grupo";
@@ -275,6 +334,8 @@ export function CardsPage() {
     const limitRawPercent = limitCents && limitUsedCents !== null ? (limitUsedCents / limitCents) * 100 : 0;
     const limitPercent = Math.min(100, limitRawPercent);
     const limitTone = limitRawPercent >= 100 ? "over" : limitRawPercent >= 80 ? "warning" : "";
+    const isSecured = card.limitType === "secured";
+    const available = limitCents !== null && limitUsedCents !== null ? Math.max(0, limitCents - limitUsedCents) : 0;
     return (
       <div key={card.id} className="card debt-card">
         <div className="section-header">
@@ -301,14 +362,86 @@ export function CardsPage() {
         {limitCents !== null && limitUsedCents !== null && (
           <>
             <div className="goal-amounts" style={{ marginTop: "0.6rem" }}>
-              <span className="debt-mini-value">Limite {formatCurrency(limitCents)}</span>
-              <span className="debt-mini-remaining">
-                disponível {formatCurrency(Math.max(0, limitCents - limitUsedCents))}
+              <span className="debt-mini-value">
+                {isSecured ? "Guardado" : "Limite"} {formatCurrency(limitCents)}
               </span>
+              <span className="debt-mini-remaining">disponível agora {formatCurrency(available)}</span>
             </div>
             <div className="progress-track thin">
               <div className={`progress-fill ${limitTone}`} style={{ width: `${limitPercent}%` }} />
             </div>
+
+            {isSecured && (
+              <div className="limit-adjust-actions">
+                <button type="button" className="btn btn-outline" onClick={() => openLimitAdjust(card.id, "deposit")}>
+                  Guardar mais
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => openLimitAdjust(card.id, "withdraw")}>
+                  Resgatar
+                </button>
+              </div>
+            )}
+
+            {limitAdjust?.cardId === card.id && (
+              <form className="limit-adjust-form" onSubmit={(e) => handleLimitAdjust(e, card, available)}>
+                <div className="field">
+                  <label htmlFor={`limit-adjust-${card.id}`}>
+                    {limitAdjust.direction === "deposit" ? "Quanto vai guardar (R$)" : "Quanto vai resgatar (R$)"}
+                  </label>
+                  <input
+                    id={`limit-adjust-${card.id}`}
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    value={limitAdjustAmount}
+                    onChange={(e) => setLimitAdjustAmount(e.target.value)}
+                    autoFocus
+                    required
+                  />
+                  <p className="field-hint">
+                    {limitAdjust.direction === "deposit"
+                      ? "O valor guardado vira limite na hora."
+                      : `Você pode resgatar até ${formatCurrency(available)}: o que está em compras fica preso até a fatura ser paga.`}
+                  </p>
+                </div>
+                {limitAdjustError && (
+                  <p className="alert" role="alert">
+                    {limitAdjustError}
+                  </p>
+                )}
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                    {isSubmitting ? "Salvando..." : limitAdjust.direction === "deposit" ? "Guardar" : "Resgatar"}
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={() => setLimitAdjust(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {card.limitReleases?.length > 0 && (
+              <div className="limit-releases">
+                <p className="limit-releases-title">Quando o limite volta</p>
+                <ul>
+                  {card.limitReleases.map((release) => (
+                    <li key={release.month}>
+                      <span>
+                        Pagando a fatura de {monthYearLabel(release.month)}
+                        <span className="limit-releases-meta">
+                          vence{" "}
+                          {parseLocalDate(release.dueDate).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                          })}{" "}
+                          · volta {formatCurrency(Number(release.amount))}
+                        </span>
+                      </span>
+                      <strong>{formatCurrency(Math.max(0, Number(release.availableAfter)))}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         )}
 
@@ -582,8 +715,27 @@ export function CardsPage() {
               />
             </div>
 
+            <div className="segmented">
+              <button
+                type="button"
+                className={`segmented-option${limitType === "normal" ? " active" : ""}`}
+                onClick={() => setLimitType("normal")}
+              >
+                Limite normal
+              </button>
+              <button
+                type="button"
+                className={`segmented-option${limitType === "secured" ? " active" : ""}`}
+                onClick={() => setLimitType("secured")}
+              >
+                Limite garantido
+              </button>
+            </div>
+
             <div className="field">
-              <label htmlFor="card-limit">Limite (opcional)</label>
+              <label htmlFor="card-limit">
+                {limitType === "secured" ? "Quanto você guardou no cartão (R$)" : "Limite (opcional)"}
+              </label>
               <input
                 id="card-limit"
                 inputMode="decimal"
@@ -591,7 +743,11 @@ export function CardsPage() {
                 value={limit}
                 onChange={(e) => setLimit(e.target.value)}
               />
-              <p className="field-hint">Se preencher, a gente acompanha quanto do limite já está comprometido.</p>
+              <p className="field-hint">
+                {limitType === "secured"
+                  ? "No cartão com limite garantido, o dinheiro que você guarda vira o limite. Depois dá pra guardar mais ou resgatar."
+                  : "Se preencher, a gente acompanha quanto do limite já está comprometido."}
+              </p>
             </div>
 
             {error && (

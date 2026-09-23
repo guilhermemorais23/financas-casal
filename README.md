@@ -88,10 +88,10 @@ frontend/src/auth/           # AuthContext (Firebase Auth)
 - Grupos sem limite de pessoas: criar, convidar por link, aceitar convite, sair do grupo, remover outro integrante (`/api/groups`).
 - Transações: criar (split igualitário entre quantos membros o grupo tiver), listar (filtro por mês/conta/texto), editar (inclusive conta e pagador), excluir, cancelar ou editar o valor de uma série recorrente (só as ocorrências futuras), saldo "quem deve quem" par a par, resumo mensal e anual por categoria/pagador, exportar CSV (do mês ou tudo).
 - Categorias: as padrão valem pra qualquer grupo; as criadas pelo grupo podem ser renomeadas, trocar de emoji ou ser excluídas.
-- Metas (`/api/goals`): criar, listar, contribuir, remover.
+- Metas (`/api/goals`): criar, listar, contribuir, remover. Com prazo, mostram o mínimo a guardar por mês (o que falta ÷ meses até a data).
 - Orçamento (`/api/budgets`): teto mensal (geral ou por categoria) com gasto já calculado.
 - Dívidas/parcelamentos (`/api/debts`): criar (com dia de vencimento opcional), marcar parcela como paga.
-- Cartões (`/api/cards`): compras, fatura atual, lembrete de vencimento.
+- Cartões (`/api/cards`): compras, fatura atual, lembrete de vencimento, limite disponível agora e quanto volta a cada fatura paga. Cartão com **limite garantido** (o dinheiro guardado vira o limite): guardar mais e resgatar (`POST /api/cards/:id/secured-limit`), resgate só até o disponível.
 - Lembretes por e-mail (`/api/reminders/run`, chamado por um cron externo diário): avisa 3 dias antes do vencimento de fatura de cartão ou parcela de dívida, com dedupe pra nunca mandar duas vezes.
 - Modelo de privacidade: contas/transações/dívidas pessoais só visíveis ao dono; itens da conta conjunta visíveis a qualquer membro do grupo — essa é a proteção de dados privados do app (não existe nem está planejado um bloqueio por PIN/biometria no nível de tela; a privacidade já é por dado, não por tela).
 - Frontend completo: Painel (individual, com widgets e cache instantâneo entre meses já visitados), Par (conjunto, com orçamento e saldo por pessoa), Nova transação, Metas, Cartões, Dívidas, Lista de compras, Investimentos, Relatórios (gráficos, busca, visão anual, exportar), Conta (membros, contas, categorias, convite, desvincular). PWA com service worker (funciona offline pro shell, dados sempre vêm da rede).
