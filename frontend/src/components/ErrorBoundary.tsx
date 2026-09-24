@@ -1,113 +1,74 @@
 import { Component, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { clearCache } from "../utils/pageCache";
+import { canRecover, forceFreshReload, recoverApp } from "../utils/appRecovery";
+import { BrandMark } from "./Brand";
 import { LoadingScreen } from "./Spinner";
 
 interface Props {
   children: ReactNode;
+  pathname: string;
 }
 
 interface State {
   hasError: boolean;
   isReloading: boolean;
+  pathname: string;
 }
 
-const AUTO_RELOAD_KEY = "par:auto-reload-at";
+// Catches render/lazy-import errors below it -- without this a crash is a
+// blank white screen. Almost every crash here comes from a tab running an
+// old build across a deploy (see utils/appRecovery.ts) or stale cached page
+// data (pageCache.ts), and a fresh reload fixes both -- so the app reloads
+// itself behind a "Atualizando o app..." screen instead of asking. The
+// fallback screen only shows if recovering already failed twice in a row.
+class ErrorBoundaryInner extends Component<Props, State> {
+  state: State = { hasError: false, isReloading: false, pathname: this.props.pathname };
 
-// The messages browsers use when a lazy route chunk can't be fetched
-// (Chrome/Edge, Safari, Firefox) -- almost always "a new version was
-// deployed and this tab still points at the old file names".
-function isChunkLoadError(error: unknown): boolean {
-  const message = error instanceof Error ? `${error.name} ${error.message}` : String(error);
-  return /dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk/i.test(message);
-}
-
-// Only auto-reload once per 20s: if the reload didn't fix it, stop and show
-// the screen instead of looping forever. (Read-only here -- it's called from
-// getDerivedStateFromError, which must stay side-effect free.)
-function canAutoReload(): boolean {
-  try {
-    return Date.now() - Number(sessionStorage.getItem(AUTO_RELOAD_KEY) ?? 0) >= 20_000;
-  } catch {
-    return false;
-  }
-}
-
-function rememberAutoReload(): void {
-  try {
-    sessionStorage.setItem(AUTO_RELOAD_KEY, String(Date.now()));
-  } catch {
-    // ignore
-  }
-}
-
-// On phones the old service worker can keep serving the previous build for
-// a reload or two, which is what made "Recarregar" feel slow/useless. Ask it
-// to check for the new version first (capped at 1.5s so a bad connection
-// never blocks the reload), then reload.
-async function reloadFresh(): Promise<void> {
-  try {
-    const registration = await navigator.serviceWorker?.getRegistration();
-    if (registration) {
-      await Promise.race([registration.update(), new Promise((resolve) => setTimeout(resolve, 1500))]);
-    }
-  } catch {
-    // ignore -- reload anyway
-  }
-  window.location.reload();
-}
-
-// Catches render/lazy-import errors below it -- without this, a failed
-// dynamic import() (React.lazy in App.tsx) throws with nothing to catch it,
-// crashing to a blank white screen. That failure got more likely once this
-// app started code-splitting per route AND running a service worker that
-// updates itself automatically: someone with a tab open across a deploy, or
-// a stale service-worker cache, can click into a route whose chunk file no
-// longer exists at its old hashed URL. That case reloads on its own; any
-// other crash gets a "Recarregar" button that reacts right away.
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, isReloading: false };
-
-  static getDerivedStateFromError(error: unknown): State {
-    return { hasError: true, isReloading: isChunkLoadError(error) && canAutoReload() };
+  static getDerivedStateFromError(): Partial<State> {
+    // Read-only check here (must stay side-effect free); the reload itself
+    // starts in componentDidCatch.
+    return { hasError: true, isReloading: canRecover() };
   }
 
-  // A render crash is very often bad cached data (see pageCache.ts) -- drop
-  // it so "Recarregar" actually recovers instead of crashing again on the
-  // same stale entry.
   componentDidCatch() {
     clearCache();
-    if (this.state.isReloading) {
-      rememberAutoReload();
-      void reloadFresh();
-    }
+    if (this.state.isReloading && !recoverApp()) this.setState({ isReloading: false });
+  }
+
+  // Navigating away (menu, back button) gives the new page a fresh try.
+  static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
+    if (props.pathname === state.pathname) return null;
+    return { pathname: props.pathname, hasError: state.hasError && state.isReloading };
   }
 
   handleReload = () => {
     this.setState({ isReloading: true });
-    void reloadFresh();
+    forceFreshReload();
   };
 
   render() {
-    if (this.state.hasError) {
-      if (this.state.isReloading) {
-        return <LoadingScreen label="Atualizando o app..." />;
-      }
-      return (
-        <div className="error-boundary-fallback">
-          <p className="card-title">Algo deu errado ao carregar essa página</p>
-          <p className="card-subtitle">Pode ser uma versão nova do app -- recarregar já resolve.</p>
-          <div className="onboarding-actions">
-            <button type="button" className="btn btn-primary" onClick={this.handleReload}>
-              Recarregar
-            </button>
-            <button type="button" className="btn btn-outline" onClick={() => window.location.assign("/dashboard")}>
-              Ir pro painel
-            </button>
-          </div>
+    if (!this.state.hasError) return this.props.children;
+    if (this.state.isReloading) return <LoadingScreen label="Atualizando o app..." />;
+    return (
+      <div className="error-boundary-fallback" role="alert">
+        <BrandMark size={44} />
+        <p className="error-boundary-title">Vamos atualizar o app</p>
+        <p className="error-boundary-text">Tem uma versão nova do PAR. Toque abaixo pra carregar.</p>
+        <div className="onboarding-actions">
+          <button type="button" className="btn btn-primary" onClick={this.handleReload}>
+            Atualizar agora
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => window.location.assign("/dashboard")}>
+            Ir pro painel
+          </button>
         </div>
-      );
-    }
-    return this.props.children;
+      </div>
+    );
   }
 }
 
+export function ErrorBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return <ErrorBoundaryInner pathname={pathname}>{children}</ErrorBoundaryInner>;
+}

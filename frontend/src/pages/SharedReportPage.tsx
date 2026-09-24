@@ -118,10 +118,14 @@ export default function SharedReportPage() {
                       {tx.categoryEmoji ?? "💸"}
                     </span>
                     <div className="transaction-info">
-                      <span className="transaction-desc">{tx.description}</span>
+                      <span className="transaction-desc">
+                        <span className="text-truncate">{tx.description}</span>
+                      </span>
                       <span className="transaction-meta">
-                        {tx.categoryName ?? "Sem categoria"}
-                        {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
+                        <span className="text-truncate">
+                          {tx.categoryName ?? "Sem categoria"}
+                          {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
+                        </span>
                       </span>
                     </div>
                     <span className={`transaction-amount ${tx.transactionType}`}>

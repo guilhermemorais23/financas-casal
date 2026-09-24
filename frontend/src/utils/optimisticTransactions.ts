@@ -124,15 +124,12 @@ export function saveTransactionInBackground(args: SaveInBackgroundArgs): void {
   request.catch((err) => {
     patchCaches(userId, optimistic, -1);
     notifyDataChanged();
-    showToast(
-      err instanceof ApiError
-        ? `Não salvou “${optimistic.description}”: ${err.message}`
-        : `Não foi possível salvar “${optimistic.description}”`,
-      {
+    showToast(`Não salvou “${optimistic.description}”`, {
+        variant: "error",
+        description: err instanceof ApiError ? err.message : "Verifique a conexão e tente de novo",
         actionLabel: "Tentar de novo",
         durationMs: 10000,
         onAction: () => saveTransactionInBackground(args),
-      }
-    );
+    });
   });
 }

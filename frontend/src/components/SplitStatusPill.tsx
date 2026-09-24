@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
+import { useToast } from "./ToastProvider";
 
 interface SplitStatusPillProps {
   token: string | null;
@@ -33,6 +34,7 @@ export function SplitStatusPill({
   onError,
 }: SplitStatusPillProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const { showToast } = useToast();
   const [amount, setAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -50,6 +52,7 @@ export function SplitStatusPill({
     onOptimisticChange(false);
     try {
       await apiRequest(`/transactions/${transactionId}/settle`, { method: "PATCH", token, body: { isSettled: false } });
+      showToast("Divisão reaberta", { variant: "info" });
       onSettled();
     } catch (err) {
       onOptimisticChange(true);
@@ -72,6 +75,7 @@ export function SplitStatusPill({
         body: { isSettled: true, amount: parsedAmount },
       });
       setIsFormOpen(false);
+      showToast("Marcado como pago");
       onSettled();
     } catch (err) {
       onOptimisticChange(false);

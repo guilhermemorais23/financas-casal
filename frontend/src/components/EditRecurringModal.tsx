@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useToast } from "./ToastProvider";
 
 export interface EditableRecurring {
   id: string;
@@ -22,6 +23,7 @@ export function EditRecurringModal({
   onSaved: () => void;
 }) {
   const { token } = useAuth();
+  const { showToast } = useToast();
   const [amount, setAmount] = useState(transaction.amount);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,6 +45,7 @@ export function EditRecurringModal({
         token,
         body: { amount: parsedAmount },
       });
+      showToast("Conta fixa atualizada");
       onSaved();
       onClose();
     } catch (err) {

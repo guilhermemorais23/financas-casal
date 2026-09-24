@@ -168,6 +168,7 @@ export function AccountPage() {
         token,
         body: { capAmount },
       });
+      showToast("Orçamento salvo");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar o orçamento");
@@ -215,6 +216,7 @@ export function AccountPage() {
     setIsInviting(true);
     try {
       await apiRequest("/groups/invite", { method: "POST", token });
+      showToast("Convite gerado");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível gerar o convite");
@@ -235,6 +237,7 @@ export function AccountPage() {
     setRemovingMemberId(memberId);
     try {
       await apiRequest(`/groups/members/${memberId}`, { method: "DELETE", token });
+      showToast(`${memberName} saiu do grupo`, { variant: "info" });
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível remover essa pessoa");
@@ -432,7 +435,7 @@ export function AccountPage() {
             <button
               type="button"
               className="btn btn-outline btn-sm"
-              onClick={() => showToast("Open Finance chega em breve. Por enquanto, importe o extrato do banco.")}
+              onClick={() => showToast("Open Finance chega em breve", { variant: "info", description: "Por enquanto, importe o extrato do banco" })}
             >
               <Icon name="bank" />
               Conectar conta
@@ -445,7 +448,7 @@ export function AccountPage() {
 
         <div className="card form-card">
           <p className="card-title">Orçamento do mês</p>
-          <p className="card-subtitle">Definam um teto mensal e acompanhem no painel.</p>
+          <p className="card-subtitle">Um teto por mês, visto no Painel.</p>
           <form onSubmit={handleSaveBudget}>
             <div className="field">
               <label htmlFor="budget-cap">Teto (R$)</label>

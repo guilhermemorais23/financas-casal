@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
+import { useToast } from "./ToastProvider";
 
 interface CategoryRow {
   id: string;
@@ -43,6 +44,7 @@ export function EditTransactionModal({
   onSaved: () => void;
 }) {
   const { user, token } = useAuth();
+  const { showToast } = useToast();
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -95,6 +97,7 @@ export function EditTransactionModal({
           paymentMethod: paymentMethod || null,
         },
       });
+      showToast("Lançamento atualizado");
       onSaved();
       onClose();
     } catch (err) {

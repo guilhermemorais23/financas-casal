@@ -7,6 +7,7 @@ import { currentMonthParam, formatCurrency, monthYearLabel, parseLocalDate } fro
 import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
+import { useToast } from "../components/ToastProvider";
 
 interface MemberRow {
   id: string;
@@ -71,6 +72,7 @@ interface StatementDetail extends StatementSummary {
 
 export function CardsPage() {
   const { user, token } = useAuth();
+  const { showToast } = useToast();
   const confirm = useConfirm();
   const cacheKey = `cards:${user?.id ?? "anon"}`;
 
@@ -158,6 +160,7 @@ export function CardsPage() {
       setLimit("");
       setLimitType("normal");
       setIsCreateOpen(false);
+      showToast("Cartão criado");
       await loadCards();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar o cartão");
@@ -176,6 +179,7 @@ export function CardsPage() {
     try {
       await apiRequest(`/cards/${cardId}`, { method: "DELETE", token });
       if (expandedCardId === cardId) setExpandedCardId(null);
+      showToast("Cartão excluído");
       await loadCards();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível remover o cartão");
@@ -240,6 +244,7 @@ export function CardsPage() {
       setPurchaseCategoryId("");
       setPurchaseInstallments("1");
       setIsAddingPurchase(false);
+      showToast("Compra lançada no cartão");
       await loadStatement(cardId, statementMonth);
       await loadCards();
     } catch (err) {
@@ -252,6 +257,7 @@ export function CardsPage() {
   async function handleDeletePurchase(cardId: string, purchaseId: string) {
     try {
       await apiRequest(`/cards/${cardId}/purchases/${purchaseId}`, { method: "DELETE", token });
+      showToast("Compra excluída");
       await loadStatement(cardId, statementMonth);
       await loadCards();
     } catch (err) {
@@ -278,6 +284,7 @@ export function CardsPage() {
         token,
         body: { isPaid: !isPaid },
       });
+      showToast(isPaid ? "Fatura reaberta" : "Fatura paga", isPaid ? { variant: "info" } : undefined);
       await loadStatement(card.id, statementMonth);
       await loadCards();
     } catch (err) {
@@ -313,6 +320,7 @@ export function CardsPage() {
         token,
         body: { direction: limitAdjust.direction, amount: parsedAmount },
       });
+      showToast(limitAdjust.direction === "deposit" ? "Guardado no limite" : "Resgatado do limite");
       setLimitAdjust(null);
       setLimitAdjustAmount("");
       await loadCards();
@@ -514,7 +522,7 @@ export function CardsPage() {
                         <span className="transaction-icon">{category?.emoji ?? "🧾"}</span>
                         <div className="transaction-info">
                           <span className="transaction-desc">
-                            {purchase.description}
+                            <span className="text-truncate">{purchase.description}</span>
                             {purchase.installmentsCount > 1 && (
                               <span className="badge installment-badge">
                                 {purchase.installmentNumber}/{purchase.installmentsCount}
@@ -678,7 +686,7 @@ export function CardsPage() {
         <div className="section-header">
           <div>
             <h1>Cartões</h1>
-            <p className="card-subtitle">Faturas, limite e quem comprou o quê em cada cartão.</p>
+            <p className="card-subtitle">Faturas, limite e quem comprou o quê.</p>
           </div>
           {cards !== null && cards.length > 0 && !isCreateOpen && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsCreateOpen(true)}>

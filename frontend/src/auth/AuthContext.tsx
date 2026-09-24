@@ -15,7 +15,6 @@ import { FirebaseError } from "firebase/app";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiRequest, setTokenRefresher, warmUpApi } from "../api/client";
 import { firebaseAuth } from "../firebase";
-import { markWelcomeTourPending } from "../utils/welcomeTour";
 
 export interface AuthUser {
   id: string;
@@ -75,15 +74,15 @@ const POPUP_UNAVAILABLE = new Set([
   "auth/web-storage-unsupported",
 ]);
 
-// Creates the profile doc on first sign-in (idempotent otherwise). A brand
-// new account also gets the welcome tour queued up.
+// Creates the profile doc on first sign-in (idempotent otherwise). The
+// welcome tour shows for every account that hasn't seen the current edition
+// (see utils/welcomeTour.ts), new or not.
 async function bootstrapProfile(idToken: string, displayName: string): Promise<AuthUser> {
-  const { isNew, ...profile } = await apiRequest<AuthUser & { isNew?: boolean }>("/me/bootstrap", {
+  const { isNew: _isNew, ...profile } = await apiRequest<AuthUser & { isNew?: boolean }>("/me/bootstrap", {
     method: "POST",
     token: idToken,
     body: { displayName },
   });
-  if (isNew) markWelcomeTourPending(profile.id);
   return profile;
 }
 
@@ -277,7 +276,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await updateProfile(credential.user, { displayName });
     const idToken = await credential.user.getIdToken();
     const profile = await bootstrapProfile(idToken, displayName);
-    markWelcomeTourPending(profile.id);
     setToken(idToken);
     setUser(profile);
     logLoginEvent(idToken, "register");

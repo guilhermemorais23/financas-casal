@@ -842,14 +842,31 @@ input:focus {
 }
 
 .error-boundary-fallback {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
   text-align: center;
-  padding: 2rem;
+  padding: 2rem 1.25rem;
+}
+
+.error-boundary-title {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.error-boundary-text {
+  margin: 0 0 0.75rem;
+  color: var(--color-text-muted);
+  max-width: 300px;
+}
+
+.error-boundary-fallback .onboarding-actions {
+  gap: 0.6rem;
 }
 
 .skeleton {
@@ -876,49 +893,107 @@ input:focus {
 
 .toast-stack {
   position: fixed;
-  top: 1.25rem;
+  top: calc(0.75rem + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
+  width: min(420px, calc(100vw - 2rem));
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 0.5rem;
-  z-index: 80;
+  z-index: 300;
   pointer-events: none;
 }
 
 .toast {
+  --toast-accent: var(--status-good);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0;
+  gap: 0.7rem;
+  min-width: 0;
   position: relative;
   overflow: hidden;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  padding: 0.6rem 1rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  box-shadow: 0 12px 28px -14px rgba(23, 26, 22, 0.35);
-  animation: toast-in 0.25s ease, toast-out 0.25s ease calc(var(--toast-ms, 2600ms) - 0.25s);
+  pointer-events: auto;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--toast-accent) 22%, var(--color-border));
+  border-radius: 16px;
+  padding: 0.7rem 0.8rem 0.75rem;
+  box-shadow: 0 18px 40px -18px rgba(23, 20, 60, 0.45), 0 2px 6px -2px rgba(23, 20, 60, 0.12);
+  animation: toast-in 0.35s cubic-bezier(0.2, 0.9, 0.25, 1.2), toast-out 0.25s ease calc(var(--toast-ms, 3000ms) - 0.25s);
   animation-fill-mode: forwards;
 }
 
-.toast.has-action {
-  pointer-events: auto;
-  padding-right: 0.6rem;
+.toast-error {
+  --toast-accent: var(--status-critical);
+}
+
+.toast-info {
+  --toast-accent: var(--color-primary);
+}
+
+.toast-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--toast-accent);
+  box-shadow: 0 6px 14px -6px var(--toast-accent);
+}
+
+.toast-icon .icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.6;
+}
+
+.toast-success .toast-icon .icon {
+  animation: toast-check 0.45s ease 0.1s both;
+  stroke-dasharray: 24;
+}
+
+.toast-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.toast-message,
+.toast-description {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast-message {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.toast-description {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
 }
 
 .toast-action {
+  flex-shrink: 0;
   border: 0;
   background: var(--color-primary-soft);
   color: var(--color-primary);
   font: inherit;
+  font-size: 0.85rem;
   font-weight: 700;
-  padding: 0.3rem 0.75rem;
+  padding: 0.4rem 0.8rem;
   border-radius: 999px;
   cursor: pointer;
-  margin-left: 0.25rem;
+  white-space: nowrap;
 }
 
 .toast-action:hover {
@@ -926,16 +1001,17 @@ input:focus {
   color: #fff;
 }
 
-/* Thin bar draining across the bottom -- shows how long "Desfazer" stays. */
+/* Thin bar draining across the bottom -- shows how long the toast stays. */
 .toast-timer {
   position: absolute;
   left: 0;
   bottom: 0;
   height: 3px;
   width: 100%;
-  background: var(--color-primary);
+  background: var(--toast-accent);
+  opacity: 0.55;
   transform-origin: left;
-  animation: toast-drain var(--toast-ms, 6000ms) linear forwards;
+  animation: toast-drain var(--toast-ms, 3000ms) linear forwards;
 }
 
 @keyframes toast-drain {
@@ -944,30 +1020,32 @@ input:focus {
   }
 }
 
-.toast-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--status-good);
-  flex-shrink: 0;
+@keyframes toast-check {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(-14px) scale(0.96);
   }
 }
 
 @keyframes toast-out {
   to {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(-10px) scale(0.98);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .toast,
+  .toast-success .toast-icon .icon {
     animation: none;
   }
 
@@ -4212,6 +4290,16 @@ input[type="checkbox"] {
   color: var(--color-primary);
 }
 
+.welcome-tour-tag {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
 .welcome-tour h2 {
   margin: 0 0 0.6rem;
   font-size: 1.45rem;
@@ -4316,5 +4404,272 @@ input[type="checkbox"] {
   .welcome-tour,
   .welcome-tour-slide {
     animation: none;
+  }
+}
+
+/* Feels like an app on a phone ---------------------------------------------
+   The page is exactly the phone's width: nothing can be dragged sideways,
+   and short labels (buttons, pills, list rows) stay on one line with "..."
+   instead of breaking into two. `clip` (not `hidden`) so sticky headers and
+   the fixed menu keep working. */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+body {
+  overscroll-behavior-x: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+.text-truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-desc,
+.transaction-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.transaction-desc .badge,
+.split-status-pill {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.btn,
+.segmented-option,
+.badge,
+.pill-soon,
+.app-sidebar-spending-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.checkbox-field {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  /* iOS zooms into any field under 16px on focus -- and once zoomed, the
+     whole page can be dragged sideways. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .segmented-option {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.35rem;
+  }
+
+  .transaction-row {
+    gap: 0.6rem;
+  }
+
+  /* Not enough room for "categoria · pagamento" AND the Em aberto pill side
+     by side: the pill drops to its own line instead of squeezing the text. */
+  .transaction-meta {
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+  }
+
+  .transaction-meta > .text-truncate {
+    max-width: 100%;
+  }
+
+  .transaction-meta .split-status-pill {
+    margin-left: 0;
+  }
+
+  .transaction-row-actions .btn-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .transaction-amount {
+    font-size: 0.88rem;
+  }
+}
+
+.stat-box .label,
+.stat-card .label,
+.money-card-list li > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.money-card-list li > strong {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.budget-header {
+  gap: 0.75rem;
+}
+
+.budget-header > *,
+.debt-mini-name,
+.section-header > .card-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.budget-header > .link,
+.budget-header > .budget-amounts {
+  flex-shrink: 0;
+}
+
+@media (max-width: 380px) {
+  .budget-header .card-title {
+    font-size: 1rem;
+  }
+}
+
+.category-budget-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-header > .card-title {
+  flex: 1 1 0;
+}
+
+.section-header > .transaction-row-actions,
+.section-header > .link {
+  flex-shrink: 0;
+}
+
+/* "R$ X nesta fatura  ·  vence ..." -- when both don't fit, the second
+   part goes under the first, each staying whole on one line. */
+.goal-amounts {
+  flex-wrap: wrap;
+  column-gap: 0.75rem;
+  row-gap: 0.15rem;
+  align-items: baseline;
+}
+
+.goal-amounts > *,
+.debt-mini-value,
+.debt-mini-remaining {
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  /* Phone list rows: the value sits top-right and the edit/delete icons
+     tuck under it, so the description column gets the width instead of
+     being squeezed to a few letters. */
+  .transaction-row:has(> .transaction-info):has(> .transaction-row-actions) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    column-gap: 0.6rem;
+    row-gap: 0.1rem;
+    align-items: center;
+  }
+
+  .transaction-row:has(> .transaction-info):has(> .transaction-row-actions) > .transaction-icon {
+    grid-row: 1 / span 2;
+  }
+
+  .transaction-row:has(> .transaction-info):has(> .transaction-row-actions) > .transaction-info {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .transaction-row:has(> .transaction-info):has(> .transaction-row-actions) > .transaction-amount {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    align-self: end;
+  }
+
+  .transaction-row:has(> .transaction-info):has(> .transaction-row-actions) > .transaction-row-actions {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+    align-self: start;
+    margin-right: -0.35rem;
+  }
+
+  .transaction-row-actions .btn-icon {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+.stat-box {
+  min-width: 0;
+}
+
+.stat-box .value-sm {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.report-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-group-count,
+.report-group-chevron {
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  /* Big money values shrink with the screen instead of spilling out. */
+  .stat-box .value-sm {
+    font-size: clamp(1.1rem, 5.6vw, 1.55rem);
+  }
+
+  .stat-row.wrap .stat-box {
+    min-width: 0;
+    flex-basis: calc(50% - 0.5rem);
+    padding: 1rem;
+  }
+
+  .report-group-total {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    font-size: 0.82rem;
   }
 }

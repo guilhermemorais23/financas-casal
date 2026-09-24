@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useToast } from "./ToastProvider";
 
 export interface EditableDebt {
   id: string;
@@ -19,6 +20,7 @@ export function EditDebtModal({
   onSaved: () => void;
 }) {
   const { token } = useAuth();
+  const { showToast } = useToast();
 
   const [name, setName] = useState(debt.name);
   const [description, setDescription] = useState(debt.description ?? "");
@@ -51,6 +53,7 @@ export function EditDebtModal({
           dueDay: parsedDueDay,
         },
       });
+      showToast("Dívida atualizada");
       onSaved();
       onClose();
     } catch (err) {
