@@ -5,6 +5,7 @@ import { NewGoalModal } from "../components/NewGoalModal";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, parseLocalDate } from "../utils/format";
+import { minimumMonthlySaving } from "../utils/goals";
 import { useConfirm } from "../components/ConfirmDialog";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { trackWrite, whenWritesSettled } from "../utils/pendingWrites";
@@ -122,6 +123,10 @@ export function GoalsPage() {
           const current = Number(goal.currentAmount);
           const target = Number(goal.targetAmount);
           const percent = Math.min(100, Math.round((current / target) * 100));
+          const monthly = goal.achievedAt ? null : minimumMonthlySaving(target, current, goal.deadline);
+          // minimumMonthlySaving only returns null for a dated, unfinished goal
+          // once its deadline is behind us.
+          const isOverdue = !goal.achievedAt && goal.deadline !== null && monthly === null && current < target;
           return (
             <div key={goal.id} className="card goal-card">
               {goal.photoDataUrl && <img src={goal.photoDataUrl} alt="" className="goal-card-cover" />}
@@ -143,6 +148,19 @@ export function GoalsPage() {
                 </span>
                 {goal.deadline && <span>até {parseLocalDate(goal.deadline).toLocaleDateString("pt-BR")}</span>}
               </div>
+              {monthly && (
+                <p className="goal-monthly">
+                  Guarde no mínimo <strong>{formatCurrency(monthly.perMonth)}/mês</strong>{" "}
+                  <span className="field-hint">
+                    por {monthly.months} {monthly.months === 1 ? "mês" : "meses"} pra chegar no prazo
+                  </span>
+                </p>
+              )}
+              {isOverdue && (
+                <p className="goal-monthly field-hint">
+                  O prazo passou e faltam {formatCurrency(target - current)}.
+                </p>
+              )}
               {!goal.achievedAt && (
                 <div className="invite-link-row">
                   <input

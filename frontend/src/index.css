@@ -605,19 +605,59 @@ input:focus {
   background: rgba(248, 246, 242, 0.12);
 }
 
-.btn-google-icon {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  margin: 0 auto;
-  border-radius: 50%;
-  background: var(--color-bg);
-  border-color: var(--color-border);
+.social-login-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
 }
 
-.btn-google-icon:hover:not(:disabled) {
+.social-login-row .btn + .btn {
+  margin-top: 0;
+}
+
+.btn-social {
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  font-weight: 600;
+}
+
+.btn-social-google {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.btn-social-google:hover:not(:disabled) {
   background: var(--color-bg-soft);
   box-shadow: 0 1px 4px rgba(15, 17, 21, 0.08);
+}
+
+/* Apple's guideline: black button, white logo (white on dark mode). */
+.btn-social-apple {
+  background: #000;
+  color: #fff;
+}
+
+.btn-social-apple:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-social-apple {
+    background: #fff;
+    color: #000;
+  }
+}
+
+:root[data-theme="dark"] .btn-social-apple {
+  background: #fff;
+  color: #000;
+}
+
+.footnote.footnote-muted {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  opacity: 0.75;
 }
 
 .btn-ghost {
@@ -1349,7 +1389,9 @@ input:focus {
 
 .app-main {
   flex: 1;
-  padding: 2rem;
+  /* Extra room at the bottom so the last row can scroll out from under the
+     floating "+" instead of being covered by it. */
+  padding: 2rem 2rem 6rem;
   max-width: 720px;
   margin: 0 auto;
   width: 100%;
@@ -1370,6 +1412,13 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  min-width: 0;
+}
+
+/* .card's 380px cap is for the auth/setup forms -- on the Painel the cards
+   fill their column, otherwise wide screens get big empty gaps. */
+.dashboard-col > .card {
+  max-width: none;
 }
 
 @media (max-width: 900px) {
@@ -1496,7 +1545,7 @@ input:focus {
   }
 
   .app-main {
-    padding: 1.25rem 1.25rem calc(4.75rem + env(safe-area-inset-bottom, 0px));
+    padding: 1.25rem 1.25rem calc(8.5rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -3056,6 +3105,14 @@ input[type="checkbox"] {
   letter-spacing: -0.01em;
 }
 
+.hero-note {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
 .hero-trend {
   position: relative;
   z-index: 1;
@@ -3883,4 +3940,138 @@ input[type="checkbox"] {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+/* Cartão com limite garantido: guardar/resgatar + "quando o limite volta" */
+.limit-adjust-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.limit-adjust-actions .btn {
+  flex: 1;
+  margin-top: 0;
+}
+
+.limit-adjust-form {
+  margin-top: 0.75rem;
+}
+
+.limit-releases {
+  margin-top: 0.9rem;
+}
+
+.limit-releases-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 0 0 0.35rem;
+}
+
+.limit-releases ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.limit-releases li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.limit-releases li:first-child {
+  border-top: 0;
+}
+
+.limit-releases-meta {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.goal-monthly {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.goal-monthly strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Política de privacidade (public page) ------------------------------------ */
+
+.legal-page {
+  min-height: 100vh;
+  padding: 2.5rem 16px 4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.card.legal-card {
+  max-width: 720px;
+  line-height: 1.6;
+}
+
+.legal-card h2 {
+  font-size: 1.15rem;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.legal-card ul {
+  padding-left: 1.2rem;
+  margin: 0.5rem 0;
+}
+
+.legal-card li {
+  margin-bottom: 0.5rem;
+}
+
+.legal-back {
+  margin-top: 2rem;
+}
+
+@media (max-width: 480px) {
+  .card.legal-card {
+    padding: 1.5rem;
+  }
+}
+
+.card.danger-zone {
+  border: 1px solid var(--color-danger-text);
+}
+
+/* "Seu dinheiro hoje" on the Painel ---------------------------------------- */
+
+.money-card-total {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.money-card-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.money-card-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
 }

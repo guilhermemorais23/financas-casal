@@ -10,6 +10,7 @@ import {
   InvalidRecurringUpdateError,
   InvalidSettlementAmountError,
   NotSplitError,
+  SecuredCardTransferError,
   TransactionNotFoundError,
   UnsupportedSplitTypeError,
   cancelRecurringForUser,
@@ -278,6 +279,10 @@ export async function updateTransactionHandler(req: Request, res: Response) {
       res.status(404).json({ error: "transaction not found" });
       return;
     }
+    if (err instanceof SecuredCardTransferError) {
+      res.status(409).json({ error: "Esse valor foi guardado no cartão. Use Resgatar na página Cartões." });
+      return;
+    }
     if (err instanceof InvalidCategoryError) {
       res.status(400).json({ error: "InvalidCategoryError" });
       return;
@@ -301,6 +306,10 @@ export async function deleteTransactionHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
       res.status(404).json({ error: "transaction not found" });
+      return;
+    }
+    if (err instanceof SecuredCardTransferError) {
+      res.status(409).json({ error: "Esse valor foi guardado no cartão. Use Resgatar na página Cartões." });
       return;
     }
     throw err;

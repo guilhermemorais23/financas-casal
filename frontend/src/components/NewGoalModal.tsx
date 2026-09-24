@@ -4,6 +4,8 @@ import { useAuth } from "../auth/AuthContext";
 import { EmojiPicker } from "./EmojiPicker";
 import { useToast } from "./ToastProvider";
 import { compressToSquareDataUrl } from "../utils/imageCompression";
+import { formatCurrency } from "../utils/format";
+import { minimumMonthlySaving } from "../utils/goals";
 
 const PHOTO_SIZE = 240;
 
@@ -19,6 +21,8 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [deadline, setDeadline] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const monthly = minimumMonthlySaving(Number(targetAmount.replace(",", ".")) || 0, 0, deadline || null);
 
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -115,6 +119,12 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
               <input id="goal-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
             </div>
           </div>
+          {monthly && (
+            <p className="field-hint">
+              Pra chegar no prazo, guarde no mínimo <strong>{formatCurrency(monthly.perMonth)} por mês</strong> durante{" "}
+              {monthly.months} {monthly.months === 1 ? "mês" : "meses"}.
+            </p>
+          )}
 
           {error && (
             <p className="alert" role="alert">

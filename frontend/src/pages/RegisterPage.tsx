@@ -3,19 +3,18 @@ import { Link, useNavigate } from "react-router-dom";
 import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
-import { GoogleIcon } from "../components/GoogleIcon";
+import { SocialLoginButtons } from "../components/SocialLoginButtons";
 import { PasswordInput } from "../components/PasswordInput";
 import { PENDING_INVITE_STORAGE_KEY } from "./AcceptInvitePage";
 
 export function RegisterPage() {
-  const { register, loginWithGoogle } = useAuth();
+  const { register } = useAuth();
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
 
   function goAfterAuth() {
@@ -46,18 +45,6 @@ export function RegisterPage() {
     }
   }
 
-  async function handleGoogle() {
-    setError(null);
-    setIsGoogleSubmitting(true);
-    try {
-      await loginWithGoogle();
-      celebrateThenGo();
-    } catch (err) {
-      setError(authErrorMessage(err, "Não foi possível entrar com Google"));
-      setIsGoogleSubmitting(false);
-    }
-  }
-
   if (justCreated) {
     return (
       <div className="page-center">
@@ -80,16 +67,7 @@ export function RegisterPage() {
         <h1>Criar conta</h1>
         <p className="card-subtitle">Grátis para começar. Sem cartão necessário.</p>
 
-        <button
-          type="button"
-          className="btn btn-google-icon"
-          onClick={handleGoogle}
-          disabled={isGoogleSubmitting}
-          aria-label="Continuar com Google"
-          title="Continuar com Google"
-        >
-          <GoogleIcon />
-        </button>
+        <SocialLoginButtons onSuccess={celebrateThenGo} onError={setError} />
         <div className="divider">ou</div>
 
         <form onSubmit={handleSubmit}>
@@ -130,6 +108,9 @@ export function RegisterPage() {
       </div>
       <p className="footnote">
         Já tem conta? <Link to="/login">Entrar</Link>
+      </p>
+      <p className="footnote footnote-muted">
+        Ao criar a conta você concorda com a <Link to="/privacidade">política de privacidade</Link>.
       </p>
     </div>
   );

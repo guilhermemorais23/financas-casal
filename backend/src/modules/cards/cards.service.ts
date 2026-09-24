@@ -1,7 +1,13 @@
 import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { deleteTransaction, insertSplits, insertTransaction } from "../transactions/transactions.repository";
+import {
+  deleteTransaction,
+  deleteTransactionsBatch,
+  findSecuredCardTransferIds,
+  insertSplits,
+  insertTransaction,
+} from "../transactions/transactions.repository";
 import { addMonths, dateForDayInMonth } from "../../utils/month";
 import {
   deleteCard,
@@ -12,11 +18,13 @@ import {
   findPurchaseById,
   findPurchasesByCardAndStatement,
   findStatement,
+  incrementCardLimit,
   insertCard,
   insertPurchaseSeries,
   setStatementPaid,
   updateCard,
   type CardRow,
+  type LimitType,
   type PurchaseRow,
 } from "./cards.repository";
 
@@ -28,6 +36,8 @@ export class InvalidCategoryError extends Error {}
 export class StatementAlreadyPaidError extends Error {}
 export class InvalidLimitError extends Error {}
 export class InvalidInstallmentsError extends Error {}
+export class NotSecuredCardError extends Error {}
+export class InsufficientAvailableLimitError extends Error {}
 
 export type CardScope = "personal" | "joint";
 
@@ -44,6 +54,7 @@ export interface CreateCardInput {
   dueDay: number;
   scope: CardScope;
   limit: number | null;
+  limitType: LimitType;
 }
 
 export interface CardStatementSummary {
@@ -61,24 +72,60 @@ export interface CardWithSummary extends CardRow {
   // does the extra findAllPurchasesByCardId + per-month statement reads for
   // nothing, and the frontend has nothing to draw a bar against anyway.
   limitUsed: string | null;
+  // One entry per unpaid statement (oldest first): how much of the limit
+  // comes back once that fatura is paid, and how much will be free right
+  // after -- the "quando o limite volta" timeline. Empty without a limit.
+  limitReleases: LimitRelease[];
 }
 
-// Sum of every installment (any statement month, including ones months in
-// the future) whose statement hasn't been marked paid yet -- a parcelado
-// purchase locks its FULL amount against the limit the moment it's made,
-// same as a real card, and only frees each installment's share back up as
-// that specific month's fatura gets paid off.
-async function computeLimitUsed(cardId: string): Promise<number> {
+export interface LimitRelease {
+  month: string;
+  dueDate: string;
+  amount: string;
+  availableAfter: string;
+}
+
+// Every installment (any statement month, including ones months in the
+// future) whose statement hasn't been marked paid yet, summed per statement
+// month -- a parcelado purchase locks its FULL amount against the limit the
+// moment it's made, same as a real card, and only frees each installment's
+// share back up as that specific month's fatura gets paid off.
+async function computeUnpaidByMonth(cardId: string): Promise<Map<string, number>> {
   const purchases = await findAllPurchasesByCardId(cardId);
-  if (purchases.length === 0) return 0;
+  const byMonth = new Map<string, number>();
+  if (purchases.length === 0) return byMonth;
 
   const months = [...new Set(purchases.map((purchase) => purchase.statementMonth))];
   const statements = await Promise.all(months.map((month) => findStatement(cardId, month)));
   const paidMonths = new Set(months.filter((_, index) => statements[index]?.isPaid));
 
-  return purchases
-    .filter((purchase) => !paidMonths.has(purchase.statementMonth))
-    .reduce((sum, purchase) => sum + Math.round(Number(purchase.amount) * 100), 0);
+  for (const purchase of purchases) {
+    if (paidMonths.has(purchase.statementMonth)) continue;
+    const cents = Math.round(Number(purchase.amount) * 100);
+    byMonth.set(purchase.statementMonth, (byMonth.get(purchase.statementMonth) ?? 0) + cents);
+  }
+  return byMonth;
+}
+
+function sumCents(byMonth: Map<string, number>): number {
+  let total = 0;
+  for (const cents of byMonth.values()) total += cents;
+  return total;
+}
+
+function limitReleasesFor(card: CardRow, byMonth: Map<string, number>): LimitRelease[] {
+  let availableCents = Math.round(Number(card.limit) * 100) - sumCents(byMonth);
+  return [...byMonth.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, cents]) => {
+      availableCents += cents;
+      return {
+        month,
+        dueDate: dueDateFor(month, card.closingDay, card.dueDay),
+        amount: (cents / 100).toFixed(2),
+        availableAfter: (availableCents / 100).toFixed(2),
+      };
+    });
 }
 
 // Purchases on days 1..closingDay belong to the statement labeled with that
@@ -145,8 +192,13 @@ export async function createCard(userId: string, input: CreateCardInput) {
   if (input.limit !== null && input.limit <= 0) {
     throw new InvalidLimitError();
   }
+  // A secured card's limit is the money put into it, so it starts with the
+  // first deposit -- there's nothing to track without one.
+  if (input.limitType === "secured" && input.limit === null) {
+    throw new InvalidLimitError();
+  }
 
-  return insertCard({
+  const card = await insertCard({
     groupId,
     ownerUserId,
     createdBy: userId,
@@ -154,6 +206,55 @@ export async function createCard(userId: string, input: CreateCardInput) {
     closingDay: input.closingDay,
     dueDay: input.dueDay,
     limit: input.limit,
+    limitType: input.limitType,
+  });
+  if (card.limitType === "secured" && input.limit !== null) {
+    await recordSecuredTransfer(userId, groupId, card, "deposit", input.limit);
+  }
+  return card;
+}
+
+// The account a card's money moves through -- the owner's personal account
+// for a personal card, "Nossa Conta" for a joint one. Same rule the fatura
+// payment uses.
+async function accountForCard(groupId: string, card: CardRow) {
+  const accounts = await findAccountsByGroupId(groupId);
+  const account = card.ownerUserId
+    ? accounts.find((a) => a.type === "personal" && a.ownerUserId === card.ownerUserId)
+    : accounts.find((a) => a.type === "joint");
+  if (!account) {
+    throw new CardNotFoundError();
+  }
+  return account;
+}
+
+// Guardar no cartão = the money leaves the account (and shows up in the
+// extrato on the day it happened); resgatar = it comes back. Booked as a
+// transfer (securedCardId), so it moves the balance without counting as a
+// gasto/receita anywhere.
+async function recordSecuredTransfer(
+  userId: string,
+  groupId: string,
+  card: CardRow,
+  direction: "deposit" | "withdraw",
+  amount: number
+) {
+  const account = await accountForCard(groupId, card);
+  await insertTransaction({
+    groupId,
+    accountId: account.id,
+    accountType: account.type,
+    accountOwnerId: account.ownerUserId,
+    categoryId: null,
+    payerId: userId,
+    createdBy: userId,
+    description: direction === "deposit" ? `Guardado no cartão ${card.name}` : `Resgatado do cartão ${card.name}`,
+    amount,
+    transactionType: direction === "deposit" ? "expense" : "income",
+    occurredAt: new Date().toISOString().slice(0, 10),
+    isPrivate: false,
+    splitType: "none",
+    securedCardId: card.id,
   });
 }
 
@@ -164,16 +265,17 @@ export async function listCards(userId: string): Promise<CardWithSummary[]> {
   return Promise.all(
     cards.map(async (card) => {
       const month = currentStatementMonth(card.closingDay);
-      const [purchases, statement, limitUsedCents] = await Promise.all([
+      const [purchases, statement, unpaidByMonth] = await Promise.all([
         findPurchasesByCardAndStatement(card.id, month),
         findStatement(card.id, month),
-        card.limit !== null ? computeLimitUsed(card.id) : Promise.resolve(null),
+        card.limit !== null ? computeUnpaidByMonth(card.id) : Promise.resolve(null),
       ]);
       return {
         ...card,
         scope: card.ownerUserId ? "personal" : ("joint" as CardScope),
         currentStatement: summarizePurchases(card, month, purchases, statement?.isPaid ?? false),
-        limitUsed: limitUsedCents !== null ? (limitUsedCents / 100).toFixed(2) : null,
+        limitUsed: unpaidByMonth !== null ? (sumCents(unpaidByMonth) / 100).toFixed(2) : null,
+        limitReleases: unpaidByMonth !== null ? limitReleasesFor(card, unpaidByMonth) : [],
       };
     })
   );
@@ -287,13 +389,7 @@ export async function setStatementPaidForUser(
       throw new PurchaseNotFoundError();
     }
 
-    const accounts = await findAccountsByGroupId(groupId);
-    const account = card.ownerUserId
-      ? accounts.find((a) => a.type === "personal" && a.ownerUserId === card.ownerUserId)
-      : accounts.find((a) => a.type === "joint");
-    if (!account) {
-      throw new CardNotFoundError();
-    }
+    const account = await accountForCard(groupId, card);
 
     const totalAmount = purchases.reduce((sum, purchase) => sum + Number(purchase.amount), 0);
     const transaction = await insertTransaction({
@@ -344,15 +440,53 @@ export async function updateCardForUser(
   cardId: string,
   input: { name: string; closingDay: number; dueDay: number; limit?: number | null }
 ) {
-  await requireManageableCard(userId, cardId);
+  const { card } = await requireManageableCard(userId, cardId);
   if (input.limit !== undefined && input.limit !== null && input.limit <= 0) {
     throw new InvalidLimitError();
+  }
+  // A secured card's limit only moves through deposits/withdrawals, so its
+  // history always matches the money actually parked in it.
+  if (card.limitType === "secured" && input.limit !== undefined) {
+    throw new NotSecuredCardError();
   }
   return updateCard(cardId, input);
 }
 
+// Cartão com limite garantido: "Guardar mais" raises the limit by exactly
+// the money deposited; "Resgatar" lowers it, but only up to what purchases
+// aren't holding -- the rest stays locked until those faturas are paid,
+// same as the bank would do.
+export async function adjustSecuredLimit(
+  userId: string,
+  cardId: string,
+  input: { direction: "deposit" | "withdraw"; amount: number }
+) {
+  const { groupId, card } = await requireManageableCard(userId, cardId);
+  if (card.limitType !== "secured") {
+    throw new NotSecuredCardError();
+  }
+  if (!(input.amount > 0)) {
+    throw new InvalidLimitError();
+  }
+
+  const amountCents = Math.round(input.amount * 100);
+  if (input.direction === "withdraw") {
+    const availableCents = Math.round(Number(card.limit ?? 0) * 100) - sumCents(await computeUnpaidByMonth(cardId));
+    if (amountCents > availableCents) {
+      throw new InsufficientAvailableLimitError();
+    }
+  }
+  const updated = await incrementCardLimit(cardId, input.direction === "deposit" ? amountCents : -amountCents);
+  await recordSecuredTransfer(userId, groupId, card, input.direction, amountCents / 100);
+  return updated;
+}
+
 export async function removeCard(userId: string, cardId: string) {
   await requireManageableCard(userId, cardId);
+  // Whatever was still guardado in the card goes back to the account: its
+  // guardar/resgatar entries disappear along with the card.
+  const transferIds = await findSecuredCardTransferIds(cardId);
   const linkedTransactionIds = await deleteCard(cardId);
   await Promise.all(linkedTransactionIds.map((transactionId) => deleteTransaction(transactionId)));
+  await deleteTransactionsBatch(transferIds);
 }

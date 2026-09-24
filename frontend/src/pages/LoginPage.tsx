@@ -4,18 +4,17 @@ import { Link, useNavigate } from "react-router-dom";
 import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
-import { GoogleIcon } from "../components/GoogleIcon";
+import { SocialLoginButtons } from "../components/SocialLoginButtons";
 import { PasswordInput } from "../components/PasswordInput";
 import { PENDING_INVITE_STORAGE_KEY } from "./AcceptInvitePage";
 
 export function LoginPage() {
-  const { login, loginWithGoogle, resetPassword } = useAuth();
+  const { login, resetPassword } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
@@ -70,19 +69,6 @@ export function LoginPage() {
     setIsResetting(false);
   }
 
-  async function handleGoogle() {
-    setError(null);
-    setIsGoogleSubmitting(true);
-    try {
-      await loginWithGoogle();
-      goAfterAuth();
-    } catch (err) {
-      setError(authErrorMessage(err, "Não foi possível entrar com Google"));
-    } finally {
-      setIsGoogleSubmitting(false);
-    }
-  }
-
   if (isResetMode) {
     return (
       <div className="page-center">
@@ -133,16 +119,7 @@ export function LoginPage() {
         <h1>Entrar</h1>
         <p className="card-subtitle">Finanças em grupo, sem atrito.</p>
 
-        <button
-          type="button"
-          className="btn btn-google-icon"
-          onClick={handleGoogle}
-          disabled={isGoogleSubmitting}
-          aria-label="Continuar com Google"
-          title="Continuar com Google"
-        >
-          <GoogleIcon />
-        </button>
+        <SocialLoginButtons onSuccess={goAfterAuth} onError={setError} />
         <div className="divider">ou</div>
 
         <form onSubmit={handleSubmit}>
@@ -186,6 +163,9 @@ export function LoginPage() {
       </div>
       <p className="footnote">
         Não tem conta? <Link to="/register">Criar conta</Link>
+      </p>
+      <p className="footnote footnote-muted">
+        <Link to="/privacidade">Política de privacidade</Link>
       </p>
     </div>
   );

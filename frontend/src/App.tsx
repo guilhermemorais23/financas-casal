@@ -29,6 +29,7 @@ function namedLazy<K extends string>(loader: () => Promise<Record<K, ComponentTy
 // load, so there's nothing to gain deferring it.
 const SharedReportPage = lazy(() => import("./pages/SharedReportPage"));
 const RegisterPage = namedLazy(() => import("./pages/RegisterPage"), "RegisterPage");
+const PrivacyPage = namedLazy(() => import("./pages/PrivacyPage"), "PrivacyPage");
 const GroupSetupPage = namedLazy(() => import("./pages/GroupSetupPage"), "GroupSetupPage");
 const DashboardPage = namedLazy(() => import("./pages/DashboardPage"), "DashboardPage");
 const ParPage = namedLazy(() => import("./pages/ParPage"), "ParPage");
@@ -55,6 +56,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/r/:token" element={<SharedReportPage />} />
+            <Route path="/privacidade" element={<PrivacyPage />} />
             <Route
               path="/group-setup"
               element={

@@ -3,6 +3,7 @@ import { isAdminEmail } from "../admin/admin.service";
 import { logAccess, type AccessEvent } from "../../utils/accessLog";
 import { sendWelcomeEmail } from "../../email/mailer";
 import { auth } from "../../db/firestore";
+import { deleteAccountForUser } from "./deleteAccount.service";
 import { findUserById, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
 
 function isNonEmptyString(value: unknown): value is string {
@@ -141,5 +142,13 @@ export async function updateProfileHandler(req: Request, res: Response) {
 // all-or-nothing revocation every major provider offers here.
 export async function revokeSessionsHandler(req: Request, res: Response) {
   await auth.revokeRefreshTokens(req.user!.id);
+  res.status(204).send();
+}
+
+// "Excluir conta" -- erases the person's data and their login for good (see
+// deleteAccount.service.ts for exactly what goes and what stays with the
+// rest of the group).
+export async function deleteAccountHandler(req: Request, res: Response) {
+  await deleteAccountForUser(req.user!.id);
   res.status(204).send();
 }

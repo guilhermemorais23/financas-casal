@@ -65,6 +65,9 @@ interface TransactionListRow {
   recurringGroupId: string | null;
   splitType: "none" | "equal";
   isSettled: boolean;
+  // Guardar/resgatar de um cartão com limite garantido -- managed from the
+  // card itself, so the extrato shows it without edit/delete.
+  securedCardId?: string | null;
   accountId: string;
   paymentMethod: PaymentMethod | null;
   payerId: string;
@@ -145,6 +148,9 @@ interface MonthlyTrendPoint {
 interface MonthTotals {
   income: number;
   expense: number;
+  // Net money moved into cartões com limite garantido this month -- left
+  // the account without being a gasto (see getMonthlyTrendForUser).
+  savedInCards?: number;
 }
 
 interface DashboardResponse {
@@ -161,6 +167,8 @@ interface DashboardResponse {
   personalPrevMonthTotals: MonthTotals;
   goalHighlight: GoalHighlight | null;
   nextInvoice: NextInvoice | null;
+  // Optional: responses cached by an older build don't have it.
+  savedInSecuredCards?: number;
   trend6m: MonthlyTrendPoint[];
   alerts: AlertRow[];
 }
@@ -236,6 +244,9 @@ export function DashboardPage() {
     readCache(staticKey("goalHighlight"))
   );
   const [nextInvoice, setNextInvoice] = useState<NextInvoice | null>(() => readCache(staticKey("nextInvoice")));
+  const [savedInSecuredCards, setSavedInSecuredCards] = useState<number>(
+    () => readCache(staticKey("savedInSecuredCards")) ?? 0
+  );
   const [trend6m, setTrend6m] = useState<MonthlyTrendPoint[]>(() => readCache(monthKey("trend6m")) ?? []);
   const [alerts, setAlerts] = useState<AlertRow[]>(() => readCache(monthKey("alerts")) ?? []);
   const [isLoading, setIsLoading] = useState(!group);
@@ -271,6 +282,7 @@ export function DashboardPage() {
       setDailyTrend(data.dailyTrend);
       setGoalHighlight(data.goalHighlight);
       setNextInvoice(data.nextInvoice);
+      setSavedInSecuredCards(data.savedInSecuredCards ?? 0);
       setTrend6m(data.trend6m);
       // ?? []: a response cached by an older build has no `alerts` at all.
       setAlerts(data.alerts ?? []);
@@ -281,6 +293,7 @@ export function DashboardPage() {
     writeCache(sKey("balance"), data.balance);
     writeCache(sKey("goalHighlight"), data.goalHighlight);
     writeCache(sKey("nextInvoice"), data.nextInvoice);
+    writeCache(sKey("savedInSecuredCards"), data.savedInSecuredCards ?? 0);
     writeCache(mKey("personalMonthTotals"), data.personalMonthTotals);
     writeCache(mKey("personalPrevMonthTotals"), data.personalPrevMonthTotals);
     writeCache(mKey("recent"), data.recent);
@@ -526,6 +539,7 @@ export function DashboardPage() {
   // reason -- none of those state changes affect this derived data.
   const income = personalMonthTotals.income;
   const expense = personalMonthTotals.expense;
+  const savedInCards = personalMonthTotals.savedInCards ?? 0;
   const prevIncome = personalPrevMonthTotals.income;
   const prevExpense = personalPrevMonthTotals.expense;
   const incomeDelta = percentChange(income, prevIncome);
@@ -538,10 +552,35 @@ export function DashboardPage() {
     return { activeDebts: active, totalDebtRemaining: active.reduce((sum, debt) => sum + debt.remainingAmount, 0) };
   }, [debts]);
 
-  const { topCategories, topCategoriesTotal } = useMemo(() => {
-    const top = summary?.byCategory.slice(0, 4) ?? [];
-    return { topCategories: top, topCategoriesTotal: top.reduce((sum, row) => sum + Number(row.total), 0) };
+  const { topCategories, topCategoriesTotal, uncategorizedShare } = useMemo(() => {
+    const rows = summary?.byCategory ?? [];
+    const top = rows.slice(0, 4);
+    const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
+    const uncategorized = Number(rows.find((row) => row.categoryId === null)?.total ?? 0);
+    return {
+      topCategories: top,
+      topCategoriesTotal: top.reduce((sum, row) => sum + Number(row.total), 0),
+      uncategorizedShare: total > 0 ? uncategorized / total : 0,
+    };
   }, [summary]);
+
+  // "Seu dinheiro hoje": what's in the accounts this person can see (their
+  // own + Nossa Conta -- the backend never sends anyone else's personal
+  // balance) plus what's guardado in cartões com limite garantido.
+  const visibleAccounts = group?.accounts ?? [];
+  const accountsTotal = visibleAccounts.reduce((sum, account) => sum + account.balance, 0);
+  const moneyTotal = accountsTotal + savedInSecuredCards;
+
+  // "Dá pra gastar por dia": only for the month actually being lived --
+  // browsing a past month, "até o fim do mês" means nothing.
+  const monthLeft = income - expense - savedInCards;
+  const dailyAllowance = useMemo(() => {
+    if (month !== currentMonthParam()) return null;
+    const today = new Date();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const daysLeft = daysInMonth - today.getDate() + 1;
+    return monthLeft / daysLeft;
+  }, [month, monthLeft]);
 
   const categoryCapById = useMemo(() => {
     const map = new Map<string, number>();
@@ -616,8 +655,22 @@ export function DashboardPage() {
           <span className="stat-card-circle stat-card-circle-2" />
           <p className="label">Você tem no mês</p>
           <p className="value">
-            <AnimatedNumber value={income - expense} />
+            <AnimatedNumber value={monthLeft} />
           </p>
+          {dailyAllowance !== null && income > 0 && (
+            <p className="hero-note">
+              {dailyAllowance > 0
+                ? `Dá pra gastar ${formatCurrency(dailyAllowance)} por dia até o fim do mês.`
+                : "Você já gastou mais do que entrou este mês."}
+            </p>
+          )}
+          {savedInCards !== 0 && (
+            <p className="hero-note">
+              {savedInCards > 0
+                ? `${formatCurrency(savedInCards)} foram guardados no cartão. Não é gasto, esse dinheiro continua seu.`
+                : `${formatCurrency(-savedInCards)} voltaram do cartão com limite garantido.`}
+            </p>
+          )}
           {trend6m.length > 1 && (
             <div className="hero-trend">
               <TrendSparkline points={trend6m} />
@@ -627,7 +680,7 @@ export function DashboardPage() {
 
         <div className="stat-row wrap">
           <div className="stat-box tone-good">
-            <p className="label">Entrada do mês</p>
+            <p className="label">Sua entrada no mês</p>
             <p className="value-sm income-text">{formatCurrency(income)}</p>
             {incomeDelta !== null && (
               <p className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
@@ -637,7 +690,7 @@ export function DashboardPage() {
             )}
           </div>
           <div className="stat-box tone-warm">
-            <p className="label">Saída do mês</p>
+            <p className="label">Sua saída no mês</p>
             <p className="value-sm">{formatCurrency(expense)}</p>
             {expenseDelta !== null && (
               <p className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
@@ -823,6 +876,18 @@ export function DashboardPage() {
                   Ver relatório
                 </Link>
               </div>
+              {uncategorizedShare >= 0.5 && (
+                <p className="report-insight">
+                  <Icon name="spark" />
+                  <span>
+                    {Math.round(uncategorizedShare * 100)}% dos gastos estão sem categoria.{" "}
+                    <Link to="/reports" className="link">
+                      Categorize no extrato
+                    </Link>{" "}
+                    pra ver pra onde o dinheiro vai.
+                  </span>
+                </p>
+              )}
               {topCategories.length === 0 ? (
                 <p className="empty-state">Nenhuma despesa neste mês.</p>
               ) : (
@@ -919,6 +984,29 @@ export function DashboardPage() {
           </div>
 
           <div className="dashboard-col">
+            <div className="card money-card">
+              <p className="card-title">Seu dinheiro hoje</p>
+              <p className="money-card-total">{formatCurrency(moneyTotal)}</p>
+              <ul className="money-card-list">
+                {visibleAccounts.map((account) => (
+                  <li key={account.id}>
+                    <span>
+                      {account.emoji ?? (account.type === "joint" ? "💞" : "👤")} {account.name}
+                    </span>
+                    <strong className={account.balance < 0 ? "danger-text" : ""}>{formatCurrency(account.balance)}</strong>
+                  </li>
+                ))}
+                {savedInSecuredCards > 0 && (
+                  <li>
+                    <Link to="/cards" className="link">
+                      🔒 Guardado em cartões
+                    </Link>
+                    <strong>{formatCurrency(savedInSecuredCards)}</strong>
+                  </li>
+                )}
+              </ul>
+              <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>
+            </div>
             {dailyTrend.length > 0 && (
               <div className="card">
                 <p className="card-title">Gastos acumulados</p>
@@ -976,43 +1064,45 @@ export function DashboardPage() {
                             {tx.transactionType === "income" ? "+" : "-"}
                             {formatCurrency(Number(tx.amount))}
                           </span>
-                          <div className="transaction-row-actions">
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              title="Editar"
-                              onClick={() => setEditingTx(tx)}
-                            >
-                              <Icon name="pencil" />
-                            </button>
-                            <RowActionsMenu
-                              actions={[
-                                ...(tx.recurringGroupId
-                                  ? [
-                                      {
-                                        key: "edit-recurring",
-                                        label: "Editar valor da recorrência",
-                                        icon: "pencil" as const,
-                                        onClick: () => setEditingRecurringTx(tx),
-                                      },
-                                      {
-                                        key: "cancel-recurring",
-                                        label: "Cancelar recorrência",
-                                        icon: "repeatOff" as const,
-                                        onClick: () => handleCancelRecurring(tx),
-                                      },
-                                    ]
-                                  : []),
-                                {
-                                  key: "delete",
-                                  label: "Excluir",
-                                  icon: "trash" as const,
-                                  danger: true,
-                                  onClick: () => handleDelete(tx),
-                                },
-                              ]}
-                            />
-                          </div>
+                          {!tx.securedCardId && (
+                            <div className="transaction-row-actions">
+                              <button
+                                type="button"
+                                className="btn-icon"
+                                title="Editar"
+                                onClick={() => setEditingTx(tx)}
+                              >
+                                <Icon name="pencil" />
+                              </button>
+                              <RowActionsMenu
+                                actions={[
+                                  ...(tx.recurringGroupId
+                                    ? [
+                                        {
+                                          key: "edit-recurring",
+                                          label: "Editar valor da recorrência",
+                                          icon: "pencil" as const,
+                                          onClick: () => setEditingRecurringTx(tx),
+                                        },
+                                        {
+                                          key: "cancel-recurring",
+                                          label: "Cancelar recorrência",
+                                          icon: "repeatOff" as const,
+                                          onClick: () => handleCancelRecurring(tx),
+                                        },
+                                      ]
+                                    : []),
+                                  {
+                                    key: "delete",
+                                    label: "Excluir",
+                                    icon: "trash" as const,
+                                    danger: true,
+                                    onClick: () => handleDelete(tx),
+                                  },
+                                ]}
+                              />
+                            </div>
+                          )}
                         </li>
                       ))}
                     </Fragment>

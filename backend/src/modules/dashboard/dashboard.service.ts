@@ -120,8 +120,16 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   const currentMonthTotals = trend6m[trend6m.length - 1];
   const prevMonthTotals = trend6m[trend6m.length - 2];
 
+  // Money parked in cartões com limite garantido -- left the accounts
+  // (guardar is a transfer) but is still the person's, so "Seu dinheiro"
+  // on the Painel adds it back.
+  const savedInSecuredCards = cards
+    .filter((card) => card.limitType === "secured")
+    .reduce((sum, card) => sum + Math.round(Number(card.limit ?? 0) * 100), 0);
+
   return {
     group: { accounts: groupResult.accounts, members: groupResult.members },
+    savedInSecuredCards: savedInSecuredCards / 100,
     recent,
     debts,
     summary,
@@ -130,7 +138,11 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     budget,
     categoryBudgets,
     dailyTrend,
-    personalMonthTotals: { income: currentMonthTotals.income, expense: currentMonthTotals.expense },
+    personalMonthTotals: {
+      income: currentMonthTotals.income,
+      expense: currentMonthTotals.expense,
+      savedInCards: currentMonthTotals.savedInCards,
+    },
     personalPrevMonthTotals: { income: prevMonthTotals.income, expense: prevMonthTotals.expense },
     goalHighlight: pickGoalHighlight(goals),
     nextInvoice: pickNextInvoice(cards),

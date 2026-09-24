@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmojiPicker } from "../components/EmojiPicker";
@@ -52,7 +52,7 @@ interface CategoryRow {
 }
 
 export function AccountPage() {
-  const { user, token, logout, refreshUser, revokeAllSessions } = useAuth();
+  const { user, token, logout, refreshUser, revokeAllSessions, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const confirm = useConfirm();
@@ -74,6 +74,8 @@ export function AccountPage() {
   const [isInviting, setIsInviting] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isRevokingSessions, setIsRevokingSessions] = useState(false);
   const [telegramCode, setTelegramCode] = useState<string | null>(null);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
@@ -258,6 +260,26 @@ export function AccountPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível desvincular a conta");
       setIsLeaving(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    const confirmed = await confirm({
+      title: "Excluir sua conta de vez?",
+      body: "Seu login, sua conta pessoal e tudo o que foi lançado nela são apagados agora e não dá pra recuperar. O que é do grupo continua com quem ficar nele.",
+      confirmLabel: "Excluir conta",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+
+    setError(null);
+    setIsDeletingAccount(true);
+    try {
+      await deleteAccount();
+      navigate("/login");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível excluir a conta");
+      setIsDeletingAccount(false);
     }
   }
 
@@ -635,7 +657,34 @@ export function AccountPage() {
           {isLeaving ? "Desvinculando..." : "Desvincular conta do grupo"}
         </button>
 
-        <p className="app-version-footer">PAR. v{__APP_VERSION__}</p>
+        <div className="card danger-zone">
+          <p className="card-title">Excluir conta</p>
+          <p className="card-subtitle">
+            Apaga seu login e seus dados pessoais para sempre. Se você for a última pessoa do grupo, o grupo inteiro é
+            apagado. Veja os detalhes na <Link to="/privacidade">política de privacidade</Link>.
+          </p>
+          <div className="field">
+            <label htmlFor="delete-account-confirm">Digite EXCLUIR para confirmar</label>
+            <input
+              id="delete-account-confirm"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={handleDeleteAccount}
+            disabled={isDeletingAccount || deleteConfirmText.trim().toUpperCase() !== "EXCLUIR"}
+          >
+            {isDeletingAccount ? "Excluindo..." : "Excluir minha conta"}
+          </button>
+        </div>
+
+        <p className="app-version-footer">
+          PAR. v{__APP_VERSION__} · <Link to="/privacidade">Privacidade</Link>
+        </p>
       </div>
     </AppLayout>
   );

@@ -22,7 +22,7 @@ const NAV_ITEMS: { to: string; label: string; icon: IconName }[] = [
   { to: "/transactions/new", label: "Nova despesa", icon: "plus" },
   { to: "/debts", label: "Dívidas", icon: "card" },
   { to: "/recurring-bills", label: "Contas fixas", icon: "repeat" },
-  { to: "/cards", label: "Cartão conjunto", icon: "receipt" },
+  { to: "/cards", label: "Cartões", icon: "receipt" },
   { to: "/shopping", label: "Lista de compras", icon: "cart" },
   { to: "/goals", label: "Metas", icon: "target" },
   { to: "/reports", label: "Relatórios", icon: "chart" },
@@ -179,7 +179,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         {budgetSummary && <SidebarSpending summary={budgetSummary} month={sidebarMonth} />}
         {dailyTrend && dailyTrend.length > 0 && (
           <div className="daily-trend-chart">
-            <p className="app-sidebar-spending-label">Entrada x saída</p>
+            <p className="app-sidebar-spending-label">Entrada x saída · todas as contas</p>
             <IncomeExpenseBars
               income={Number(dailyTrend[dailyTrend.length - 1].income)}
               expense={Number(dailyTrend[dailyTrend.length - 1].expense)}
@@ -295,7 +295,7 @@ function SidebarSpending({ summary, month }: { summary: BudgetSummary; month: st
 
   return (
     <div className="app-sidebar-spending">
-      <p className="app-sidebar-spending-label">Gasto em {monthLongName(month)}</p>
+      <p className="app-sidebar-spending-label">Nossa Conta em {monthLongName(month)}</p>
       <p className="app-sidebar-spending-value">{formatCurrency(summary.spent)}</p>
       {cap ? (
         <>
