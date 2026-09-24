@@ -1,0 +1,29 @@
+import { NavLink } from "react-router-dom";
+import { Icon, type IconName } from "./Icon";
+
+// Cartões, Dívidas and Contas fixas are one "Contas" place in the phone's
+// bottom bar -- these tabs switch between them without the menu.
+export const BILLS_TABS: { to: string; label: string; shortLabel: string; icon: IconName }[] = [
+  { to: "/cards", label: "Cartões", shortLabel: "Cartões", icon: "receipt" },
+  { to: "/debts", label: "Dívidas", shortLabel: "Dívidas", icon: "card" },
+  { to: "/recurring-bills", label: "Contas fixas", shortLabel: "Fixas", icon: "repeat" },
+];
+
+export function BillsTabs() {
+  return (
+    <nav className="bills-tabs" aria-label="Contas">
+      {BILLS_TABS.map((tab) => (
+        <NavLink
+          key={tab.to}
+          to={tab.to}
+          replace
+          className={({ isActive }) => `bills-tab${isActive ? " active" : ""}`}
+        >
+          <Icon name={tab.icon} />
+          <span className="bills-tab-label">{tab.label}</span>
+          <span className="bills-tab-short">{tab.shortLabel}</span>
+        </NavLink>
+      ))}
+    </nav>
+  );
+}

@@ -8,6 +8,7 @@ import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
+import { BillsTabs } from "../components/BillsTabs";
 
 interface MemberRow {
   id: string;
@@ -683,6 +684,7 @@ export function CardsPage() {
   return (
     <AppLayout>
       <div className="page-stack">
+        <BillsTabs />
         <div className="section-header">
           <div>
             <h1>Cartões</h1>

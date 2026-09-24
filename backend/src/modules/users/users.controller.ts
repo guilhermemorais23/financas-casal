@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { isAdminEmail } from "../admin/admin.service";
 import { logAccess, type AccessEvent } from "../../utils/accessLog";
-import { sendWelcomeEmail } from "../../email/mailer";
+import { sendNewSignupEmail, sendWelcomeEmail } from "../../email/mailer";
 import { auth } from "../../db/firestore";
 import { deleteAccountForUser } from "./deleteAccount.service";
 import { findUserById, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
@@ -54,6 +54,7 @@ export async function bootstrapHandler(req: Request, res: Response) {
 
   if (isNew) {
     void sendWelcomeEmail(user.email, user.displayName);
+    void sendNewSignupEmail(user);
   }
 
   // isNew lets the frontend show the welcome tour only to brand-new

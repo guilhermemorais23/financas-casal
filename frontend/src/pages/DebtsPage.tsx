@@ -10,6 +10,7 @@ import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
+import { BillsTabs } from "../components/BillsTabs";
 
 interface InstallmentRow {
   id: string;
@@ -241,6 +242,7 @@ export function DebtsPage() {
     <>
       <AppLayout>
       <div className="page-stack">
+        <BillsTabs />
         <div className="card form-card">
           <h1>Dívidas</h1>
           <p className="card-subtitle">
