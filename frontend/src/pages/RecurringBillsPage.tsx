@@ -8,6 +8,7 @@ import { formatCurrency } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
+import { useToast } from "../components/ToastProvider";
 
 interface AccountRow {
   id: string;
@@ -44,6 +45,7 @@ interface RecurringBillRow {
 
 export function RecurringBillsPage() {
   const { user, token } = useAuth();
+  const { showToast } = useToast();
   const confirm = useConfirm();
   const cacheKey = `recurring-bills:${user?.id ?? "anon"}`;
 
@@ -135,6 +137,7 @@ export function RecurringBillsPage() {
       setCategoryId("");
       setDayOfMonth("");
       setSplitType("none");
+      showToast("Conta fixa criada");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar a conta fixa");
@@ -147,6 +150,7 @@ export function RecurringBillsPage() {
     setBusyId(bill.id);
     try {
       await apiRequest(`/recurring-bills/${bill.id}`, { method: "PATCH", token, body: { isActive: !bill.isActive } });
+      showToast(bill.isActive ? "Conta fixa pausada" : "Conta fixa ativada", bill.isActive ? { variant: "info" } : undefined);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a conta fixa");
@@ -176,6 +180,7 @@ export function RecurringBillsPage() {
         body: { amount: parsedAmount, dayOfMonth: parsedDay },
       });
       setEditingId(null);
+      showToast("Conta fixa salva");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar a conta fixa");
@@ -195,6 +200,7 @@ export function RecurringBillsPage() {
     setBusyId(billId);
     try {
       await apiRequest(`/recurring-bills/${billId}`, { method: "DELETE", token });
+      showToast("Conta fixa excluída");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível remover a conta fixa");

@@ -7,6 +7,9 @@ import { Icon, type IconName } from "./Icon";
 
 interface Slide {
   icon: IconName | "brand";
+  // Small chip above the title ("Novidade") -- marks what changed for people
+  // who already use the app.
+  tag?: string;
   title: string;
   text: string;
   bullets?: string[];
@@ -15,35 +18,47 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     icon: "brand",
-    title: "Bem-vindo ao PAR.",
+    title: "Bem-vindos ao PAR.",
     text: "O app pra organizar o dinheiro junto com quem divide a vida com você -- casal, família ou amigos. Tudo num lugar só, sem planilha e sem briga.",
+    bullets: ["Quem pagou e quem deve pra quem", "Contas, cartões, dívidas e metas juntos", "No celular, funciona como um app"],
   },
   {
     icon: "heart",
-    title: "Monte seu grupo",
-    text: "Crie um grupo e chame as pessoas por um link. Não tem limite de gente.",
+    title: "Como funciona",
+    text: "Monte seu grupo, chame as pessoas por um link e lance os gastos pelo botão +.",
     bullets: [
-      "Conta conjunta (Nossa Conta) e a conta pessoal de cada um",
-      "No Par você vê quem pagou o quê e quem deve pra quem",
+      "Nossa Conta e a conta pessoal de cada um",
+      "Contas fixas e faturas com aviso por email",
+      "Relatórios e um assistente pra tirar dúvidas",
     ],
   },
   {
-    icon: "plus",
-    title: "Lance gastos em segundos",
-    text: "Registre despesas e receitas pelo botão +, divida uma conta entre o grupo ou importe o extrato do banco.",
-    bullets: ["Categorias pra organizar tudo", "Parcelas e compras no cartão", "Lista de compras compartilhada"],
+    icon: "chart",
+    tag: "Novidade",
+    title: "Painel mais claro",
+    text: "Logo no topo você vê o seu dinheiro hoje e quanto dá pra gastar por dia até o fim do mês.",
+    bullets: ["Seu dinheiro hoje", "Quanto dá pra gastar por dia", "Cards organizados no PC e no celular"],
   },
   {
-    icon: "repeat",
-    title: "Nada de conta esquecida",
-    text: "Cadastre contas fixas, cartões e dívidas e o PAR. te avisa por email antes de vencer.",
-    bullets: ["Faturas dos cartões", "Dívidas e parcelamentos", "Lembretes de vencimento"],
+    icon: "card",
+    tag: "Novidade",
+    title: "Limite garantido no cartão",
+    text: "Guarde dinheiro no limite do cartão e resgate quando quiser. O PAR. mostra quando o limite volta.",
+    bullets: ["Guardar sai da conta como transferência", "Não conta como gasto nos Relatórios", "Metas com mínimo por mês"],
   },
   {
-    icon: "target",
-    title: "Metas e para onde vai o dinheiro",
-    text: "Guarde para objetivos juntos e acompanhe tudo no Painel e nos Relatórios.",
-    bullets: ["Quanto dá pra gastar por dia", "Gráficos por categoria e por mês", "Um assistente pra tirar dúvidas"],
+    icon: "user",
+    tag: "Novidade",
+    title: "Sua conta, do seu jeito",
+    text: "Mais jeitos de entrar e mais controle sobre os seus dados.",
+    bullets: ["Entrar com Apple", "Excluir a conta quando quiser", "Política de privacidade no app"],
+  },
+  {
+    icon: "spark",
+    tag: "Novidade",
+    title: "Mais rápido e bonito",
+    text: "O app ficou mais leve no celular e avisa quando algo dá certo.",
+    bullets: ["Login mais rápido no celular", "Aviso na tela ao salvar", "Atualiza sozinho quando sai versão nova"],
   },
 ];
 
@@ -51,9 +66,8 @@ const SLIDES: Slide[] = [
 // the "Conta criada!" moment on /register) and public pages.
 const HIDDEN_ON = ["/login", "/register", "/privacidade", "/r/", "/invite/"];
 
-// Shown once, right after an account is created (email or first
-// Google/Apple sign-in -- see bootstrapProfile in AuthContext): a short
-// swipeable walkthrough of what the app is for.
+// Shown once per edition to every signed-in account (new or existing -- see
+// utils/welcomeTour.ts): what the app is for plus what's new, swipeable.
 export function WelcomeTour() {
   const { user } = useAuth();
   const location = useLocation();
@@ -124,6 +138,7 @@ export function WelcomeTour() {
             {slide.icon === "brand" ? <BrandMark size={44} /> : <Icon name={slide.icon} className="icon" />}
           </div>
           <p className="welcome-tour-step">
+            {slide.tag && <span className="welcome-tour-tag">{slide.tag}</span>}
             {index + 1} de {SLIDES.length}
           </p>
           <h2 id="welcome-tour-title">{slide.title}</h2>

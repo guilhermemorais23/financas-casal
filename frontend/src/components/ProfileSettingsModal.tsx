@@ -6,11 +6,13 @@ import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
 import { firebaseAuth } from "../firebase";
 import { compressToSquareDataUrl } from "../utils/imageCompression";
+import { useToast } from "./ToastProvider";
 
 const AVATAR_SIZE = 160;
 
 export function ProfileSettingsModal({ onClose }: { onClose: () => void }) {
   const { user, token, refreshUser } = useAuth();
+  const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
@@ -97,9 +99,11 @@ export function ProfileSettingsModal({ onClose }: { onClose: () => void }) {
       // Email verification is still pending -- keep the modal open so the
       // user actually sees that message instead of it flashing and closing.
       if (email.trim() !== user?.email) {
+        showToast("Perfil salvo", { description: "Confirme o novo email pela mensagem que enviamos" });
         setIsSubmitting(false);
         return;
       }
+      showToast("Perfil salvo");
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar o perfil");

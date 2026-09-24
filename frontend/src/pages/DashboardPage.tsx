@@ -739,7 +739,7 @@ export function DashboardPage() {
                 <p className="card-title">Orçamento do mês</p>
                 {!cap && (
                   <Link to="/account" className="link">
-                    Definir orçamento
+                    Definir teto
                   </Link>
                 )}
               </div>
@@ -1041,12 +1041,14 @@ export function DashboardPage() {
                           </span>
                           <div className="transaction-info">
                             <span className="transaction-desc">
-                              {tx.description}
+                              <span className="text-truncate">{tx.description}</span>
                               {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
                             </span>
                             <span className="transaction-meta">
-                              {tx.categoryName ?? "Sem categoria"}
-                              {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
+                              <span className="text-truncate">
+                                {tx.categoryName ?? "Sem categoria"}
+                                {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
+                              </span>
                               {tx.splitType === "equal" && (
                                 <SplitStatusPill
                                   token={token}

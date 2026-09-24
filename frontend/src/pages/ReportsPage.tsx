@@ -282,7 +282,7 @@ export function ReportsPage() {
           transactionType: tx.transactionType,
         })),
     });
-    if (opened) showToast("Na tela de impressão, escolha “Salvar como PDF”");
+    if (opened) showToast("PDF pronto pra salvar", { variant: "info", description: "Na impressão, escolha “Salvar como PDF”" });
     else setError("O navegador bloqueou a janela do PDF. Libere pop-ups para este site e tente de novo.");
   }
 
@@ -301,13 +301,14 @@ export function ReportsPage() {
       } catch {
         copied = false;
       }
-      showToast(copied ? "Link copiado · vale por 7 dias" : `Link criado: ${url}`, {
+      showToast(copied ? "Link copiado" : "Link criado", {
+        description: copied ? "Vale por 7 dias" : url,
         actionLabel: "Revogar",
         durationMs: copied ? 6000 : 12000,
         onAction: () => {
           apiRequest(`/shares/${share.id}`, { method: "DELETE", token })
             .then(() => showToast("Link revogado"))
-            .catch(() => showToast("Não foi possível revogar o link"));
+            .catch(() => showToast("Não foi possível revogar o link", { variant: "error" }));
         },
       });
     } catch (err) {
@@ -508,13 +509,15 @@ export function ReportsPage() {
           </span>
           <div className="transaction-info">
             <span className="transaction-desc">
-              {tx.description}
+              <span className="text-truncate">{tx.description}</span>
               {tx.isPrivate && <span className="badge private-badge">privado</span>}
               {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
             </span>
             <span className="transaction-meta">
-              {tx.categoryName ?? "Sem categoria"}
-              {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
+              <span className="text-truncate">
+                {tx.categoryName ?? "Sem categoria"}
+                {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
+              </span>
               {tx.splitType === "equal" && (
                 <SplitStatusPill
                   token={token}

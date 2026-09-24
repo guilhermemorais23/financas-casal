@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
+import { useToast } from "../components/ToastProvider";
 
 type Mode = "choose" | "create" | "accept";
 
@@ -13,6 +14,7 @@ interface CreateGroupResponse {
 
 export function GroupSetupPage() {
   const { token, refreshUser } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -32,6 +34,7 @@ export function GroupSetupPage() {
       });
       setInviteLink(`${window.location.origin}/invite/${response.inviteToken}`);
       setMode("create");
+      showToast("Grupo criado", { description: "Agora é só mandar o link do convite" });
       await refreshUser();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar o grupo");
@@ -51,6 +54,7 @@ export function GroupSetupPage() {
         body: { token: acceptToken },
       });
       await refreshUser();
+      showToast("Você entrou no grupo");
       navigate("/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível aceitar o convite");

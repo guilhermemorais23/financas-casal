@@ -9,6 +9,7 @@ import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/form
 import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
+import { useToast } from "../components/ToastProvider";
 
 interface InstallmentRow {
   id: string;
@@ -37,6 +38,7 @@ interface DebtRow {
 
 export function DebtsPage() {
   const { user, token } = useAuth();
+  const { showToast } = useToast();
   const confirm = useConfirm();
   const cacheKey = `debts:${user?.id ?? "anon"}`;
 
@@ -111,6 +113,7 @@ export function DebtsPage() {
       setInstallmentsCount("2");
       setStartMonth(currentMonthParam());
       setDueDay("");
+      showToast("Dívida cadastrada");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar a dívida");
@@ -135,6 +138,7 @@ export function DebtsPage() {
         token,
         body: { isPaid: !installment.isPaid },
       });
+      showToast(installment.isPaid ? "Parcela reaberta" : "Parcela paga", installment.isPaid ? { variant: "info" } : undefined);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a parcela");
@@ -151,6 +155,7 @@ export function DebtsPage() {
 
     try {
       await apiRequest(`/debts/${debtId}`, { method: "DELETE", token });
+      showToast("Dívida excluída");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível remover a dívida");

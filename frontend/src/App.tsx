@@ -6,6 +6,7 @@ import { PageSkeleton } from "./components/Skeleton";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import { ToastProvider } from "./components/ToastProvider";
 import { WelcomeTour } from "./components/WelcomeTour";
+import { importWithRecovery } from "./utils/appRecovery";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
@@ -15,8 +16,10 @@ import { ProtectedRoute } from "./routes/ProtectedRoute";
 // export) -- each call site below still has its own literal `import("./
 // pages/X")`, which is what lets Vite give every page its own chunk; this
 // just removes the repeated `.then((m) => ({ default: m.Name }))` typo risk.
+// importWithRecovery: a chunk missing after a deploy reloads into the new
+// build (skeleton stays up) instead of crashing into the error screen.
 function namedLazy<K extends string>(loader: () => Promise<Record<K, ComponentType<object>>>, name: K) {
-  return lazy(async () => ({ default: (await loader())[name] }));
+  return lazy(async () => ({ default: (await importWithRecovery(loader))[name] }));
 }
 
 // Lazy-loaded: everything past the login screen used to ship in the same
@@ -28,7 +31,7 @@ function namedLazy<K extends string>(loader: () => Promise<Record<K, ComponentTy
 // the chunk after that, same as any other lazy import. LoginPage stays
 // eager -- it's the one screen nearly everyone hits on the coldest possible
 // load, so there's nothing to gain deferring it.
-const SharedReportPage = lazy(() => import("./pages/SharedReportPage"));
+const SharedReportPage = lazy(() => importWithRecovery(() => import("./pages/SharedReportPage")));
 const RegisterPage = namedLazy(() => import("./pages/RegisterPage"), "RegisterPage");
 const PrivacyPage = namedLazy(() => import("./pages/PrivacyPage"), "PrivacyPage");
 const GroupSetupPage = namedLazy(() => import("./pages/GroupSetupPage"), "GroupSetupPage");

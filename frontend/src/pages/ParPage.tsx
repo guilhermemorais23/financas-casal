@@ -311,7 +311,7 @@ export function ParPage() {
               </span>
             ) : (
               <Link to="/account" className="link">
-                Definir orçamento
+                Definir teto
               </Link>
             )}
           </div>
@@ -385,11 +385,15 @@ export function ParPage() {
                   {tx.categoryEmoji ?? "💸"}
                 </span>
                 <div className="transaction-info">
-                  <span className="transaction-desc">{tx.description}</span>
+                  <span className="transaction-desc">
+                    <span className="text-truncate">{tx.description}</span>
+                  </span>
                   <span className="transaction-meta">
-                    {memberName(tx.payerId)} · {tx.categoryName ?? "Sem categoria"}
-                    {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`} ·{" "}
-                    {parseLocalDate(tx.occurredAt).toLocaleDateString("pt-BR")}
+                    <span className="text-truncate">
+                      {memberName(tx.payerId)} · {tx.categoryName ?? "Sem categoria"}
+                      {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`} ·{" "}
+                      {parseLocalDate(tx.occurredAt).toLocaleDateString("pt-BR")}
+                    </span>
                     {tx.splitType === "equal" && (
                       <SplitStatusPill
                         token={token}

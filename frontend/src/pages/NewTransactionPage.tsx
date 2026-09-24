@@ -172,11 +172,8 @@ export function NewTransactionPage() {
       },
     });
     showToast(
-      isRecurring
-        ? `${isIncome ? "Receita" : "Despesa"} recorrente salva (${parsedMonths} meses)`
-        : isIncome
-          ? "Receita salva"
-          : "Despesa salva"
+      isRecurring ? `${isIncome ? "Receita" : "Despesa"} recorrente salva` : isIncome ? "Receita salva" : "Despesa salva",
+      isRecurring ? { description: `Repete por ${parsedMonths} meses` } : undefined
     );
     navigate("/dashboard");
   }
@@ -320,7 +317,7 @@ export function NewTransactionPage() {
 
           <label className="checkbox-field">
             <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
-            {isIncome ? "Entrada recorrente (salário...)" : "Despesa recorrente (assinatura, aluguel...)"}
+            {isIncome ? "Entrada recorrente (salário)" : "Repete todo mês (assinatura)"}
           </label>
           {isRecurring && (
             <div className="field">
@@ -366,7 +363,7 @@ export function NewTransactionPage() {
 
               <label className="checkbox-field">
                 <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-                Despesa privada (só você vê a descrição)
+                Privada (só você vê o nome)
               </label>
             </>
           )}

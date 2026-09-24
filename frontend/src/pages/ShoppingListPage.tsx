@@ -78,6 +78,7 @@ export function ShoppingListPage() {
     try {
       await apiRequest("/shopping", { method: "POST", token, body: { name: newItemName.trim() } });
       setNewItemName("");
+      showToast("Item adicionado");
       await loadItems();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível adicionar o item");
@@ -126,6 +127,7 @@ export function ShoppingListPage() {
   async function handleUncheck(itemId: string) {
     try {
       await apiRequest(`/shopping/${itemId}/check`, { method: "PATCH", token, body: { isChecked: false } });
+      showToast("Item voltou pra lista", { variant: "info" });
       await loadItems();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível desfazer");
@@ -142,6 +144,7 @@ export function ShoppingListPage() {
     try {
       await apiRequest(`/shopping/${itemId}`, { method: "DELETE", token });
       if (checkingId === itemId) setCheckingId(null);
+      showToast("Item removido");
       await loadItems();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível remover o item");
@@ -200,7 +203,7 @@ export function ShoppingListPage() {
                       checked={false}
                       onChange={() => startChecking(item)}
                     />
-                    {item.name}
+                    <span className="text-truncate">{item.name}</span>
                   </label>
                   <div className="transaction-row-actions">
                     <button type="button" className="btn-icon" title="Remover" onClick={() => handleDelete(item.id)}>

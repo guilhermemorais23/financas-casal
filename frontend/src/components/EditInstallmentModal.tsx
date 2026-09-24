@@ -3,6 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { formatCurrency } from "../utils/format";
 import { useConfirm } from "./ConfirmDialog";
+import { useToast } from "./ToastProvider";
 
 export interface EditableInstallment {
   debtId: string;
@@ -23,6 +24,7 @@ export function EditInstallmentModal({
   onSaved: () => void;
 }) {
   const { token } = useAuth();
+  const { showToast } = useToast();
   const confirm = useConfirm();
 
   const [referenceMonth, setReferenceMonth] = useState(installment.referenceMonth);
@@ -40,6 +42,7 @@ export function EditInstallmentModal({
         token,
         body: { referenceMonth },
       });
+      showToast("Parcela atualizada");
       onSaved();
       onClose();
     } catch (err) {
@@ -65,6 +68,7 @@ export function EditInstallmentModal({
         token,
         body: { isPaid: false },
       });
+      showToast("Pagamento desfeito");
       onSaved();
       onClose();
     } catch (err) {
