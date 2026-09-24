@@ -20,6 +20,7 @@ import { shoppingRouter } from "./modules/shopping/shopping.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
 import {
   bootstrapHandler,
+  deleteAccountHandler,
   logLoginEventHandler,
   meHandler,
   revokeSessionsHandler,
@@ -72,6 +73,7 @@ export function createApp() {
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));
   app.post("/api/me/login-event", requireAuth, asyncHandler(logLoginEventHandler));
   app.patch("/api/me", requireAuth, asyncHandler(updateProfileHandler));
+  app.delete("/api/me", requireAuth, asyncHandler(deleteAccountHandler));
   app.post("/api/me/revoke-sessions", requireAuth, asyncHandler(revokeSessionsHandler));
   app.use("/api/groups", groupsRouter);
   app.use("/api/dashboard", dashboardRouter);

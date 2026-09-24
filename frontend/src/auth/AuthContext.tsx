@@ -1,13 +1,17 @@
 import {
   GoogleAuthProvider,
+  OAuthProvider,
   createUserWithEmailAndPassword,
   onIdTokenChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
+  type User,
 } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiRequest, setTokenRefresher } from "../api/client";
 import { firebaseAuth } from "../firebase";
@@ -30,7 +34,10 @@ interface AuthContextValue {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  // Resolves true once signed in, false when the popup couldn't open and the
+  // page is being redirected to the provider instead (it comes back signed in).
+  loginWithProvider: (provider: SocialProvider) => Promise<boolean>;
+  deleteAccount: () => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -38,7 +45,34 @@ interface AuthContextValue {
   revokeAllSessions: () => Promise<void>;
 }
 
+export type SocialProvider = "google" | "apple";
+
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function providerFor(kind: SocialProvider) {
+  if (kind === "apple") {
+    const apple = new OAuthProvider("apple.com");
+    apple.addScope("email");
+    apple.addScope("name");
+    apple.setCustomParameters({ locale: "pt_BR" });
+    return apple;
+  }
+  return new GoogleAuthProvider();
+}
+
+// Apple only sends the name on the very first sign-in (and never if the
+// person hides it), so there's always a fallback -- bootstrap requires one.
+function displayNameFor(firebaseUser: User): string {
+  return firebaseUser.displayName?.trim() || firebaseUser.email?.split("@")[0] || "Você";
+}
+
+// Popups don't open everywhere -- notably the app added to an iPhone's home
+// screen. Those errors fall back to a full-page redirect.
+const POPUP_UNAVAILABLE = new Set([
+  "auth/popup-blocked",
+  "auth/operation-not-supported-in-this-environment",
+  "auth/web-storage-unsupported",
+]);
 
 async function bootstrapProfile(idToken: string, displayName: string): Promise<AuthUser> {
   return apiRequest<AuthUser>("/me/bootstrap", {
@@ -54,7 +88,7 @@ async function fetchProfile(idToken: string): Promise<AuthUser> {
 
 // Best-effort, fire-and-forget -- purely feeds the Admin > Logs "who's
 // coming in" view, must never hold up or fail an actual sign-in. Called
-// explicitly from login/loginWithGoogle/register only, not from the silent
+// explicitly from login/loginWithProvider/register only, not from the silent
 // token-refresh listener below (that fires roughly hourly and isn't a
 // "someone logged in" event).
 function logLoginEvent(idToken: string, event: "login" | "register"): void {
@@ -84,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(profile);
       } catch {
         // No Firestore profile doc yet (first sign-in) -- bootstrap creates it.
-        const profile = await bootstrapProfile(idToken, firebaseUser.displayName ?? "");
+        const profile = await bootstrapProfile(idToken, displayNameFor(firebaseUser));
         setUser(profile);
       } finally {
         setIsLoading(false);
@@ -129,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(profile);
   }, [token]);
 
-  // login/loginWithGoogle/register set user+token themselves, synchronously
+  // login/loginWithProvider/register set user+token themselves, synchronously
   // within their own promise, rather than relying solely on onIdTokenChanged
   // (a separate, independently-fired listener). Without this, a caller that
   // awaits register() and immediately navigates can land on a route guarded
@@ -144,13 +178,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logLoginEvent(idToken, "login");
   }, []);
 
-  const loginWithGoogle = useCallback(async () => {
-    const credential = await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
+  const loginWithProvider = useCallback(async (kind: SocialProvider) => {
+    const provider = providerFor(kind);
+    let credential;
+    try {
+      credential = await signInWithPopup(firebaseAuth, provider);
+    } catch (err) {
+      if (err instanceof FirebaseError && POPUP_UNAVAILABLE.has(err.code)) {
+        await signInWithRedirect(firebaseAuth, provider);
+        return false;
+      }
+      throw err;
+    }
     const idToken = await credential.user.getIdToken();
-    const profile = await bootstrapProfile(idToken, credential.user.displayName ?? credential.user.email ?? "");
+    const profile = await bootstrapProfile(idToken, displayNameFor(credential.user));
     setToken(idToken);
     setUser(profile);
     logLoginEvent(idToken, "login");
+    return true;
   }, []);
 
   const register = useCallback(async (email: string, password: string, displayName: string) => {
@@ -182,20 +227,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(firebaseAuth);
   }, [token]);
 
+  // "Excluir conta": the backend erases the data and the Firebase login
+  // itself; signing out locally just drops the now-dead session.
+  const deleteAccount = useCallback(async () => {
+    if (!token) return;
+    await apiRequest("/me", { method: "DELETE", token });
+    await signOut(firebaseAuth);
+  }, [token]);
+
   const value = useMemo(
     () => ({
       user,
       token,
       isLoading,
       login,
-      loginWithGoogle,
+      loginWithProvider,
       register,
       logout,
       refreshUser,
       resetPassword,
       revokeAllSessions,
+      deleteAccount,
     }),
-    [user, token, isLoading, login, loginWithGoogle, register, logout, refreshUser, resetPassword, revokeAllSessions]
+    [user, token, isLoading, login, loginWithProvider, register, logout, refreshUser, resetPassword, revokeAllSessions, deleteAccount]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
