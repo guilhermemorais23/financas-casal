@@ -5339,3 +5339,30 @@ video {
     gap: 0;
   }
 }
+
+.loan-projection {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.45rem 3.1rem;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+
+.loan-projection .icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--success-text);
+}
+
+.loan-projection strong {
+  color: var(--color-text);
+}
+
+@media (max-width: 720px) {
+  .loan-projection {
+    margin-left: 0;
+  }
+}

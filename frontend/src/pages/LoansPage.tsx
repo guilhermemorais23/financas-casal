@@ -125,6 +125,19 @@ export function LoansPage() {
   const finishedLoans = useMemo(() => (data?.loans ?? []).filter((loan) => loan.status !== "open"), [data]);
   const personalAccount = accounts.find((a) => a.type === "personal" && a.ownerUserId === user?.id);
 
+  // "Quando pagar, você fica com R$ X": the balance climbing loan by loan in
+  // the order they're expected back (the list is already sorted that way:
+  // overdue first, then by deadline, no deadline last).
+  const balanceAfter = useMemo(() => {
+    const map = new Map<string, number>();
+    let running = inAccounts;
+    for (const loan of openLoans) {
+      running += Number(loan.remaining);
+      map.set(loan.id, running);
+    }
+    return map;
+  }, [openLoans, inAccounts]);
+
   function replaceLoan(updated: Loan) {
     void load();
     setData((prev) =>
@@ -220,6 +233,15 @@ export function LoansPage() {
           <div className="progress-track thin loan-progress">
             <div className="progress-fill" style={{ width: `${percent}%` }} />
           </div>
+        )}
+        {loan.status === "open" && balanceAfter.has(loan.id) && accounts.length > 0 && (
+          <p className="loan-projection">
+            <Icon name="trend" />
+            <span className="text-truncate">
+              Quando {loan.dueDate ? "pagar" : "receber"}, você fica com{" "}
+              <strong>{formatCurrency(balanceAfter.get(loan.id)!)}</strong>
+            </span>
+          </p>
         )}
 
         {isExpanded && (
