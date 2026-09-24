@@ -48,6 +48,10 @@ interface TransactionListRow {
   categoryEmoji: string | null;
   splitType: "none" | "equal";
   isSettled: boolean;
+  // Transfers (cartão garantido, empréstimo) are managed from their own
+  // pages -- no edit/delete here.
+  securedCardId?: string | null;
+  loanId?: string | null;
 }
 
 interface PayerSummaryRow {
@@ -411,19 +415,21 @@ export function ParPage() {
                   {tx.transactionType === "income" ? "+" : "-"}
                   {formatCurrency(Number(tx.amount))}
                 </span>
-                <div className="transaction-row-actions">
-                  <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
-                    <Icon name="pencil" />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    title="Excluir"
-                    onClick={() => handleDelete(tx)}
-                  >
-                    <Icon name="trash" />
-                  </button>
-                </div>
+                {!tx.securedCardId && !tx.loanId && (
+                  <div className="transaction-row-actions">
+                    <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
+                      <Icon name="pencil" />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      title="Excluir"
+                      onClick={() => handleDelete(tx)}
+                    >
+                      <Icon name="trash" />
+                    </button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

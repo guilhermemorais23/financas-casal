@@ -1,12 +1,13 @@
 import { NavLink } from "react-router-dom";
 import { Icon, type IconName } from "./Icon";
 
-// Cartões, Dívidas and Contas fixas are one "Contas" place in the phone's
+// Cartões, Dívidas, Contas fixas and A receber (empréstimos) are one "Contas" place in the phone's
 // bottom bar -- these tabs switch between them without the menu.
 export const BILLS_TABS: { to: string; label: string; shortLabel: string; icon: IconName }[] = [
   { to: "/cards", label: "Cartões", shortLabel: "Cartões", icon: "receipt" },
   { to: "/debts", label: "Dívidas", shortLabel: "Dívidas", icon: "card" },
   { to: "/recurring-bills", label: "Contas fixas", shortLabel: "Fixas", icon: "repeat" },
+  { to: "/loans", label: "A receber", shortLabel: "Receber", icon: "coin" },
 ];
 
 export function BillsTabs() {

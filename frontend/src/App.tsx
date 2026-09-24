@@ -47,6 +47,7 @@ const AccountPage = namedLazy(() => import("./pages/AccountPage"), "AccountPage"
 const AdminPage = namedLazy(() => import("./pages/AdminPage"), "AdminPage");
 const InvestmentsPage = namedLazy(() => import("./pages/InvestmentsPage"), "InvestmentsPage");
 const ShoppingListPage = namedLazy(() => import("./pages/ShoppingListPage"), "ShoppingListPage");
+const LoansPage = namedLazy(() => import("./pages/LoansPage"), "LoansPage");
 
 function App() {
   return (
@@ -155,6 +156,14 @@ function App() {
               element={
                 <ProtectedRoute requireGroup>
                   <InvestmentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/loans"
+              element={
+                <ProtectedRoute requireGroup>
+                  <LoansPage />
                 </ProtectedRoute>
               }
             />

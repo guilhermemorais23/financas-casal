@@ -36,7 +36,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     ],
   },
   {
-    label: "Contas a pagar",
+    label: "Contas",
     items: BILLS_TABS,
   },
   {

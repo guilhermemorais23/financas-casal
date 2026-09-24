@@ -280,7 +280,7 @@ export async function updateTransactionHandler(req: Request, res: Response) {
       return;
     }
     if (err instanceof SecuredCardTransferError) {
-      res.status(409).json({ error: "Esse valor foi guardado no cartão. Use Resgatar na página Cartões." });
+      res.status(409).json({ error: transferLockedMessage(err) });
       return;
     }
     if (err instanceof InvalidCategoryError) {
@@ -299,6 +299,12 @@ export async function updateTransactionHandler(req: Request, res: Response) {
   }
 }
 
+function transferLockedMessage(err: Error): string {
+  return err.message === "loan"
+    ? "Esse lançamento é de um empréstimo. Mexa nele pela página Empréstimos."
+    : "Esse valor foi guardado no cartão. Use Resgatar na página Cartões.";
+}
+
 export async function deleteTransactionHandler(req: Request, res: Response) {
   try {
     await deleteTransactionForUser(req.user!.id, req.params.id);
@@ -309,7 +315,7 @@ export async function deleteTransactionHandler(req: Request, res: Response) {
       return;
     }
     if (err instanceof SecuredCardTransferError) {
-      res.status(409).json({ error: "Esse valor foi guardado no cartão. Use Resgatar na página Cartões." });
+      res.status(409).json({ error: transferLockedMessage(err) });
       return;
     }
     throw err;

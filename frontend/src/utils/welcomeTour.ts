@@ -4,7 +4,7 @@
 // Per user id, so a second person signing in on the same phone gets their own.
 // localStorage can throw (private mode, blocked storage) -- a missed tour is
 // harmless, so every access just swallows that.
-export const TOUR_EDITION = "2026-09-novidades";
+export const TOUR_EDITION = "2026-09-a-receber";
 
 const key = (userId: string) => `par:welcome-tour:${userId}`;
 

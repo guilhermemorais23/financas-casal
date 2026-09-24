@@ -68,6 +68,7 @@ interface TransactionListRow {
   // Guardar/resgatar de um cartão com limite garantido -- managed from the
   // card itself, so the extrato shows it without edit/delete.
   securedCardId?: string | null;
+  loanId?: string | null;
   accountId: string;
   paymentMethod: PaymentMethod | null;
   payerId: string;
@@ -151,6 +152,8 @@ interface MonthTotals {
   // Net money moved into cartões com limite garantido this month -- left
   // the account without being a gasto (see getMonthlyTrendForUser).
   savedInCards?: number;
+  // Net money lent out through Empréstimos this month -- same treatment.
+  lentOut?: number;
 }
 
 interface DashboardResponse {
@@ -169,6 +172,7 @@ interface DashboardResponse {
   nextInvoice: NextInvoice | null;
   // Optional: responses cached by an older build don't have it.
   savedInSecuredCards?: number;
+  loansSummary?: { outstanding: string; overdue: string; overdueCount: number };
   trend6m: MonthlyTrendPoint[];
   alerts: AlertRow[];
 }
@@ -247,6 +251,9 @@ export function DashboardPage() {
   const [savedInSecuredCards, setSavedInSecuredCards] = useState<number>(
     () => readCache(staticKey("savedInSecuredCards")) ?? 0
   );
+  const [loansOutstanding, setLoansOutstanding] = useState<number>(
+    () => readCache(staticKey("loansOutstanding")) ?? 0
+  );
   const [trend6m, setTrend6m] = useState<MonthlyTrendPoint[]>(() => readCache(monthKey("trend6m")) ?? []);
   const [alerts, setAlerts] = useState<AlertRow[]>(() => readCache(monthKey("alerts")) ?? []);
   const [isLoading, setIsLoading] = useState(!group);
@@ -283,6 +290,7 @@ export function DashboardPage() {
       setGoalHighlight(data.goalHighlight);
       setNextInvoice(data.nextInvoice);
       setSavedInSecuredCards(data.savedInSecuredCards ?? 0);
+      setLoansOutstanding(Number(data.loansSummary?.outstanding ?? 0));
       setTrend6m(data.trend6m);
       // ?? []: a response cached by an older build has no `alerts` at all.
       setAlerts(data.alerts ?? []);
@@ -294,6 +302,7 @@ export function DashboardPage() {
     writeCache(sKey("goalHighlight"), data.goalHighlight);
     writeCache(sKey("nextInvoice"), data.nextInvoice);
     writeCache(sKey("savedInSecuredCards"), data.savedInSecuredCards ?? 0);
+    writeCache(sKey("loansOutstanding"), Number(data.loansSummary?.outstanding ?? 0));
     writeCache(mKey("personalMonthTotals"), data.personalMonthTotals);
     writeCache(mKey("personalPrevMonthTotals"), data.personalPrevMonthTotals);
     writeCache(mKey("recent"), data.recent);
@@ -540,6 +549,7 @@ export function DashboardPage() {
   const income = personalMonthTotals.income;
   const expense = personalMonthTotals.expense;
   const savedInCards = personalMonthTotals.savedInCards ?? 0;
+  const lentOut = personalMonthTotals.lentOut ?? 0;
   const prevIncome = personalPrevMonthTotals.income;
   const prevExpense = personalPrevMonthTotals.expense;
   const incomeDelta = percentChange(income, prevIncome);
@@ -573,7 +583,7 @@ export function DashboardPage() {
 
   // "Dá pra gastar por dia": only for the month actually being lived --
   // browsing a past month, "até o fim do mês" means nothing.
-  const monthLeft = income - expense - savedInCards;
+  const monthLeft = income - expense - savedInCards - lentOut;
   const dailyAllowance = useMemo(() => {
     if (month !== currentMonthParam()) return null;
     const today = new Date();
@@ -669,6 +679,13 @@ export function DashboardPage() {
               {savedInCards > 0
                 ? `${formatCurrency(savedInCards)} foram guardados no cartão. Não é gasto, esse dinheiro continua seu.`
                 : `${formatCurrency(-savedInCards)} voltaram do cartão com limite garantido.`}
+            </p>
+          )}
+          {lentOut !== 0 && (
+            <p className="hero-note">
+              {lentOut > 0
+                ? `${formatCurrency(lentOut)} emprestados este mês. Não é gasto, vai voltar pra você.`
+                : `${formatCurrency(-lentOut)} de empréstimos voltaram pra você este mês.`}
             </p>
           )}
           {trend6m.length > 1 && (
@@ -1004,7 +1021,20 @@ export function DashboardPage() {
                     <strong>{formatCurrency(savedInSecuredCards)}</strong>
                   </li>
                 )}
+                {loansOutstanding > 0 && (
+                  <li>
+                    <Link to="/loans" className="link">
+                      🤝 Vão te pagar
+                    </Link>
+                    <strong>{formatCurrency(loansOutstanding)}</strong>
+                  </li>
+                )}
               </ul>
+              {loansOutstanding > 0 && (
+                <p className="money-card-future">
+                  Quando receber tudo: <strong>{formatCurrency(moneyTotal + loansOutstanding)}</strong>
+                </p>
+              )}
               <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>
             </div>
             {dailyTrend.length > 0 && (
@@ -1066,7 +1096,7 @@ export function DashboardPage() {
                             {tx.transactionType === "income" ? "+" : "-"}
                             {formatCurrency(Number(tx.amount))}
                           </span>
-                          {!tx.securedCardId && (
+                          {!tx.securedCardId && !tx.loanId && (
                             <div className="transaction-row-actions">
                               <button
                                 type="button"

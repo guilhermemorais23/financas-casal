@@ -210,6 +210,9 @@ export interface MonthlyTrendPoint {
   // did leave the account, so the hero number subtracts it while "Saída do
   // mês" and every report leave it out.
   savedInCards: number;
+  // Same idea for Empréstimos: net money lent out this month (lent minus
+  // received back).
+  lentOut: number;
   net: number;
 }
 
@@ -234,15 +237,17 @@ export async function getMonthlyTrendForUser(
 
   const rows = await findOwnDocsForRange(groupId, userId, rangeStart, rangeEnd);
 
-  const byMonth = new Map<string, { incomeCents: number; expenseCents: number; savedCents: number }>();
+  const byMonth = new Map<string, { incomeCents: number; expenseCents: number; savedCents: number; lentCents: number }>();
   for (let i = 0; i < monthsBack; i++) {
-    byMonth.set(addMonths(startMonth, i), { incomeCents: 0, expenseCents: 0, savedCents: 0 });
+    byMonth.set(addMonths(startMonth, i), { incomeCents: 0, expenseCents: 0, savedCents: 0, lentCents: 0 });
   }
   for (const row of rows) {
     const entry = byMonth.get(row.month);
     if (!entry) continue; // outside the requested window -- can't happen given the query's own range, kept defensive
     if (row.isSecuredCardTransfer) {
       entry.savedCents += row.transactionType === "income" ? -row.amountCents : row.amountCents;
+    } else if (row.isLoanTransfer) {
+      entry.lentCents += row.transactionType === "income" ? -row.amountCents : row.amountCents;
     } else if (row.transactionType === "income") {
       entry.incomeCents += row.amountCents;
     } else {
@@ -250,12 +255,13 @@ export async function getMonthlyTrendForUser(
     }
   }
 
-  return Array.from(byMonth.entries()).map(([month, { incomeCents, expenseCents, savedCents }]) => ({
+  return Array.from(byMonth.entries()).map(([month, { incomeCents, expenseCents, savedCents, lentCents }]) => ({
     month,
     income: Number(fromCents(incomeCents)),
     expense: Number(fromCents(expenseCents)),
     savedInCards: Number(fromCents(savedCents)),
-    net: Number(fromCents(incomeCents - expenseCents - savedCents)),
+    lentOut: Number(fromCents(lentCents)),
+    net: Number(fromCents(incomeCents - expenseCents - savedCents - lentCents)),
   }));
 }
 
@@ -272,8 +278,8 @@ export async function deleteTransactionForUser(userId: string, transactionId: st
   if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
   }
-  if (transaction.securedCardId) {
-    throw new SecuredCardTransferError();
+  if (transaction.securedCardId || transaction.loanId) {
+    throw new SecuredCardTransferError(transaction.loanId ? "loan" : "card");
   }
   await deleteTransaction(transactionId);
 }
@@ -430,8 +436,8 @@ export async function updateTransactionForUser(
   if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
   }
-  if (transaction.securedCardId) {
-    throw new SecuredCardTransferError();
+  if (transaction.securedCardId || transaction.loanId) {
+    throw new SecuredCardTransferError(transaction.loanId ? "loan" : "card");
   }
 
   if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {

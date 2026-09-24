@@ -12,6 +12,7 @@ import {
   listTransactions,
 } from "../transactions/transactions.service";
 import { parseMonthRange } from "../../utils/month";
+import { listLoans } from "../loans/loans.service";
 
 export interface GoalHighlight {
   id: string;
@@ -85,7 +86,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   // fetched at all when `month` is the real current month.
   const isCurrentMonth = month === new Date().toISOString().slice(0, 7);
 
-  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts] =
+  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts, loans] =
     await Promise.all([
       listTransactions(userId, 8, month),
       listDebts(userId),
@@ -112,6 +113,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
       // sum two numbers each.
       getMonthlyTrendForUser(userId, month),
       isCurrentMonth ? getAlertsForUser(userId) : Promise.resolve<AlertItem[]>([]),
+      listLoans(userId),
     ]);
 
   // trend6m's window always includes both of these (monthsBack defaults to
@@ -130,6 +132,9 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   return {
     group: { accounts: groupResult.accounts, members: groupResult.members },
     savedInSecuredCards: savedInSecuredCards / 100,
+    // Empréstimos: what's still to come back -- "Seu dinheiro" shows it as
+    // "quando receber tudo" on top of what's in the accounts.
+    loansSummary: loans.summary,
     recent,
     debts,
     summary,
