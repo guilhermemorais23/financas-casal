@@ -13,8 +13,9 @@ import {
 } from "firebase/auth";
 import { FirebaseError } from "firebase/app";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiRequest, setTokenRefresher } from "../api/client";
+import { apiRequest, setTokenRefresher, warmUpApi } from "../api/client";
 import { firebaseAuth } from "../firebase";
+import { markWelcomeTourPending } from "../utils/welcomeTour";
 
 export interface AuthUser {
   id: string;
@@ -74,16 +75,67 @@ const POPUP_UNAVAILABLE = new Set([
   "auth/web-storage-unsupported",
 ]);
 
+// Creates the profile doc on first sign-in (idempotent otherwise). A brand
+// new account also gets the welcome tour queued up.
 async function bootstrapProfile(idToken: string, displayName: string): Promise<AuthUser> {
-  return apiRequest<AuthUser>("/me/bootstrap", {
+  const { isNew, ...profile } = await apiRequest<AuthUser & { isNew?: boolean }>("/me/bootstrap", {
     method: "POST",
     token: idToken,
     body: { displayName },
   });
+  if (isNew) markWelcomeTourPending(profile.id);
+  return profile;
 }
 
 async function fetchProfile(idToken: string): Promise<AuthUser> {
   return apiRequest<AuthUser>("/me", { token: idToken });
+}
+
+// login() and the onIdTokenChanged listener both ask for /me with the very
+// same token at the very same moment on every sign-in -- share the one
+// request instead of making a (possibly just-woken) backend answer twice.
+const inflightProfiles = new Map<string, Promise<AuthUser>>();
+function fetchProfileShared(idToken: string): Promise<AuthUser> {
+  let request = inflightProfiles.get(idToken);
+  if (!request) {
+    request = fetchProfile(idToken).finally(() => inflightProfiles.delete(idToken));
+    inflightProfiles.set(idToken, request);
+  }
+  return request;
+}
+
+// Last known profile per account, so opening the app (or signing back in on
+// the same phone) shows the app right away instead of a "Carregando..."
+// that waits on the backend -- which on Render's free plan can take 30s+
+// to wake up. The real /me still runs right after and replaces it.
+const PROFILE_CACHE_PREFIX = "par:profile:";
+
+function readCachedProfile(userId: string): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_PREFIX + userId);
+    const profile = raw ? (JSON.parse(raw) as AuthUser) : null;
+    return profile?.id === userId ? profile : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedProfile(profile: AuthUser): void {
+  try {
+    localStorage.setItem(PROFILE_CACHE_PREFIX + profile.id, JSON.stringify(profile));
+  } catch {
+    // ignore -- it's only a speed-up
+  }
+}
+
+function clearCachedProfiles(): void {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(PROFILE_CACHE_PREFIX)) localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore
+  }
 }
 
 // Best-effort, fire-and-forget -- purely feeds the Admin > Logs "who's
@@ -101,10 +153,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    warmUpApi();
+
     // Fires on sign-in, sign-out, and automatic ID-token refresh -- token in
     // context stays fresh without every page having to call getIdToken().
     const unsubscribe = onIdTokenChanged(firebaseAuth, async (firebaseUser) => {
       if (!firebaseUser) {
+        clearCachedProfiles();
         setUser(null);
         setToken(null);
         setIsLoading(false);
@@ -113,19 +168,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const idToken = await firebaseUser.getIdToken();
       setToken(idToken);
+      const cached = readCachedProfile(firebaseUser.uid);
+      if (cached) {
+        // Known account on this device: show the app now, refresh below.
+        setUser((current) => current ?? cached);
+        setIsLoading(false);
+      }
       try {
-        const profile = await fetchProfile(idToken);
+        let profile: AuthUser;
+        try {
+          profile = await fetchProfileShared(idToken);
+        } catch {
+          // No Firestore profile doc yet (first sign-in) -- bootstrap creates it.
+          profile = await bootstrapProfile(idToken, displayNameFor(firebaseUser));
+        }
         setUser(profile);
-      } catch {
-        // No Firestore profile doc yet (first sign-in) -- bootstrap creates it.
-        const profile = await bootstrapProfile(idToken, displayNameFor(firebaseUser));
-        setUser(profile);
+      } catch (err) {
+        // Offline / backend still waking: keep the cached profile if there
+        // is one; without it there's nothing to show, so it surfaces as before.
+        if (!cached) throw err;
       } finally {
         setIsLoading(false);
       }
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (user) writeCachedProfile(user);
+  }, [user]);
 
   // Gives api/client.ts a way to force a fresh ID token (used to retry a
   // request that came back 401 because the cached token had gone stale --
@@ -172,7 +243,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
     const idToken = await credential.user.getIdToken();
-    const profile = await fetchProfile(idToken);
+    // Signed in on this phone before: go straight in with the saved profile
+    // (the listener above fetches the fresh one in the background).
+    const profile = readCachedProfile(credential.user.uid) ?? (await fetchProfileShared(idToken));
     setToken(idToken);
     setUser(profile);
     logLoginEvent(idToken, "login");
@@ -191,7 +264,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw err;
     }
     const idToken = await credential.user.getIdToken();
-    const profile = await bootstrapProfile(idToken, displayNameFor(credential.user));
+    const profile =
+      readCachedProfile(credential.user.uid) ?? (await bootstrapProfile(idToken, displayNameFor(credential.user)));
     setToken(idToken);
     setUser(profile);
     logLoginEvent(idToken, "login");
@@ -203,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await updateProfile(credential.user, { displayName });
     const idToken = await credential.user.getIdToken();
     const profile = await bootstrapProfile(idToken, displayName);
+    markWelcomeTourPending(profile.id);
     setToken(idToken);
     setUser(profile);
     logLoginEvent(idToken, "register");

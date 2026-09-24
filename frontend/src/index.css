@@ -759,7 +759,86 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 2rem;
   color: var(--color-text-muted);
+}
+
+.loading-page-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  text-align: center;
+  max-width: 320px;
+}
+
+/* Spinner ------------------------------------------------------------------ */
+
+.spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-primary-soft);
+  border-top-color: var(--color-primary);
+  animation: month-picker-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.spinner-lg {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-width: 3px;
+}
+
+/* On the filled purple button: white track so it's visible. */
+.spinner-on-primary {
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+}
+
+.btn .spinner {
+  margin-right: 0.5rem;
+}
+
+.btn-social .spinner {
+  margin-right: 0;
+}
+
+.slow-server-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  text-align: center;
+  animation: slow-hint-in 0.3s ease-out;
+}
+
+@keyframes slow-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* Instant tap feedback on phones -- otherwise nothing visibly changes until
+   the async work behind the button starts re-rendering. */
+.btn {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.6s;
+  }
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 .error-boundary-fallback {
@@ -4074,4 +4153,168 @@ input[type="checkbox"] {
   padding: 0.5rem 0;
   border-top: 1px solid var(--color-border);
   font-variant-numeric: tabular-nums;
+}
+
+/* Welcome tour (first sign-in) ------------------------------------------- */
+
+.welcome-tour-backdrop {
+  z-index: 200;
+  animation: welcome-fade-in 0.2s ease-out;
+}
+
+.welcome-tour {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 2.25rem 1.75rem 1.75rem;
+  animation: welcome-pop-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.welcome-tour-skip {
+  position: absolute;
+  top: 1rem;
+  right: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.welcome-tour-slide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 300px;
+  animation: welcome-slide-in 0.25s ease-out;
+}
+
+.welcome-tour-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  margin-bottom: 1rem;
+}
+
+.welcome-tour-icon .icon {
+  width: 30px;
+  height: 30px;
+}
+
+.welcome-tour-step {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.welcome-tour h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+.welcome-tour-text {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.welcome-tour-bullets {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.welcome-tour-bullets li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  line-height: 1.4;
+}
+
+.welcome-tour-bullets .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-primary);
+}
+
+.welcome-tour-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.welcome-tour-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-border);
+  cursor: pointer;
+  transition: width 0.2s, background-color 0.2s;
+}
+
+.welcome-tour-dot.is-active {
+  width: 22px;
+  background: var(--color-primary);
+}
+
+.welcome-tour .modal-actions {
+  margin-top: 0;
+}
+
+@keyframes welcome-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes welcome-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+@keyframes welcome-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+
+@media (max-width: 480px) {
+  .welcome-tour-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .welcome-tour {
+    max-width: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: calc(1.75rem + env(safe-area-inset-bottom));
+  }
+
+  .welcome-tour-slide {
+    min-height: 280px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-tour-backdrop,
+  .welcome-tour,
+  .welcome-tour-slide {
+    animation: none;
+  }
 }

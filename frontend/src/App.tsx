@@ -5,6 +5,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PageSkeleton } from "./components/Skeleton";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import { ToastProvider } from "./components/ToastProvider";
+import { WelcomeTour } from "./components/WelcomeTour";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
@@ -164,6 +165,7 @@ function App() {
             />
           </Routes>
         </Suspense>
+        <WelcomeTour />
         </ErrorBoundary>
       </AuthProvider>
       </ConfirmProvider>

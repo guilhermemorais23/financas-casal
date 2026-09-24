@@ -6,6 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { SocialLoginButtons } from "../components/SocialLoginButtons";
 import { PasswordInput } from "../components/PasswordInput";
+import { SlowServerHint, Spinner } from "../components/Spinner";
 import { PENDING_INVITE_STORAGE_KEY } from "./AcceptInvitePage";
 
 export function LoginPage() {
@@ -90,8 +91,14 @@ export function LoginPage() {
             </div>
             {error && <p className="alert" role="alert">{error}</p>}
             {resetMessage && <p className="card-subtitle">{resetMessage}</p>}
-            <button type="submit" className="btn btn-primary" disabled={isResetting}>
-              {isResetting ? "Enviando..." : "Enviar link"}
+            <button type="submit" className="btn btn-primary" disabled={isResetting} aria-busy={isResetting}>
+              {isResetting ? (
+                <>
+                  <Spinner className="spinner-on-primary" /> Enviando...
+                </>
+              ) : (
+                "Enviar link"
+              )}
             </button>
           </form>
         </div>
@@ -156,9 +163,16 @@ export function LoginPage() {
             />
           </div>
           {error && <p className="alert" role="alert">{error}</p>}
-          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? "Entrando..." : "Entrar"}
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Spinner className="spinner-on-primary" /> Entrando...
+              </>
+            ) : (
+              "Entrar"
+            )}
           </button>
+          <SlowServerHint active={isSubmitting} />
         </form>
       </div>
       <p className="footnote">
