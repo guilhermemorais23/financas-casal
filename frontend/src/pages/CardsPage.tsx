@@ -83,6 +83,7 @@ export function CardsPage() {
   const [closingDay, setClosingDay] = useState("28");
   const [dueDay, setDueDay] = useState("5");
   const [limit, setLimit] = useState("");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [limitType, setLimitType] = useState<"normal" | "secured">("normal");
   const [scope, setScope] = useState<"personal" | "joint">("joint");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -156,6 +157,7 @@ export function CardsPage() {
       setDueDay("5");
       setLimit("");
       setLimitType("normal");
+      setIsCreateOpen(false);
       await loadCards();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar o cartão");
@@ -665,16 +667,36 @@ export function CardsPage() {
 
   const jointCards = cards?.filter((c) => c.scope === "joint") ?? [];
   const personalCards = cards?.filter((c) => c.scope === "personal") ?? [];
+  // With no card yet the form IS the page; once there's one, the cards come
+  // first (on a phone the form used to push them a full screen down) and
+  // the form opens from the button.
+  const showCreateForm = isCreateOpen || cards?.length === 0;
 
   return (
     <AppLayout>
       <div className="page-stack">
+        <div className="section-header">
+          <div>
+            <h1>Cartões</h1>
+            <p className="card-subtitle">Faturas, limite e quem comprou o quê em cada cartão.</p>
+          </div>
+          {cards !== null && cards.length > 0 && !isCreateOpen && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsCreateOpen(true)}>
+              + Novo cartão
+            </button>
+          )}
+        </div>
+
+        {showCreateForm && (
         <div className="card form-card">
-          <h1>Cartão conjunto</h1>
-          <p className="card-subtitle">
-            Um cartão de crédito usado por mais de uma pessoa? Registre aqui e saiba quem comprou o quê em
-            cada fatura.
-          </p>
+          <div className="section-header">
+            <p className="card-title">Novo cartão</p>
+            {cards !== null && cards.length > 0 && (
+              <button type="button" className="btn btn-ghost" onClick={() => setIsCreateOpen(false)}>
+                Cancelar
+              </button>
+            )}
+          </div>
           <form onSubmit={handleCreate}>
             <div className="segmented">
               <button
@@ -768,6 +790,7 @@ export function CardsPage() {
             </button>
           </form>
         </div>
+        )}
 
         <div>
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
