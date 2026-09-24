@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { LoadingScreen } from "../components/Spinner";
 
 export function ProtectedRoute({
   children,
@@ -11,7 +12,7 @@ export function ProtectedRoute({
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <p className="loading-page">Carregando...</p>;
+    return <LoadingScreen />;
   }
 
   if (!user) {

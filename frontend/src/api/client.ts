@@ -86,3 +86,15 @@ export async function apiDownload(path: string, token: string | null, filename: 
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+// The backend runs on Render's free plan, which puts it to sleep after a
+// while idle -- the first request after that can take 30s+ while it boots.
+// Firing a throwaway /health ping as soon as the app opens lets that boot
+// overlap with the person typing their email/password (or Firebase
+// restoring their session), instead of it all landing on the "Entrar" tap.
+let warmUpStarted = false;
+export function warmUpApi(): void {
+  if (warmUpStarted || !API_URL) return;
+  warmUpStarted = true;
+  fetch(`${API_URL}/health`, { cache: "no-store" }).catch(() => {});
+}

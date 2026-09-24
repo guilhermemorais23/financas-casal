@@ -4,6 +4,7 @@ import { useAuth, type SocialProvider } from "../auth/AuthContext";
 import { authErrorMessage } from "../auth/firebaseErrors";
 import { AppleIcon } from "./AppleIcon";
 import { GoogleIcon } from "./GoogleIcon";
+import { SlowServerHint, Spinner } from "./Spinner";
 
 const LABELS: Record<SocialProvider, string> = { google: "Google", apple: "Apple" };
 
@@ -38,6 +39,7 @@ export function SocialLoginButtons({
   }
 
   return (
+    <>
     <div className="social-login-row">
       {(["google", "apple"] as const).map((provider) => (
         <button
@@ -46,12 +48,15 @@ export function SocialLoginButtons({
           className={`btn btn-social btn-social-${provider}`}
           onClick={() => handle(provider)}
           disabled={busy !== null}
+          aria-busy={busy === provider}
           aria-label={`Continuar com ${LABELS[provider]}`}
         >
-          {provider === "google" ? <GoogleIcon /> : <AppleIcon />}
-          <span>{LABELS[provider]}</span>
+          {busy === provider ? <Spinner /> : provider === "google" ? <GoogleIcon /> : <AppleIcon />}
+          <span>{busy === provider ? "Entrando..." : LABELS[provider]}</span>
         </button>
       ))}
     </div>
+    <SlowServerHint active={busy !== null} />
+    </>
   );
 }

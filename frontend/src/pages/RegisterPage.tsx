@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { SocialLoginButtons } from "../components/SocialLoginButtons";
 import { PasswordInput } from "../components/PasswordInput";
+import { SlowServerHint, Spinner } from "../components/Spinner";
 import { PENDING_INVITE_STORAGE_KEY } from "./AcceptInvitePage";
 
 export function RegisterPage() {
@@ -101,9 +102,16 @@ export function RegisterPage() {
             />
           </div>
           {error && <p className="alert" role="alert">{error}</p>}
-          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? "Criando..." : "Criar conta"}
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Spinner className="spinner-on-primary" /> Criando...
+              </>
+            ) : (
+              "Criar conta"
+            )}
           </button>
+          <SlowServerHint active={isSubmitting} />
         </form>
       </div>
       <p className="footnote">

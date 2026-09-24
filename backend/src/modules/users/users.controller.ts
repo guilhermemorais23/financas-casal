@@ -56,7 +56,10 @@ export async function bootstrapHandler(req: Request, res: Response) {
     void sendWelcomeEmail(user.email, user.displayName);
   }
 
-  res.status(200).json(toPublicUser(user));
+  // isNew lets the frontend show the welcome tour only to brand-new
+  // accounts (including a first Google/Apple sign-in, which never goes
+  // through the "Criar conta" form).
+  res.status(200).json({ ...toPublicUser(user), isNew });
 }
 
 // Called explicitly by the frontend right after a real sign-in (login,
