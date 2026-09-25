@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
+import { requirePremium } from "../../middleware/requirePremium";
 import {
   cancelRecurringHandler,
   createTransactionHandler,
@@ -26,7 +27,8 @@ transactionsRouter.get("/balance", asyncHandler(getBalanceHandler));
 transactionsRouter.get("/summary", asyncHandler(getSummaryHandler));
 transactionsRouter.get("/summary/year", asyncHandler(getYearlySummaryHandler));
 transactionsRouter.get("/daily-series", asyncHandler(getDailySeriesHandler));
-transactionsRouter.get("/export", asyncHandler(exportTransactionsHandler));
+// Exportar (CSV) é do Premium.
+transactionsRouter.get("/export", requirePremium, asyncHandler(exportTransactionsHandler));
 transactionsRouter.patch("/:id/settle", asyncHandler(setSplitSettledHandler));
 transactionsRouter.patch("/:id/recurring", asyncHandler(updateRecurringHandler));
 transactionsRouter.patch("/:id", asyncHandler(updateTransactionHandler));

@@ -349,7 +349,7 @@ const SCREENS: { path: string; label: string }[] = [
   { path: "/cards", label: "Cartões" },
   { path: "/debts", label: "Dívidas" },
   { path: "/recurring-bills", label: "Contas fixas" },
-  { path: "/loans", label: "A receber" },
+  { path: "/loans", label: "Empréstimos" },
   { path: "/goals", label: "Metas" },
   { path: "/investments", label: "Investimentos" },
   { path: "/shopping", label: "Lista de compras" },
@@ -659,6 +659,611 @@ export function AdminAnnouncements() {
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Admin > Assinaturas: como está a cobrança, quem assina e cortesias.
+// ---------------------------------------------------------------------------
+
+type AccessStateName = "trial" | "active" | "past_due" | "canceled_active" | "courtesy" | "free";
+
+interface BillingAdmin {
+  config: {
+    enabled: boolean;
+    asaasConfigured: boolean;
+    asaasEnv: "sandbox" | "production";
+    webhookConfigured: boolean;
+    prices: { monthly: number; yearly: number };
+    trialDays: number;
+  };
+  totals: { active: number; pastDue: number; canceledActive: number; trial: number; courtesy: number; free: number; mrr: number };
+  groups: {
+    groupId: string;
+    members: string[];
+    access: { premium: boolean; state: AccessStateName; endsAt: number | null };
+    plan: "monthly" | "yearly" | null;
+    payerName: string | null;
+    courtesyNote: string | null;
+  }[];
+  events: { id: string; event: string; groupId: string | null; value: number | null; receivedAt: number }[];
+  actions: { id: string; adminEmail: string; action: string; groupId: string | null; detail: string; at: number }[];
+}
+
+const STATE_LABELS: Record<AccessStateName, string> = {
+  trial: "Em teste",
+  active: "Assinante",
+  past_due: "Pagamento atrasado",
+  canceled_active: "Cancelou (ainda vale)",
+  courtesy: "Cortesia",
+  free: "Grátis",
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  PAYMENT_CONFIRMED: "Pagamento confirmado",
+  PAYMENT_RECEIVED: "Pagamento recebido",
+  PAYMENT_OVERDUE: "Pagamento atrasado",
+  PAYMENT_REFUNDED: "Reembolso",
+  PAYMENT_CHARGEBACK_REQUESTED: "Contestação no cartão",
+  SUBSCRIPTION_DELETED: "Assinatura cancelada",
+  SUBSCRIPTION_INACTIVATED: "Assinatura desativada",
+};
+
+function brl(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export function AdminBilling() {
+  const { token, refreshUser } = useAuth();
+  const [isSwitching, setIsSwitching] = useState(false);
+  const { showToast } = useToast();
+  const confirm = useConfirm();
+  const [data, setData] = useState<BillingAdmin | null>(null);
+  const [filter, setFilter] = useState<AccessStateName | "all">("all");
+
+  function load() {
+    apiRequest<BillingAdmin>("/billing/admin", { token })
+      .then(setData)
+      .catch(() => setData(null));
+  }
+  useEffect(load, [token]);
+
+  async function grant(groupId: string, days: number | null) {
+    const ok = await confirm({
+      title: days ? `Dar ${days} dias de Premium?` : "Dar Premium sem prazo?",
+      body: "O grupo passa a ter tudo do Premium sem pagar. Fica registrado nas ações do admin.",
+      confirmLabel: "Dar cortesia",
+      tone: "primary",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest("/billing/admin/courtesy", { method: "POST", token, body: { groupId, days, note: "" } });
+      showToast("Cortesia dada");
+      load();
+    } catch (err) {
+      showToast("Não foi possível", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    }
+  }
+
+  async function revoke(groupId: string) {
+    try {
+      await apiRequest("/billing/admin/courtesy/revoke", { method: "POST", token, body: { groupId } });
+      showToast("Cortesia removida");
+      load();
+    } catch (err) {
+      showToast("Não foi possível", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    }
+  }
+
+  async function toggleBilling(next: boolean) {
+    const ok = await confirm({
+      title: next ? "Ligar a cobrança do Premium?" : "Desligar a cobrança?",
+      body: next
+        ? "A tela Plano aparece pra todo mundo, cada grupo ganha o período de teste e, depois dele, IA, importar extrato, exportar e link de relatório passam a ser do Premium."
+        : "Todo mundo volta a ter tudo liberado e a tela Plano some. Quem já pagou continua com o registro da assinatura no Asaas — cancele por lá se precisar.",
+      confirmLabel: next ? "Ligar cobrança" : "Desligar cobrança",
+      tone: next ? "primary" : "danger",
+    });
+    if (!ok) return;
+    setIsSwitching(true);
+    try {
+      await apiRequest("/admin/settings", { method: "POST", token, body: { billingEnabled: next } });
+      showToast(next ? "Cobrança ligada" : "Cobrança desligada");
+      load();
+      void refreshUser?.();
+    } catch (err) {
+      showToast("Não foi possível mudar", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setIsSwitching(false);
+    }
+  }
+
+  if (!data) return <p className="empty-state">Carregando...</p>;
+  const { config, totals } = data;
+  const visible = filter === "all" ? data.groups : data.groups.filter((g) => g.access.state === filter);
+
+  return (
+    <div className="page-stack admin-billing">
+      <div className="card">
+        <p className="card-title">Configuração</p>
+        <ul className="diag-list">
+          <Check ok={config.enabled} label="Cobrança ligada" hint="Liga e desliga no botão abaixo. Desligada, todo mundo tem tudo." />
+          <Check ok={config.asaasConfigured} label={`Chave do Asaas (${config.asaasEnv === "production" ? "produção" : "testes"})`} hint="ASAAS_API_KEY e ASAAS_ENV" />
+          <Check ok={config.webhookConfigured} label="Webhook do Asaas" hint="ASAAS_WEBHOOK_TOKEN, o mesmo token cadastrado no painel do Asaas" />
+        </ul>
+        <p className="field-hint">
+          Preços: {brl(config.prices.monthly)}/mês ou {brl(config.prices.yearly)}/ano · teste de {config.trialDays} dias.
+        </p>
+        <button
+          type="button"
+          className={`btn ${config.enabled ? "btn-outline" : "btn-primary"}`}
+          disabled={isSwitching || (!config.enabled && (!config.asaasConfigured || !config.webhookConfigured))}
+          onClick={() => toggleBilling(!config.enabled)}
+        >
+          {config.enabled ? "Desligar cobrança" : "Ligar cobrança"}
+        </button>
+        {!config.enabled && (!config.asaasConfigured || !config.webhookConfigured) && (
+          <p className="field-hint">Pra ligar, configure antes a chave do Asaas e o token do webhook no Render (veja docs/COBRANCA.md).</p>
+        )}
+      </div>
+
+      <div className="stat-row wrap">
+        <div className="stat-box tone-accent">
+          <p className="label">Receita por mês (MRR)</p>
+          <p className="value-sm">{brl(totals.mrr)}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Assinantes</p>
+          <p className="value-sm">{totals.active + totals.pastDue}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Em teste</p>
+          <p className="value-sm">{totals.trial}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Atrasados</p>
+          <p className="value-sm">{totals.pastDue}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Cortesia</p>
+          <p className="value-sm">{totals.courtesy}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Grátis</p>
+          <p className="value-sm">{totals.free}</p>
+        </div>
+      </div>
+
+      <div className="card">
+        <p className="card-title">Grupos</p>
+        <div className="admin-feedback-filters announce-row">
+          {(["all", "active", "past_due", "trial", "courtesy", "canceled_active", "free"] as const).map((f) => (
+            <button key={f} type="button" className={`chat-kind-pick${filter === f ? " active" : ""}`} onClick={() => setFilter(f)}>
+              {f === "all" ? "Todos" : STATE_LABELS[f]}
+            </button>
+          ))}
+        </div>
+        {visible.length === 0 ? (
+          <p className="empty-state">
+            {data.groups.length === 0 ? "Nenhum grupo ainda. Eles aparecem aqui quando a cobrança está ligada e alguém abre o app." : "Nenhum grupo nesse filtro."}
+          </p>
+        ) : (
+          <ul className="announce-sent-list">
+            {visible.map((g) => (
+              <li key={g.groupId}>
+                <span className="announce-sent-info">
+                  <strong className="text-truncate">{g.members.join(" e ") || "Grupo sem nomes"}</strong>
+                  <small>
+                    {STATE_LABELS[g.access.state]}
+                    {g.plan ? ` · ${g.plan === "yearly" ? "anual" : "mensal"}` : ""}
+                    {g.access.endsAt ? ` · até ${new Date(g.access.endsAt).toLocaleDateString("pt-BR")}` : ""}
+                    {g.payerName ? ` · paga: ${g.payerName}` : ""}
+                  </small>
+                </span>
+                {g.access.state === "courtesy" ? (
+                  <button type="button" className="link-button" onClick={() => revoke(g.groupId)}>
+                    Tirar cortesia
+                  </button>
+                ) : (
+                  <span className="admin-grant">
+                    <button type="button" className="link-button" onClick={() => grant(g.groupId, 30)}>
+                      +30 dias
+                    </button>
+                    <button type="button" className="link-button" onClick={() => grant(g.groupId, null)}>
+                      Sem prazo
+                    </button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card">
+        <p className="card-title">Últimos eventos do Asaas</p>
+        {data.events.length === 0 ? (
+          <p className="empty-state">Nenhum pagamento ainda.</p>
+        ) : (
+          <ul className="announce-sent-list">
+            {data.events.map((ev) => (
+              <li key={ev.id}>
+                <span className="announce-sent-info">
+                  <strong>{EVENT_LABELS[ev.event] ?? ev.event}</strong>
+                  <small>
+                    {when(ev.receivedAt)}
+                    {ev.value !== null ? ` · ${brl(ev.value)}` : ""}
+                  </small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card">
+        <p className="card-title">Ações do admin</p>
+        {data.actions.length === 0 ? (
+          <p className="empty-state">Nenhuma ação registrada.</p>
+        ) : (
+          <ul className="announce-sent-list">
+            {data.actions.map((a) => (
+              <li key={a.id}>
+                <span className="announce-sent-info">
+                  <strong>{a.action === "grant_courtesy" ? "Deu cortesia" : a.action === "revoke_courtesy" ? "Tirou cortesia" : a.action}</strong>
+                  <small>
+                    {a.adminEmail} · {when(a.at)}
+                    {a.detail ? ` · ${a.detail}` : ""}
+                  </small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Admin > Visão geral (topo): uso, retenção, funil, banco e modo manutenção.
+// ---------------------------------------------------------------------------
+
+interface Insights {
+  activity: { today: number; week: number; month: number; newWeek: number; newMonth: number; tracked: number };
+  retention: { cohort: number; returned: number };
+  funnel: { accounts: number; inGroup: number; inPairedGroup: number; payingGroups: number | null };
+  firestore: { reads: number; writes: number; readLimit: number; writeLimit: number; countingSince: number; counterInstalled: boolean };
+  settings: { billingEnabled: boolean; maintenance: { enabled: boolean; message: string } };
+}
+
+function Meter({ label, value, limit }: { label: string; value: number; limit: number }) {
+  const pct = Math.min(100, Math.round((value / limit) * 100));
+  const tone = pct >= 80 ? "bad" : pct >= 50 ? "warn" : "ok";
+  return (
+    <div className="usage-meter">
+      <div className="usage-meter-top">
+        <span>{label}</span>
+        <strong>
+          {value.toLocaleString("pt-BR")} <small>de {limit.toLocaleString("pt-BR")}</small>
+        </strong>
+      </div>
+      <div className="usage-meter-track" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={limit} aria-label={label}>
+        <i className={`tone-${tone}`} style={{ width: `${Math.max(pct, value > 0 ? 1 : 0)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+export function AdminInsights() {
+  const { token, refreshUser } = useAuth();
+  const { showToast } = useToast();
+  const [data, setData] = useState<Insights | null>(null);
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  function load() {
+    apiRequest<Insights>("/admin/insights", { token })
+      .then((res) => {
+        setData(res);
+        setMessage(res.settings.maintenance.message);
+      })
+      .catch(() => setData(null));
+  }
+  useEffect(load, [token]);
+
+  async function setMaintenance(enabled: boolean) {
+    setIsSaving(true);
+    try {
+      await apiRequest("/admin/settings", { method: "POST", token, body: { maintenance: { enabled, message } } });
+      showToast(enabled ? "Modo manutenção ligado" : "Modo manutenção desligado", {
+        description: enabled ? "Todo mundo vê o aviso; só admins conseguem salvar." : undefined,
+      });
+      load();
+      void refreshUser();
+    } catch (err) {
+      showToast("Não foi possível mudar", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (!data) return null;
+  const { activity, retention, funnel, firestore, settings } = data;
+  const steps = [
+    { label: "Criaram conta", value: funnel.accounts },
+    { label: "Entraram num grupo", value: funnel.inGroup },
+    { label: "Em grupo com 2+ pessoas", value: funnel.inPairedGroup },
+    ...(funnel.payingGroups !== null ? [{ label: "Grupos assinantes", value: funnel.payingGroups }] : []),
+  ];
+  const top = Math.max(funnel.accounts, 1);
+
+  return (
+    <div className="page-stack admin-insights">
+      <div className="stat-row wrap">
+        <div className="stat-box tone-accent">
+          <p className="label">Ativos hoje</p>
+          <p className="value-sm">{activity.today}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Ativos em 7 dias</p>
+          <p className="value-sm">{activity.week}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Ativos em 30 dias</p>
+          <p className="value-sm">{activity.month}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Contas novas (7 dias)</p>
+          <p className="value-sm">{activity.newWeek}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Voltaram depois de 7 dias</p>
+          <p className="value-sm">{retention.cohort ? `${Math.round((retention.returned / retention.cohort) * 100)}%` : "—"}</p>
+        </div>
+      </div>
+      {activity.tracked < funnel.accounts && (
+        <p className="field-hint">
+          "Ativos" conta quem abriu o app desde que esta versão entrou no ar ({activity.tracked} de {funnel.accounts} pessoas já
+          registradas). A retenção fica confiável depois de umas semanas.
+        </p>
+      )}
+
+      <div className="admin-insights-grid">
+        <div className="card">
+          <p className="card-title">Funil</p>
+          <ul className="funnel">
+            {steps.map((step) => (
+              <li key={step.label}>
+                <div className="funnel-top">
+                  <span>{step.label}</span>
+                  <strong>
+                    {step.value}
+                    <small> · {Math.round((step.value / top) * 100)}%</small>
+                  </strong>
+                </div>
+                <div className="usage-meter-track">
+                  <i className="tone-ok" style={{ width: `${(step.value / top) * 100}%` }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="card">
+          <p className="card-title">Banco de dados hoje</p>
+          <p className="card-subtitle">Cota grátis do Firestore, que zera por volta das 4h (horário de Brasília).</p>
+          <Meter label="Leituras" value={firestore.reads} limit={firestore.readLimit} />
+          <Meter label="Gravações" value={firestore.writes} limit={firestore.writeLimit} />
+          <p className="field-hint">
+            Estimativa deste servidor desde {new Date(firestore.countingSince).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}{" "}
+            (zera quando o Render reinicia). O número exato fica no console do Firebase → Uso.
+          </p>
+        </div>
+      </div>
+
+      <div className="card">
+        <p className="card-title">Modo manutenção</p>
+        <p className="card-subtitle">
+          Mostra um aviso no topo do app pra todo mundo e pausa as gravações de quem não é admin (dá pra ver tudo, não dá
+          pra salvar). Use durante uma atualização ou migração.
+        </p>
+        <div className="field">
+          <label htmlFor="maintenance-message">Mensagem</label>
+          <input id="maintenance-message" value={message} maxLength={200} onChange={(e) => setMessage(e.target.value)} />
+        </div>
+        <button
+          type="button"
+          className={`btn ${settings.maintenance.enabled ? "btn-primary" : "btn-outline"}`}
+          disabled={isSaving}
+          onClick={() => setMaintenance(!settings.maintenance.enabled)}
+        >
+          {settings.maintenance.enabled ? "Desligar manutenção" : "Ligar manutenção"}
+        </button>
+        {settings.maintenance.enabled && <p className="field-hint">Ligado agora.</p>}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Admin > Usuários: busca, detalhe e bloqueio.
+// ---------------------------------------------------------------------------
+
+interface AdminUser {
+  id: string;
+  displayName: string;
+  email: string;
+  groupId: string | null;
+  createdAt: number | null;
+  lastSeenAt: number | null;
+  blocked: boolean;
+}
+
+interface AdminUserDetail extends Omit<AdminUser, "groupId"> {
+  phone: string | null;
+  isAdmin: boolean;
+  group: { id: string; members: { id: string; displayName: string; email: string }[] } | null;
+  transactionCount: number;
+  plan: { premium: boolean; state: AccessStateName; endsAt: number | null } | null;
+  recentAccess: { event: string; createdAt: number }[];
+}
+
+function ago(ms: number | null): string {
+  if (!ms) return "—";
+  const days = Math.floor((Date.now() - ms) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return "hoje";
+  if (days === 1) return "ontem";
+  if (days < 30) return `há ${days} dias`;
+  return new Date(ms).toLocaleDateString("pt-BR");
+}
+
+export function AdminUsers() {
+  const { token } = useAuth();
+  const { showToast } = useToast();
+  const confirm = useConfirm();
+  const [query, setQuery] = useState("");
+  const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const [detail, setDetail] = useState<AdminUserDetail | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      apiRequest<{ users: AdminUser[] }>(`/admin/users?q=${encodeURIComponent(query)}`, { token })
+        .then((res) => setUsers(res.users))
+        .catch(() => setUsers([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, token]);
+
+  async function open(id: string) {
+    setDetail(null);
+    try {
+      setDetail(await apiRequest<AdminUserDetail>(`/admin/users/${id}`, { token }));
+    } catch (err) {
+      showToast("Não foi possível abrir", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    }
+  }
+
+  async function toggleBlock(user: AdminUserDetail) {
+    const blocking = !user.blocked;
+    const ok = await confirm({
+      title: blocking ? `Bloquear ${user.displayName || user.email}?` : `Desbloquear ${user.displayName || user.email}?`,
+      body: blocking
+        ? "A pessoa sai de todos os aparelhos e não consegue mais entrar. Os dados continuam guardados; dá pra desbloquear depois."
+        : "A pessoa volta a conseguir entrar normalmente.",
+      confirmLabel: blocking ? "Bloquear" : "Desbloquear",
+      tone: blocking ? "danger" : "primary",
+    });
+    if (!ok) return;
+    setIsBusy(true);
+    try {
+      await apiRequest(`/admin/users/${user.id}/block`, { method: "POST", token, body: { blocked: blocking } });
+      showToast(blocking ? "Conta bloqueada" : "Conta desbloqueada");
+      setDetail({ ...user, blocked: blocking });
+      setUsers((prev) => prev?.map((u) => (u.id === user.id ? { ...u, blocked: blocking } : u)) ?? prev);
+    } catch (err) {
+      showToast("Não foi possível", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  if (detail) {
+    return (
+      <div className="card admin-user-detail">
+        <button type="button" className="link-button" onClick={() => setDetail(null)}>
+          ← Todos os usuários
+        </button>
+        <p className="card-title">
+          {detail.displayName || "Sem nome"} {detail.blocked && <span className="chip-blocked">Bloqueado</span>}
+          {detail.isAdmin && <span className="chip-admin">Admin</span>}
+        </p>
+        <p className="card-subtitle">{detail.email}</p>
+        <dl className="admin-user-facts">
+          <div>
+            <dt>Conta criada</dt>
+            <dd>{detail.createdAt ? new Date(detail.createdAt).toLocaleDateString("pt-BR") : "—"}</dd>
+          </div>
+          <div>
+            <dt>Visto por último</dt>
+            <dd>{ago(detail.lastSeenAt)}</dd>
+          </div>
+          <div>
+            <dt>Lançamentos</dt>
+            <dd>{detail.transactionCount}</dd>
+          </div>
+          <div>
+            <dt>Plano</dt>
+            <dd>{detail.plan ? STATE_LABELS[detail.plan.state] : "Cobrança desligada"}</dd>
+          </div>
+          <div>
+            <dt>Grupo</dt>
+            <dd>{detail.group ? detail.group.members.map((m) => m.displayName || m.email).join(", ") : "Sem grupo"}</dd>
+          </div>
+          {detail.phone && (
+            <div>
+              <dt>Telefone</dt>
+              <dd>{detail.phone}</dd>
+            </div>
+          )}
+        </dl>
+        {detail.recentAccess.length > 0 && (
+          <>
+            <p className="admin-user-subtitle">Últimos logins</p>
+            <ul className="admin-user-access">
+              {detail.recentAccess.map((a) => (
+                <li key={a.createdAt}>
+                  {a.event === "register" ? "Criou a conta" : "Entrou"} · {new Date(a.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {!detail.isAdmin && (
+          <button type="button" className={`btn ${detail.blocked ? "btn-primary" : "btn-outline"}`} disabled={isBusy} onClick={() => toggleBlock(detail)}>
+            {detail.blocked ? "Desbloquear conta" : "Bloquear conta"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="card admin-users">
+      <div className="field">
+        <label htmlFor="admin-user-search">Buscar</label>
+        <input id="admin-user-search" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nome ou email" autoComplete="off" />
+      </div>
+      {users === null ? (
+        <p className="empty-state">Carregando...</p>
+      ) : users.length === 0 ? (
+        <p className="empty-state">Ninguém encontrado.</p>
+      ) : (
+        <ul className="admin-thread-list">
+          {users.map((u) => (
+            <li key={u.id}>
+              <button type="button" className="admin-thread-row" onClick={() => open(u.id)}>
+                <span className="loan-avatar" aria-hidden="true">
+                  {(u.displayName || u.email).charAt(0).toUpperCase()}
+                </span>
+                <span className="admin-thread-info">
+                  <span className="admin-thread-top">
+                    <strong className="text-truncate">{u.displayName || "Sem nome"}</strong>
+                    <small>{ago(u.lastSeenAt ?? u.createdAt)}</small>
+                  </span>
+                  <span className="text-truncate admin-thread-last">
+                    {u.email}
+                    {!u.groupId ? " · sem grupo" : ""}
+                  </span>
+                </span>
+                {u.blocked && <span className="chip-blocked">Bloqueado</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -118,7 +118,8 @@ export function RegisterPage() {
         Já tem conta? <Link to="/login">Entrar</Link>
       </p>
       <p className="footnote footnote-muted">
-        Ao criar a conta você concorda com a <Link to="/privacidade">política de privacidade</Link>.
+        Ao criar a conta você concorda com os <Link to="/termos">termos de uso</Link> e a{" "}
+        <Link to="/privacidade">política de privacidade</Link>.
       </p>
     </div>
   );

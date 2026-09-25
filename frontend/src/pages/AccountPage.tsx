@@ -8,6 +8,7 @@ import { personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
+import { ImportRulesCard } from "../components/ImportRulesCard";
 import { ImportStatementModal } from "../components/ImportStatementModal";
 import { initialOf } from "../utils/initial";
 
@@ -73,6 +74,7 @@ export function AccountPage() {
   const [copied, setCopied] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importsDone, setImportsDone] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -351,6 +353,16 @@ export function AccountPage() {
       <div className="page-stack">
         <h1>Conta</h1>
 
+        {user?.billingEnabled && (
+        <Link to="/plano" className="card plan-link">
+          <span>
+            <span className="card-title">Plano</span>
+            <span className="card-subtitle">Grátis ou Premium, assinatura e cancelamento</span>
+          </span>
+          <Icon name="chevron" className="icon plan-link-chevron" />
+        </Link>
+        )}
+
         <div className="card">
           <p className="card-title">Grupo</p>
           <ul className="member-list">
@@ -444,7 +456,17 @@ export function AccountPage() {
           </div>
         </div>
 
-        {isImportOpen && <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load()} />}
+        <ImportRulesCard categories={categories ?? []} reloadKey={importsDone} />
+
+        {isImportOpen && (
+          <ImportStatementModal
+            onClose={() => setIsImportOpen(false)}
+            onImported={() => {
+              setImportsDone((n) => n + 1);
+              void load();
+            }}
+          />
+        )}
 
         <div className="card form-card">
           <p className="card-title">Orçamento do mês</p>
@@ -685,7 +707,7 @@ export function AccountPage() {
         </div>
 
         <p className="app-version-footer">
-          PAR. v{__APP_VERSION__} · <Link to="/privacidade">Privacidade</Link>
+          PAR. v{__APP_VERSION__} · <Link to="/termos">Termos</Link> · <Link to="/privacidade">Privacidade</Link>
         </p>
       </div>
     </AppLayout>

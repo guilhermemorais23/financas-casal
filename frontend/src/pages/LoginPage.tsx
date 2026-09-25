@@ -187,7 +187,7 @@ export function LoginPage() {
         Não tem conta? <Link to="/register">Criar conta</Link>
       </p>
       <p className="footnote footnote-muted">
-        <Link to="/privacidade">Política de privacidade</Link>
+        <Link to="/termos">Termos de uso</Link> · <Link to="/privacidade">Política de privacidade</Link>
       </p>
     </div>
   );

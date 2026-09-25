@@ -24,11 +24,15 @@ describe("answerFromSnapshot", () => {
     loansOutstanding: 1000,
     loansOverdue: 0,
     loans: [{ personName: "Mãe", remaining: 1000, dueDate: null, isOverdue: false }],
+    owedOutstanding: 400,
+    owed: [{ personName: "Pai", remaining: 400, dueDate: null, isOverdue: false }],
   };
 
   it("answers the question that was asked", () => {
     expect(answerFromSnapshot(snapshot, "o que vence essa semana?")).toContain("Fatura Nubank");
     expect(answerFromSnapshot(snapshot, "quanto posso gastar por dia?")).toContain("por dia");
     expect(answerFromSnapshot(snapshot, "quem me deve?")).toContain("R$");
+    // contas 5.700 + a receber 1.000 - devo 400
+    expect(answerFromSnapshot(snapshot, "quanto eu devo?")).toMatch(/6\.300,00/);
   });
 });

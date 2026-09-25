@@ -2,10 +2,12 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 export class ApiError extends Error {
   status: number;
+  code: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -50,7 +52,12 @@ export async function apiRequest<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new ApiError(data?.error ?? "Request failed", response.status);
+    // Recurso do Premium: avisa o app (components/PremiumPrompt abre a janela
+    // "Isso é do Premium") além de devolver o erro pra tela que chamou.
+    if (response.status === 402 && data?.code === "premium_required") {
+      window.dispatchEvent(new CustomEvent("par:premium-required"));
+    }
+    throw new ApiError(data?.error ?? "Request failed", response.status, typeof data?.code === "string" ? data.code : null);
   }
 
   return data as T;
@@ -73,7 +80,10 @@ export async function apiDownload(path: string, token: string | null, filename: 
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new ApiError(data?.error ?? "Request failed", response.status);
+    if (response.status === 402 && data?.code === "premium_required") {
+      window.dispatchEvent(new CustomEvent("par:premium-required"));
+    }
+    throw new ApiError(data?.error ?? "Request failed", response.status, typeof data?.code === "string" ? data.code : null);
   }
 
   const blob = await response.blob();

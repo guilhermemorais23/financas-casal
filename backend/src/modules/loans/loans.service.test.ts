@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestGroup, todayISO } from "../../test-helpers";
 import { getGroupForUser } from "../groups/groups.service";
+import { getMonthlyTrendForUser } from "../transactions/transactions.service";
 import { deleteTransactionForUser, SecuredCardTransferError } from "../transactions/transactions.service";
 import {
   InvalidLoanAccountError,
@@ -161,5 +162,42 @@ describe("summarize", () => {
       noDueDate: "30.00",
       openCount: 4,
     });
+  });
+});
+
+describe("eu devo (peguei emprestado)", () => {
+  it("entra na conta sem ser renda, paguei tira sem ser gasto, e soma separado do que me devem", async () => {
+    const { userAId, personalAccountId } = await createTestGroup();
+    const borrowed = await createLoan(userAId, {
+      direction: "borrowed",
+      personName: "Pai",
+      amount: 1000,
+      lentAt: todayISO(),
+      dueDate: null,
+      note: "Entrada do carro",
+      accountId: personalAccountId,
+    });
+    expect(borrowed.direction).toBe("borrowed");
+    expect(await balanceOf(userAId, personalAccountId)).toBe(1000);
+
+    await createLoan(userAId, { personName: "Irmão", amount: 300, lentAt: todayISO(), dueDate: null, note: null, accountId: personalAccountId });
+
+    const paid = await addRepayment(userAId, borrowed.id, { amount: 400, receivedAt: todayISO(), accountId: personalAccountId });
+    expect(paid.remaining).toBe("600.00");
+    expect(await balanceOf(userAId, personalAccountId)).toBe(300); // +1000 -300 -400
+
+    const { summary, owedSummary } = await listLoans(userAId);
+    expect(summary.outstanding).toBe("300.00");
+    expect(owedSummary.outstanding).toBe("600.00");
+
+    // Nada disso aparece como renda ou gasto do mês.
+    const trend = await getMonthlyTrendForUser(userAId);
+    const month = trend[trend.length - 1];
+    expect(month.income).toBe(0);
+    expect(month.expense).toBe(0);
+
+    // Excluir desfaz a entrada e o pagamento.
+    await removeLoan(userAId, borrowed.id);
+    expect(await balanceOf(userAId, personalAccountId)).toBe(-300);
   });
 });

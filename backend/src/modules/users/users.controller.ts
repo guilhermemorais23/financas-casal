@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { isAdminEmail } from "../admin/admin.service";
+import { getAppSettings, isBillingEnabled } from "../settings/appSettings";
 import { logAccess, type AccessEvent } from "../../utils/accessLog";
 import { sendNewSignupEmail, sendWelcomeEmail } from "../../email/mailer";
 import { auth } from "../../db/firestore";
@@ -15,8 +16,14 @@ function isNonEmptyString(value: unknown): value is string {
 // independently (admin.controller.ts), so this is purely a UX gate (nobody
 // who isn't allowed in ever sees "Admin" in the sidebar), not the security
 // boundary.
-function toPublicUser(user: UserRow) {
+async function toPublicUser(user: UserRow) {
+  // Chaves do app que mudam o que a tela mostra: a tela Plano só aparece com
+  // a cobrança ligada; o aviso de manutenção aparece pra todo mundo.
+  const settings = await getAppSettings().catch(() => null);
+  const billingEnabled = await isBillingEnabled().catch(() => false);
   return {
+    billingEnabled,
+    maintenance: settings?.maintenance.enabled ? settings.maintenance.message : null,
     id: user.id,
     email: user.email,
     displayName: user.displayName,
@@ -60,7 +67,7 @@ export async function bootstrapHandler(req: Request, res: Response) {
   // isNew lets the frontend show the welcome tour only to brand-new
   // accounts (including a first Google/Apple sign-in, which never goes
   // through the "Criar conta" form).
-  res.status(200).json({ ...toPublicUser(user), isNew });
+  res.status(200).json({ ...(await toPublicUser(user)), isNew });
 }
 
 // Called explicitly by the frontend right after a real sign-in (login,
@@ -81,7 +88,7 @@ export async function meHandler(req: Request, res: Response) {
     res.status(404).json({ error: "user not found" });
     return;
   }
-  res.status(200).json(toPublicUser(user));
+  res.status(200).json(await toPublicUser(user));
 }
 
 export async function updateProfileHandler(req: Request, res: Response) {
@@ -135,7 +142,7 @@ export async function updateProfileHandler(req: Request, res: Response) {
   }
 
   const user = await updateUserProfile(req.user!.id, updates);
-  res.status(200).json(toPublicUser(user));
+  res.status(200).json(await toPublicUser(user));
 }
 
 // Self-service "sair de todos os dispositivos": invalidates every refresh

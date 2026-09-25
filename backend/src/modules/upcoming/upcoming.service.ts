@@ -94,12 +94,13 @@ export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_W
 
   for (const loan of loans.loans) {
     if (loan.status !== "open" || !loan.dueDate || Number(loan.remaining) <= 0 || !within(loan.dueDate)) continue;
+    const owe = loan.direction === "borrowed";
     items.push({
       id: `loan-${loan.id}`,
       kind: "loan",
-      direction: "receive",
+      direction: owe ? "pay" : "receive",
       title: loan.personName,
-      detail: "Te devolve",
+      detail: owe ? "Você devolve" : "Te devolve",
       amount: Number(loan.remaining),
       dueDate: loan.dueDate,
       daysUntil: daysBetween(today, loan.dueDate),

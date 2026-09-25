@@ -176,6 +176,8 @@ interface DashboardResponse {
   savedInSecuredCards?: number;
   owedOnCards?: number;
   loansSummary?: { outstanding: string; overdue: string; overdueCount: number };
+  // "Eu devo": o que você pegou emprestado com pessoas e ainda vai devolver.
+  owedSummary?: { outstanding: string; overdue: string; overdueCount: number };
   // Opcional: respostas em cache de uma versão antiga não têm.
   upcoming?: UpcomingItem[];
   trend6m: MonthlyTrendPoint[];
@@ -285,6 +287,7 @@ export function DashboardPage() {
   );
   const [owedOnCards, setOwedOnCards] = useState<number>(() => readCache(staticKey("owedOnCards")) ?? 0);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>(() => readCache(staticKey("upcoming")) ?? []);
+  const [owedToPeople, setOwedToPeople] = useState<number>(() => readCache(staticKey("owedToPeople")) ?? 0);
   const [loansOutstanding, setLoansOutstanding] = useState<number>(
     () => readCache(staticKey("loansOutstanding")) ?? 0
   );
@@ -322,6 +325,7 @@ export function DashboardPage() {
       setSavedInSecuredCards(data.savedInSecuredCards ?? 0);
       setOwedOnCards(data.owedOnCards ?? 0);
       setLoansOutstanding(Number(data.loansSummary?.outstanding ?? 0));
+      setOwedToPeople(Number(data.owedSummary?.outstanding ?? 0));
       setUpcoming(data.upcoming ?? []);
       // ?? []: a response cached by an older build has no `alerts` at all.
       setAlerts(data.alerts ?? []);
@@ -335,6 +339,7 @@ export function DashboardPage() {
     writeCache(sKey("savedInSecuredCards"), data.savedInSecuredCards ?? 0);
     writeCache(sKey("owedOnCards"), data.owedOnCards ?? 0);
     writeCache(sKey("loansOutstanding"), Number(data.loansSummary?.outstanding ?? 0));
+    writeCache(sKey("owedToPeople"), Number(data.owedSummary?.outstanding ?? 0));
     writeCache(sKey("upcoming"), data.upcoming ?? []);
     writeCache(mKey("personalMonthTotals"), data.personalMonthTotals);
     writeCache(mKey("personalPrevMonthTotals"), data.personalPrevMonthTotals);
@@ -1055,6 +1060,14 @@ export function DashboardPage() {
                     <strong>{formatCurrency(loansOutstanding)}</strong>
                   </li>
                 )}
+                {owedToPeople > 0 && (
+                  <li>
+                    <Link to="/loans?lado=devo" className="link">
+                      Você deve pra pessoas
+                    </Link>
+                    <strong className="owe-text">−{formatCurrency(owedToPeople)}</strong>
+                  </li>
+                )}
               </ul>
               {loansOutstanding > 0 && (
                 <p className="money-card-future">
@@ -1063,14 +1076,19 @@ export function DashboardPage() {
               )}
               {/* O outro lado: tira dívidas e faturas/parcelas de cartão em
                   aberto, pra o número não mostrar só o que vai entrar. */}
-              {totalDebtRemaining + owedOnCards > 0 && (
+              {totalDebtRemaining + owedOnCards + owedToPeople > 0 && (
                 <p className="money-card-future money-card-owed">
                   Depois de pagar o que deve:{" "}
-                  <strong className={moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards < 0 ? "danger-text" : ""}>
-                    {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards)}
+                  <strong
+                    className={
+                      moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople < 0 ? "danger-text" : ""
+                    }
+                  >
+                    {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople)}
                   </strong>
                   <span className="money-card-future-note">
-                    Tira {formatCurrency(totalDebtRemaining + owedOnCards)} de dívidas e cartões
+                    Tira {formatCurrency(totalDebtRemaining + owedOnCards + owedToPeople)} de{" "}
+                    {owedToPeople > 0 ? "dívidas, cartões e empréstimos que você pegou" : "dívidas e cartões"}
                   </span>
                 </p>
               )}

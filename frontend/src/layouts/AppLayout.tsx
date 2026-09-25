@@ -58,8 +58,10 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
 // in the JSX below) instead of navigating straight to a page.
 const ADMIN_SUBLINKS = [
   { section: "overview", label: "Visão geral" },
+  { section: "users", label: "Usuários" },
   { section: "feedback", label: "Feedback" },
   { section: "announcements", label: "Novidades" },
+  { section: "billing", label: "Assinaturas" },
   { section: "diagnostics", label: "Diagnóstico" },
   { section: "logs", label: "Logs" },
 ];
@@ -339,7 +341,15 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       </aside>
 
       {isProfileOpen && <ProfileSettingsModal onClose={() => setIsProfileOpen(false)} />}
-      <main className={`app-main${wide ? " app-main-wide" : ""}`}>{children}</main>
+      <main className={`app-main${wide ? " app-main-wide" : ""}`}>
+        {user?.maintenance && (
+          <p className="maintenance-banner" role="status">
+            <Icon name="wrench" className="icon" />
+            <span>{user.maintenance}</span>
+          </p>
+        )}
+        {children}
+      </main>
 
       <nav className="app-bottom-nav" aria-label="Menu principal">
         <NavLink to="/dashboard" className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>

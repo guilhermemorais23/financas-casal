@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
-import { AdminAnnouncements, AdminDiagnostics, AdminFeedback } from "./AdminSections";
+import { AdminAnnouncements, AdminBilling, AdminDiagnostics, AdminFeedback, AdminInsights, AdminUsers } from "./AdminSections";
 
 interface ErrorLogEntry {
   id: string;
@@ -35,8 +35,10 @@ interface AdminOverview {
 
 const ADMIN_SECTIONS = [
   { section: "overview", label: "Geral" },
+  { section: "users", label: "Usuários" },
   { section: "feedback", label: "Feedback" },
   { section: "announcements", label: "Novidades" },
+  { section: "billing", label: "Assinaturas" },
   { section: "diagnostics", label: "Diagnóstico" },
   { section: "logs", label: "Logs" },
 ] as const;
@@ -61,10 +63,10 @@ export function AdminPage() {
   // (the sidebar's "Admin" sub-links on desktop, the tabs below on mobile).
   const requested = searchParams.get("section");
   const section =
-    requested === "logs" || requested === "feedback" || requested === "diagnostics" || requested === "announcements"
+    requested === "logs" || requested === "feedback" || requested === "diagnostics" || requested === "announcements" || requested === "billing" || requested === "users"
       ? requested
       : "overview";
-  const sectionTitle = { overview: "Visão geral", logs: "Logs", feedback: "Feedback", diagnostics: "Diagnóstico", announcements: "Novidades" }[section];
+  const sectionTitle = { overview: "Visão geral", logs: "Logs", feedback: "Feedback", diagnostics: "Diagnóstico", announcements: "Novidades", billing: "Assinaturas", users: "Usuários" }[section];
 
   useEffect(() => {
     apiRequest<AdminOverview>("/admin/overview", { token })
@@ -136,10 +138,13 @@ export function AdminPage() {
         )}
         {section === "feedback" && <AdminFeedback />}
         {section === "announcements" && <AdminAnnouncements />}
+        {section === "billing" && <AdminBilling />}
+        {section === "users" && <AdminUsers />}
         {section === "diagnostics" && <AdminDiagnostics />}
 
         {section === "overview" && (
           <>
+            <AdminInsights />
             <div className="stat-row wrap">
               <div className="stat-box tone-accent">
                 <p className="label">Usuários</p>

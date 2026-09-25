@@ -43,7 +43,7 @@ const SLIDES: Slide[] = [
     icon: "coin",
     tag: "Novidade",
     title: "Quem te deve, num lugar só",
-    text: "Em Contas > A receber: quanto te devem e quanto você vai ter quando cada pessoa pagar.",
+    text: "Em Contas > Empréstimos: quanto te devem, quanto você deve e quanto é seu de verdade.",
     bullets: ["Com ou sem prazo pra devolver", "Juros por mês, se quiser", "Não conta como gasto"],
   },
   {
@@ -62,7 +62,7 @@ const SLIDES: Slide[] = [
 
 // Routes where the tour would get in the way: the sign-in screens (including
 // the "Conta criada!" moment on /register) and public pages.
-const HIDDEN_ON = ["/login", "/register", "/privacidade", "/r/", "/invite/"];
+const HIDDEN_ON = ["/login", "/register", "/privacidade", "/termos", "/r/", "/invite/"];
 
 // Aparece uma vez por edição pra toda conta logada (nova ou antiga -- ver
 // utils/welcomeTour.ts): pra que serve o app e o que tem de novo, dá pra

@@ -71,7 +71,8 @@ export async function listLoansHandler(req: Request, res: Response) {
 }
 
 export async function createLoanHandler(req: Request, res: Response) {
-  const { personName, amount, lentAt, dueDate, note, accountId, interestRateMonthly } = req.body ?? {};
+  const { personName, amount, lentAt, dueDate, note, accountId, interestRateMonthly, direction } = req.body ?? {};
+  const borrowed = direction === "borrowed";
   const interest = readInterest(interestRateMonthly);
   if (interest === "invalid") {
     res.status(400).json({ error: "Juros entre 0 e 20% ao mês." });
@@ -79,7 +80,7 @@ export async function createLoanHandler(req: Request, res: Response) {
   }
   const name = optionalText(personName, 80);
   if (!name) {
-    res.status(400).json({ error: "Pra quem você emprestou?" });
+    res.status(400).json({ error: borrowed ? "Quem te emprestou?" : "Pra quem você emprestou?" });
     return;
   }
   if (!isPositiveAmount(amount)) {
@@ -100,6 +101,7 @@ export async function createLoanHandler(req: Request, res: Response) {
   }
   try {
     const loan = await createLoan(req.user!.id, {
+      direction: borrowed ? "borrowed" : "lent",
       personName: name,
       amount,
       lentAt,

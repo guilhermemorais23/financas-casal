@@ -1,14 +1,14 @@
 import { NavLink } from "react-router-dom";
 import { Icon, type IconName } from "./Icon";
 
-// Cartões, Dívidas, Contas fixas e A receber (empréstimos) são um lugar só,
+// Cartões, Dívidas, Contas fixas e Empréstimos (me devem / eu devo) são um lugar só,
 // "Contas", na barra de baixo do celular -- essas abas trocam entre eles sem
 // abrir o menu.
 export const BILLS_TABS: { to: string; label: string; shortLabel: string; icon: IconName }[] = [
   { to: "/cards", label: "Cartões", shortLabel: "Cartões", icon: "receipt" },
   { to: "/debts", label: "Dívidas", shortLabel: "Dívidas", icon: "card" },
   { to: "/recurring-bills", label: "Contas fixas", shortLabel: "Fixas", icon: "repeat" },
-  { to: "/loans", label: "A receber", shortLabel: "Receber", icon: "coin" },
+  { to: "/loans", label: "Empréstimos", shortLabel: "Emprést.", icon: "coin" },
 ];
 
 export function BillsTabs() {
