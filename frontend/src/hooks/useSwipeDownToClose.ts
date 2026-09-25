@@ -2,12 +2,15 @@ import { useEffect, useRef, type RefObject } from "react";
 
 // Arrastar pra baixo fecha a tela, como os painéis do iPhone. Vale pelo
 // puxador (data-swipe-handle) a qualquer momento, e pelo resto do card só
-// quando a página já está no topo -- senão o gesto é só rolar a tela. Tocar
+// quando o conteúdo já está no topo -- senão o gesto é só rolar a tela. Tocar
 // num campo (input, select, textarea) nunca começa o arrasto, pra não brigar
 // com a seleção de texto.
 export function useSwipeDownToClose(
   ref: RefObject<HTMLElement | null>,
   onClose: () => void,
+  // Pra painéis que só existem enquanto abertos: passe o "aberto" aqui pra
+  // o gesto ser ligado quando o elemento aparece.
+  active = true,
   threshold = 110
 ) {
   const onCloseRef = useRef(onClose);
@@ -17,7 +20,7 @@ export function useSwipeDownToClose(
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!active || !el) return;
 
     let startX = 0;
     let startY = 0;
@@ -34,7 +37,9 @@ export function useSwipeDownToClose(
       if (event.touches.length !== 1) return;
       const target = event.target as HTMLElement;
       const fromHandle = Boolean(target.closest("[data-swipe-handle]"));
-      if (!fromHandle && (window.scrollY > 0 || target.closest("input, textarea, select, [data-no-swipe]"))) return;
+      // Numa janela (modal) quem rola é o próprio painel; na página, a janela.
+      const scrolled = el.closest(".modal-backdrop, .more-sheet-backdrop") ? el.scrollTop > 0 : window.scrollY > 0;
+      if (!fromHandle && (scrolled || target.closest("input, textarea, select, [data-no-swipe]"))) return;
       tracking = true;
       dragging = false;
       dy = 0;
@@ -89,5 +94,5 @@ export function useSwipeDownToClose(
       el.removeEventListener("touchend", onEnd);
       el.removeEventListener("touchcancel", onEnd);
     };
-  }, [ref, threshold]);
+  }, [ref, threshold, active]);
 }

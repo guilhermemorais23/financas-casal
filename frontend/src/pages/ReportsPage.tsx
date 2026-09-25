@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { apiDownload, apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { CategoryBars } from "../components/CategoryBars";
@@ -10,6 +10,7 @@ import { ImportStatementModal } from "../components/ImportStatementModal";
 import { Icon } from "../components/Icon";
 import { MonthPicker } from "../components/MonthPicker";
 import { RowActionsMenu } from "../components/RowActionsMenu";
+import { repeatHref } from "../utils/quickEntry";
 import { SplitStatusPill } from "../components/SplitStatusPill";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
@@ -118,6 +119,7 @@ function buildGroups(rows: TransactionListRow[], mode: GroupMode): TxGroup[] {
 }
 
 export function ReportsPage() {
+  const navigate = useNavigate();
   const { user, token } = useAuth();
   const { showToast } = useToast();
   const confirm = useConfirm();
@@ -561,6 +563,12 @@ export function ReportsPage() {
                         },
                       ]
                     : []),
+                  {
+                    key: "repeat",
+                    label: "Repetir (lançar de novo hoje)",
+                    icon: "repeat" as const,
+                    onClick: () => navigate(repeatHref(tx)),
+                  },
                   {
                     key: "delete",
                     label: "Excluir",

@@ -237,7 +237,6 @@ export function ShoppingListPage() {
                         >
                           {accounts.map((account) => (
                             <option key={account.id} value={account.id}>
-                              
                               {account.name}
                             </option>
                           ))}

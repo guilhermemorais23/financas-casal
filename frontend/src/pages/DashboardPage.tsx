@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AccumulatedSpendingChart, type DailyTrendPoint } from "../components/AccumulatedSpendingChart";
@@ -14,7 +14,9 @@ import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { MonthPicker } from "../components/MonthPicker";
+import { MonthCloseCard } from "../components/MonthCloseCard";
 import { RowActionsMenu } from "../components/RowActionsMenu";
+import { repeatHref } from "../utils/quickEntry";
 import { SplitStatusPill } from "../components/SplitStatusPill";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor } from "../utils/categoryColor";
@@ -226,6 +228,7 @@ function upcomingWhen(item: UpcomingItem): string {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { user, token } = useAuth();
   const confirm = useConfirm();
   const { showToast } = useToast();
@@ -690,6 +693,7 @@ export function DashboardPage() {
         </div>
 
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
+        {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
         <div className="stat-card wide">
           {/* O número grande é o que sobra no mês (entrou - saiu), não o
               saldo acumulado das contas: quem lança só o salário todo mês e
@@ -1218,6 +1222,12 @@ export function DashboardPage() {
                                         },
                                       ]
                                     : []),
+                                  {
+                                    key: "repeat",
+                                    label: "Repetir (lançar de novo hoje)",
+                                    icon: "repeat" as const,
+                                    onClick: () => navigate(repeatHref(tx)),
+                                  },
                                   {
                                     key: "delete",
                                     label: "Excluir",
