@@ -1,5 +1,5 @@
 import { fromCents } from "../../utils/money";
-import { parsePdfStatement } from "../../utils/pdfStatement";
+import { BANKS, parsePdfStatement, type Bank } from "../../utils/pdfStatement";
 import { StatementParseError, cleanStatementDescription, parseDate, parseStatement, type ParsedStatementRow } from "../../utils/statementParser";
 import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { deleteRule, findRulesByGroup, normalizeStatementName, upsertRules } from "./importRules.repository";
@@ -51,13 +51,15 @@ export interface PdfCheck {
   closingBalance: string | null;
   readBy: "ai" | "text";
   unreadLines: string[];
-  bank: "bradesco" | "nubank" | null;
+  bank: Bank | null;
 }
 
 export interface StatementInput {
   content?: unknown;
   pdfBase64?: unknown;
   password?: unknown;
+  // Banco escolhido na tela (o leitor dele é tentado primeiro).
+  bank?: unknown;
 }
 
 function normalizeDescription(value: string): string {
@@ -74,7 +76,8 @@ const duplicateKey = (date: string, cents: number, type: string) => `${date}|${c
 async function readInput(input: StatementInput): Promise<{ format: "ofx" | "csv" | "pdf"; rows: ParsedStatementRow[]; pdf: PdfCheck | null }> {
   if (typeof input.pdfBase64 === "string" && input.pdfBase64) {
     const data = new Uint8Array(Buffer.from(input.pdfBase64, "base64"));
-    const read = await parsePdfStatement(data, typeof input.password === "string" ? input.password : undefined);
+    const chosen = BANKS.includes(input.bank as Bank) ? (input.bank as Bank) : null;
+    const read = await parsePdfStatement(data, typeof input.password === "string" ? input.password : undefined, chosen);
     return {
       format: "pdf",
       rows: read.rows,

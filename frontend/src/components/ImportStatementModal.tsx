@@ -38,7 +38,7 @@ interface PdfCheck {
   closingBalance: string | null;
   readBy: "ai" | "text";
   unreadLines?: string[];
-  bank?: "bradesco" | "nubank" | null;
+  bank?: BankId | null;
 }
 
 interface PreviewResponse {
@@ -76,7 +76,34 @@ interface Answer {
 
 type Stage = "file" | "questions" | "summary";
 
-const BANK_NAMES = { bradesco: "Bradesco", nubank: "Nubank" } as const;
+type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "outro";
+
+// Bancos com leitura própria (conferida com extrato real) primeiro; os
+// outros passam pela leitura geral.
+const BANKS: { id: BankId; name: string; own: boolean; match: RegExp }[] = [
+  { id: "bradesco", name: "Bradesco", own: true, match: /bradesco/i },
+  { id: "nubank", name: "Nubank", own: true, match: /nubank|\bnu\b/i },
+  { id: "bb", name: "Banco do Brasil", own: true, match: /banco do brasil|\bbb\b/i },
+  { id: "caixa", name: "Caixa", own: true, match: /caixa|\bcef\b/i },
+  { id: "itau", name: "Itaú", own: false, match: /ita[uú]/i },
+  { id: "santander", name: "Santander", own: false, match: /santander/i },
+  { id: "inter", name: "Inter", own: false, match: /\binter\b/i },
+  { id: "outro", name: "Outro", own: false, match: /$^/ },
+];
+const bankName = (id: BankId | null | undefined) => BANKS.find((bank) => bank.id === id)?.name ?? null;
+
+// O banco de cada conta fica lembrado neste aparelho.
+const bankKey = (accountId: string) => `par.importBank.${accountId}`;
+function rememberedBank(account: AccountRow | undefined): BankId | null {
+  if (!account) return null;
+  try {
+    const saved = localStorage.getItem(bankKey(account.id)) as BankId | null;
+    if (saved && BANKS.some((bank) => bank.id === saved)) return saved;
+  } catch {
+    // sem armazenamento: cai no palpite pelo nome da conta
+  }
+  return BANKS.find((bank) => bank.match.test(account.name))?.id ?? null;
+}
 
 const INCOME_HINT = /sal[aá]r|renda|receb|freel|reembol|venda|rendiment|b[oô]nus|comiss|extra/i;
 
@@ -114,6 +141,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [accountId, setAccountId] = useState("");
+  const [bank, setBank] = useState<BankId | null>(null);
   const [stage, setStage] = useState<Stage>("file");
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
@@ -140,7 +168,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         setAccounts(group.accounts);
         setCategories(categoryRows);
         const mine = group.accounts.find((a) => a.type === "personal" && a.ownerUserId === user?.id);
-        setAccountId((mine ?? group.accounts[0])?.id ?? "");
+        const first = mine ?? group.accounts[0];
+        setAccountId(first?.id ?? "");
+        setBank(rememberedBank(first));
       })
       .catch(() => setError("Não foi possível carregar suas contas."));
   }, [token, user?.id]);
@@ -171,7 +201,16 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     setIsReading(true);
     setFileName(file.name);
     try {
-      const body = isPdf ? { pdfBase64: await fileToBase64(file), password: pdfPassword || undefined } : { content: await file.text() };
+      if (bank) {
+        try {
+          localStorage.setItem(bankKey(accountId), bank);
+        } catch {
+          // só conveniência
+        }
+      }
+      const body = isPdf
+        ? { pdfBase64: await fileToBase64(file), password: pdfPassword || undefined, bank: bank ?? undefined }
+        : { content: await file.text() };
       const result = await apiRequest<PreviewResponse>("/statements/preview", { method: "POST", token, body });
       setPendingPdf(null);
       setPassword("");
@@ -376,13 +415,16 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       ? [...categories].sort((a, b) => Number(INCOME_HINT.test(b.name)) - Number(INCOME_HINT.test(a.name)))
       : categories;
 
-  const bankName = preview?.pdf?.bank ? BANK_NAMES[preview.pdf.bank] : null;
+  const readBank = bankName(preview?.pdf?.bank);
+  const chosenOwn = BANKS.find((b) => b.id === bank)?.own ?? false;
+  // Escolheu um banco com leitura própria mas o PDF tem cara de outro.
+  const bankMismatch = preview?.pdf && chosenOwn && preview.pdf.bank !== bank;
   // O saldo do extrato só serve pra conferir: não aparece e não é importado.
   const pdfBanner = preview?.pdf && (
     <p className={`import-check ${preview.pdf.reconciled === false ? "warn" : preview.pdf.reconciled ? "ok" : ""}`}>
       {preview.pdf.reconciled === true && (
         <>
-          <Icon name="check" /> Conferido com o extrato{bankName ? ` do ${bankName}` : ""}: nenhum lançamento ficou de fora.
+          <Icon name="check" /> Conferido com o extrato{readBank ? ` (${readBank})` : ""}: nenhum lançamento ficou de fora.
         </>
       )}
       {preview.pdf.reconciled === false && (
@@ -392,6 +434,13 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         </>
       )}
       {preview.pdf.reconciled === null && <>O extrato não mostra saldo inicial e final, então não deu pra conferir a soma.</>}
+      {bankMismatch && (
+        <>
+          {" "}
+          Esse PDF não tem a cara de extrato do {bankName(bank)}
+          {readBank ? `; li como ${readBank}` : "; usei a leitura geral"}. Confira os valores.
+        </>
+      )}
     </p>
   );
 
@@ -415,7 +464,14 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
           </p>
           <label className="import-account" htmlFor="import-account">
             De qual conta é esse extrato?
-            <select id="import-account" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+            <select
+              id="import-account"
+              value={accountId}
+              onChange={(event) => {
+                setAccountId(event.target.value);
+                setBank(rememberedBank(accounts.find((a) => a.id === event.target.value)));
+              }}
+            >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.emoji ? `${account.emoji} ` : ""}
@@ -424,6 +480,31 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               ))}
             </select>
           </label>
+
+          <div className="import-banks" role="radiogroup" aria-labelledby="import-bank-label">
+            <span id="import-bank-label" className="import-banks-label">
+              De qual banco?
+            </span>
+            {BANKS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="radio"
+                aria-checked={bank === option.id}
+                className={`import-bank${bank === option.id ? " active" : ""}`}
+                onClick={() => setBank(option.id)}
+              >
+                {option.name}
+              </button>
+            ))}
+            <small>
+              {bank && !(BANKS.find((b) => b.id === bank)?.own)
+                ? `O ${bankName(bank) === "Outro" ? "extrato" : `PDF do ${bankName(bank)}`} passa pela leitura geral e é conferido com o saldo quando ele aparece. OFX ou CSV do banco lê certinho.`
+                : bank === "caixa"
+                  ? "Caixa tem leitura própria, mas ainda não foi testada com um extrato real: confira os valores."
+                  : "Bradesco, Nubank e Banco do Brasil têm leitura própria, testada com extrato real e conferida com o saldo."}
+            </small>
+          </div>
 
           {pendingPdf ? (
             <form
@@ -489,13 +570,6 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               />
             </div>
           )}
-          <div className="import-banks">
-            <small>Lê o PDF do extrato de:</small>
-            <span className="import-bank ok">Bradesco</span>
-            <span className="import-bank ok">Nubank</span>
-            <span className="import-bank">Outros bancos (leitura geral)</span>
-            <span className="import-bank">OFX/CSV de qualquer banco</span>
-          </div>
           <div className="import-connect">
             <span className="import-connect-icon">
               <Icon name="bank" />

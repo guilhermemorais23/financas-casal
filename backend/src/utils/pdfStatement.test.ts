@@ -7,6 +7,8 @@ import {
   parsePdfStatement,
   readBalanceColumn,
   readLinesWithoutAi,
+  readBancoDoBrasil,
+  readCaixa,
   readNubank,
   reconcile,
   splitNubankDescription,
@@ -135,37 +137,55 @@ describe("readBalanceColumn (layout do Bradesco Celular)", () => {
     expect(reconcile(read)).toEqual({ reconciled: true, differenceCents: 0 });
   });
 
+  it("'Últimos Lançamentos' recomeça de outro saldo sem acusar diferença", () => {
+    const withGap = [...lines, "Folha: 3/3", "10/09/2026 COD. LANC. 0 800,00", "RENDIMENTOS", "11/09/2026 1206715 1,00 801,00", "POUP FACIL"];
+    const read = readBalanceColumn(withGap)!;
+    expect(read.rows.at(-1)).toMatchObject({ date: "2026-09-11", description: "POUP FACIL", kind: "Rendimentos", amountCents: 100 });
+    expect(reconcile(read)).toEqual({ reconciled: true, differenceCents: 0 });
+  });
+
   it("põe na lista do não conciliado a linha em que o saldo não bate (linha faltando)", () => {
     const missing = lines.filter((line) => !line.startsWith("RENTAB"));
     expect(readBalanceColumn(missing)!.mismatched).toEqual(["0501620 26,06 1.024,16"]);
   });
 });
 
-describe("readNubank", () => {
+describe("readNubank (layout conferido com extrato real)", () => {
   const lines = [
-    "Extrato de conta",
+    "FULANA DE TAL",
+    "CPF •••.123.456-•• Agência 0001 Conta",
+    "01 DE SETEMBRO DE 2026 a 30 DE SETEMBRO DE 2026 VALORES EM R$",
     "Saldo inicial 1.000,00",
-    "Total de entradas + 1.500,00",
-    "Total de saídas - 250,00",
-    "Saldo final do período 2.250,00",
+    "Total de entradas +1.550,00",
+    "Total de saídas -250,00",
+    "Saldo final do período 2.300,00",
     "Movimentações",
     "01 SET 2026 Total de entradas + 1.500,00",
-    "Transferência recebida pelo Pix JOAO DA SILVA - •••.123.456-•• - ITAÚ",
-    "UNIBANCO S.A. (0341) Agência: 1234 Conta: 12345-6 1.500,00",
+    "Transferência recebida pelo Pix JOAO DA SILVA - •••.123.456-•• - ITAÚ 1.500,00",
+    "UNIBANCO S.A. (0341) Agência: 1234 Conta: 12345-6",
     "Total de saídas - 200,00",
-    "Transferência enviada pelo Pix MARIA DE LOURDES SILVA - •••.654.321-•• - NU PAGAMENTOS - IP (0260) 150,00",
-    "Compra no débito PADARIA SOL 50,00",
+    "Transferência enviada pelo Pix IFOOD COM AGENCIA DE RESTAURANTES ONLINE 150,00",
+    "S A - 14.380.200/0001-21 - ITAÚ UNIBANCO S.A.",
     "Tem alguma dúvida? Mande uma mensagem para nosso time de atendimento.",
-    "02 SET 2026 Total de saídas - 50,00",
+    "1 de 2",
+    "FULANA DE TAL",
+    "CPF •••.123.456-•• Agência 0001 Conta",
+    "01 DE SETEMBRO DE 2026 a 30 DE SETEMBRO DE 2026 VALORES EM R$",
+    "Compra no débito PADARIA SOL 50,00",
+    "02 SET 2026 Total de entradas + 50,00",
+    "Valor adicionado na conta por cartão Valor adicionado para Pix no Crédito 50,00",
+    "de crédito",
+    "Total de saídas - 50,00",
     "Pagamento de fatura 50,00",
   ];
 
-  it("tira o sinal da seção, separa tipo e nome inteiro e confere o total do dia", () => {
+  it("valor na primeira linha, nome continua embaixo, sinal pela seção, cabeçalho ignorado", () => {
     const read = readNubank(lines)!;
     expect(read.rows.map((row) => [row.date, row.kind, row.description, row.amountCents])).toEqual([
       ["2026-09-01", "Transferência recebida pelo Pix", "JOAO DA SILVA", 150000],
-      ["2026-09-01", "Transferência enviada pelo Pix", "MARIA DE LOURDES SILVA", -15000],
+      ["2026-09-01", "Transferência enviada pelo Pix", "IFOOD COM AGENCIA DE RESTAURANTES ONLINE S A", -15000],
       ["2026-09-01", "Compra no débito", "PADARIA SOL", -5000],
+      ["2026-09-02", "Valor adicionado por cartão de crédito", "Pix no Crédito", 5000],
       ["2026-09-02", null, "Pagamento de fatura", -5000],
     ]);
     expect(read.mismatched).toEqual([]);
@@ -174,11 +194,65 @@ describe("readNubank", () => {
 
   it("avisa quando o total do dia não bate", () => {
     const missing = lines.filter((line) => !line.startsWith("Compra no débito"));
-    expect(readNubank(missing)!.mismatched).toHaveLength(1);
+    expect(readNubank(missing)!.mismatched).toEqual(["01/09/2026 saídas: o extrato diz R$ 200,00, as linhas somam R$ 150,00"]);
   });
 
   it("não é Nubank sem os cabeçalhos de dia", () => {
     expect(readNubank(["02/09 MERCADO -10,00"])).toBeNull();
     expect(splitNubankDescription("Compra no débito via NuPay iFood - x")).toEqual({ kind: "Compra no débito via NuPay", name: "iFood" });
+    expect(splitNubankDescription("Transferência enviada pelo Pix Luciana Silva (Transferência enviada)")).toEqual({
+      kind: "Transferência enviada pelo Pix",
+      name: "Luciana Silva",
+    });
+  });
+});
+
+describe("readBancoDoBrasil (layout conferido com extrato real)", () => {
+  it("histórico vira tipo, nome da linha de baixo, D/C dá o sinal, saldo não entra", () => {
+    const read = readBancoDoBrasil([
+      "Dt. balancete Dt. movimento Ag. origem Lote Histórico Documento Valor R$ Saldo",
+      "31/07/2026 0000 00000 000 Saldo Anterior 100,00 C",
+      "01/08/2026 0000 13105 144 Pix - Enviado 80.101 20,00 D",
+      "01/08 11:34 FULANO DE TAL EXEMPLO",
+      "01/08/2026 0000 13113 258 Tarifa Pix Enviado 872.131.200.057.912 2,00 D",
+      "Tar. agrupadas - ocorrencia 31/07/2026",
+      "08/08/2026 0000 13105 393 TED Transf.Eletr.Disponiv 80.802 30,00 D",
+      "010 0050 11122233344 CARLOS EXEMPLO SIL",
+      "18/08/2026 9999 99015 870 Transferência recebida 551.493.000.002.021 52,00 C 100,00 C",
+      "18/08 08:35 PREFEITURA MUNICIPAL",
+      "31/08/2026 0000 00000 999 S A L D O 100,00 C",
+    ])!;
+    expect(read.rows.map((row) => [row.date, row.kind, row.description, row.amountCents])).toEqual([
+      ["2026-08-01", "Pix - Enviado", "FULANO DE TAL EXEMPLO", -2000],
+      ["2026-08-01", null, "Tarifa Pix Enviado", -200],
+      ["2026-08-08", "TED Transf.Eletr.Disponiv", "CARLOS EXEMPLO SIL", -3000],
+      ["2026-08-18", "Transferência recebida", "PREFEITURA MUNICIPAL", 5200],
+    ]);
+    expect(reconcile(read)).toEqual({ reconciled: true, differenceCents: 0 });
+  });
+});
+
+describe("readCaixa", () => {
+  it("histórico, data e linha do valor com C/D", () => {
+    const read = readCaixa([
+      "Extrato",
+      "SALDO ANTERIOR",
+      "01/09/2026",
+      "000000 SALDO R$ 0,00 R$ 100,00 C",
+      "PIX ENVIADO",
+      "02/09/2026",
+      "021234 MARIA SILVA R$ 50,00 R$ 50,00 C",
+      "PIX RECEBIDO",
+      "03/09/2026",
+      "031234 JOAO SOUZA R$ 30,00 R$ 80,00 C",
+      "COMPRA ELO",
+      "04/09/2026",
+      "041234 PADARIA SOL R$ 10,00 R$ 70,00 D",
+    ])!;
+    expect(read.rows.map((row) => [row.date, row.kind, row.description, row.amountCents])).toEqual([
+      ["2026-09-02", "Pix enviado", "MARIA SILVA", 5000],
+      ["2026-09-03", "Pix recebido", "JOAO SOUZA", 3000],
+      ["2026-09-04", "Compra elo", "PADARIA SOL", -1000],
+    ]);
   });
 });
