@@ -703,13 +703,13 @@ export function DashboardPage() {
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
         {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
         <div className="stat-card wide">
-          {/* O número grande é o que sobra no mês (entrou - saiu), não o
+          {/* O número grande é o saldo do mês (entrou - saiu), não o
               saldo acumulado das contas: quem lança só o salário todo mês e
               não lança todo gasto veria o saldo crescer mês a mês sem ter
               esse dinheiro de verdade. O saldo das contas fica no card
               "Onde está seu dinheiro". */}
           <p className="label">
-            {dailyAllowance !== null ? `Sobra em ${monthLongName(month)}` : `Sobrou em ${monthLabel}`}
+            {dailyAllowance !== null ? `Saldo de ${monthLongName(month)}` : `Saldo de ${monthLabel}`}
           </p>
           <p className={`value${monthLeft < 0 ? " negative" : ""}`}>
             <AnimatedNumber value={monthLeft} />
@@ -739,6 +739,29 @@ export function DashboardPage() {
                 : `${formatCurrency(-lentOut)} de empréstimos voltaram pra você este mês.`}
             </p>
           )}
+        </div>
+
+        <div className="stat-row wrap">
+          <div className="stat-box tone-good">
+            <p className="label">Entrou no mês</p>
+            <p className="value-sm income-text">{formatCurrency(income)}</p>
+            {incomeDelta !== null && (
+              <p className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
+                {incomeDelta >= 0 ? "+" : ""}
+                {Math.round(incomeDelta)}% vs {prevMonthName}
+              </p>
+            )}
+          </div>
+          <div className="stat-box tone-warm">
+            <p className="label">Saiu no mês</p>
+            <p className="value-sm">{formatCurrency(expense)}</p>
+            {expenseDelta !== null && (
+              <p className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
+                {expenseDelta >= 0 ? "+" : ""}
+                {Math.round(expenseDelta)}% vs {prevMonthName}
+              </p>
+            )}
+          </div>
         </div>
 
         {jointAccount && orderedMembers.length > 1 && (
@@ -799,29 +822,6 @@ export function DashboardPage() {
             </ul>
           )}
         </section>
-
-        <div className="stat-row wrap">
-          <div className="stat-box tone-good">
-            <p className="label">Entrou no mês</p>
-            <p className="value-sm income-text">{formatCurrency(income)}</p>
-            {incomeDelta !== null && (
-              <p className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
-                {incomeDelta >= 0 ? "+" : ""}
-                {Math.round(incomeDelta)}% vs {prevMonthName}
-              </p>
-            )}
-          </div>
-          <div className="stat-box tone-warm">
-            <p className="label">Saiu no mês</p>
-            <p className="value-sm">{formatCurrency(expense)}</p>
-            {expenseDelta !== null && (
-              <p className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
-                {expenseDelta >= 0 ? "+" : ""}
-                {Math.round(expenseDelta)}% vs {prevMonthName}
-              </p>
-            )}
-          </div>
-        </div>
 
         {(cap !== null || totalDebtRemaining > 0) && (
           <div className="stat-row wrap">
