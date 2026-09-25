@@ -1,6 +1,6 @@
-import { tint } from "../utils/categoryColor";
 import { formatCurrency } from "../utils/format";
 import type { PieSlice } from "./CategoryPieChart";
+import { initialOf } from "../utils/initial";
 
 interface CategoryBarsProps {
   slices: PieSlice[];
@@ -28,8 +28,8 @@ export function CategoryBars({ slices, selectedId = null, onSelect }: CategoryBa
             aria-pressed={isSelected}
             onClick={() => onSelect?.(isSelected ? null : slice.id)}
           >
-            <span className="category-bar-icon" style={{ background: tint(slice.color) }}>
-              {slice.emoji ?? "💸"}
+            <span className="category-bar-icon">
+              {initialOf(slice.label)}
             </span>
             <span className="category-bar-name">{slice.label}</span>
             <span className="category-bar-value">

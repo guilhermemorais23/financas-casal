@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { apiDownload, apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { CategoryBars } from "../components/CategoryBars";
@@ -10,17 +10,19 @@ import { ImportStatementModal } from "../components/ImportStatementModal";
 import { Icon } from "../components/Icon";
 import { MonthPicker } from "../components/MonthPicker";
 import { RowActionsMenu } from "../components/RowActionsMenu";
+import { repeatHref } from "../utils/quickEntry";
 import { SplitStatusPill } from "../components/SplitStatusPill";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
-import { categoryColor, tint } from "../utils/categoryColor";
+import { categoryColor } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay, monthLongName, previousMonthParam } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { readCache, writeCache } from "../utils/pageCache";
 import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
+import { initialOf } from "../utils/initial";
 
 interface CategorySummaryRow {
   categoryId: string | null;
@@ -108,15 +110,16 @@ function buildGroups(rows: TransactionListRow[], mode: GroupMode): TxGroup[] {
   return [...buckets.entries()]
     .map(([key, items]) => {
       if (mode === "category") {
-        return makeGroup(key, items[0].categoryName ?? "Sem categoria", items[0].categoryEmoji ?? "✨", items);
+        return makeGroup(key, items[0].categoryName ?? "Sem categoria", initialOf(items[0].categoryName), items);
       }
       const option = PAYMENT_METHOD_OPTIONS.find((o) => o.value === key);
-      return makeGroup(key, option?.label ?? "Não informado", option?.icon ?? "❔", items);
+      return makeGroup(key, option?.label ?? "Não informado", "", items);
     })
     .sort((a, b) => b.expense - a.expense || b.income - a.income);
 }
 
 export function ReportsPage() {
+  const navigate = useNavigate();
   const { user, token } = useAuth();
   const { showToast } = useToast();
   const confirm = useConfirm();
@@ -506,15 +509,14 @@ export function ReportsPage() {
         <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
           <span
             className="transaction-icon"
-            style={{ background: tint(categoryColor(tx.categoryId)) }}
           >
-            {tx.categoryEmoji ?? "💸"}
+            {initialOf(tx.categoryName ?? tx.description)}
           </span>
           <div className="transaction-info">
             <span className="transaction-desc">
               <span className="text-truncate">{tx.description}</span>
               {tx.isPrivate && <span className="badge private-badge">privado</span>}
-              {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
+              {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">Mensal</span>}
             </span>
             <span className="transaction-meta">
               <span className="text-truncate">
@@ -561,6 +563,12 @@ export function ReportsPage() {
                         },
                       ]
                     : []),
+                  {
+                    key: "repeat",
+                    label: "Repetir (lançar de novo hoje)",
+                    icon: "repeat" as const,
+                    onClick: () => navigate(repeatHref(tx)),
+                  },
                   {
                     key: "delete",
                     label: "Excluir",
@@ -639,7 +647,7 @@ export function ReportsPage() {
           <div className="section-header">
             <p className="card-title">
               Extrato
-              {selectedCategoryLabel && ` · ${selectedCategoryLabel.categoryEmoji ?? "✨"} ${selectedCategoryLabel.categoryName ?? "Sem categoria"}`}
+              {selectedCategoryLabel && ` · ${selectedCategoryLabel.categoryName ?? "Sem categoria"}`}
             </p>
             {hasActiveFilter && (
               <button
@@ -710,7 +718,7 @@ export function ReportsPage() {
                     className={`filter-chip${paymentFilter === option.value ? " active" : ""}`}
                     onClick={() => setPaymentFilter((c) => (c === option.value ? null : option.value))}
                   >
-                    {option.icon} {option.label}
+                    {option.label}
                   </button>
                 ))}
                 <button

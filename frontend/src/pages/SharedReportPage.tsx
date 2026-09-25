@@ -3,9 +3,10 @@ import { useParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { Brand } from "../components/Brand";
 import { CategoryBars } from "../components/CategoryBars";
-import { categoryColor, tint } from "../utils/categoryColor";
+import { categoryColor } from "../utils/categoryColor";
 import { formatCurrency, groupByDay, monthLongName } from "../utils/format";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
+import { initialOf } from "../utils/initial";
 
 interface SharedReport {
   month: string;
@@ -114,8 +115,8 @@ export default function SharedReportPage() {
               <ul>
                 {dayGroup.items.map((tx, index) => (
                   <li key={`${tx.occurredAt}-${index}`} className="transaction-row">
-                    <span className="transaction-icon" style={{ background: tint(categoryColor(tx.categoryName)) }}>
-                      {tx.categoryEmoji ?? "💸"}
+                    <span className="transaction-icon">
+                      {initialOf(tx.categoryName ?? tx.description)}
                     </span>
                     <div className="transaction-info">
                       <span className="transaction-desc">

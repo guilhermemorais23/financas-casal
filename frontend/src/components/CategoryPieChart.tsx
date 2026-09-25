@@ -76,7 +76,7 @@ export function CategoryPieChart({ slices, selectedId = null, onSelect }: Catego
               <span className="category-row-header">
                 <span className="category-name">
                   <span className="identity-dot" style={{ background: arc.color }} />
-                  {arc.emoji ?? "✨"} {arc.label}
+                  {arc.label}
                 </span>
                 <span className="value">
                   {formatCurrency(arc.value)}{" "}
