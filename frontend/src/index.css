@@ -2931,6 +2931,62 @@ input:focus {
   max-width: none;
 }
 
+/* Tela de lançamento como painel: X no canto, Esc fecha no PC e no celular
+   um puxador pra arrastar pra baixo. */
+.sheet-card {
+  will-change: transform;
+}
+
+.sheet-handle {
+  display: none;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sheet-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.14);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.sheet-close:hover {
+  color: var(--color-text);
+}
+
+.sheet-close .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+@media (max-width: 720px) {
+  .sheet-handle {
+    display: block;
+    width: 44px;
+    height: 5px;
+    margin: -0.25rem auto 0.85rem;
+    border-radius: 999px;
+    background: var(--color-border);
+  }
+
+  /* Área maior pro dedo pegar o puxador. */
+  .sheet-card [data-swipe-handle] {
+    touch-action: none;
+  }
+}
+
 .field-row {
   display: flex;
   gap: 0.75rem;
