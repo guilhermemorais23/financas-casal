@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { EmojiPicker } from "../components/EmojiPicker";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { personColor, personTint } from "../utils/categoryColor";
@@ -10,6 +9,7 @@ import { currentMonthParam, formatCurrency } from "../utils/format";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ImportStatementModal } from "../components/ImportStatementModal";
+import { initialOf } from "../utils/initial";
 
 interface AccountRow {
   id: string;
@@ -413,7 +413,7 @@ export function AccountPage() {
             {group.accounts.map((account) => (
               <li key={account.id} className="account-row">
                 <span>
-                  {account.emoji ?? (account.type === "joint" ? "🏠" : "👤")} {account.name}
+                  {account.name}
                 </span>
                 <span className="value">{formatCurrency(account.balance)}</span>
               </li>
@@ -477,13 +477,12 @@ export function AccountPage() {
           <p className="card-title">Categorias</p>
           <p className="card-subtitle">
             As padrão (com a estrela) valem pra qualquer grupo e não dá pra mudar. As que vocês criaram dá pra
-            renomear, trocar o emoji ou excluir.
+            renomear ou excluir.
           </p>
           {categories?.map((category) => (
             <div key={category.id} className="category-budget-row">
               {editingCategoryId === category.id ? (
                 <>
-                  <EmojiPicker value={editCategoryEmoji} onChange={setEditCategoryEmoji} />
                   <input
                     className="category-budget-input"
                     style={{ flex: 1 }}
@@ -511,7 +510,7 @@ export function AccountPage() {
                 </>
               ) : (
                 <>
-                  <span className="category-budget-emoji">{category.emoji ?? "✨"}</span>
+                  <span className="category-budget-emoji">{initialOf(category.name)}</span>
                   <div className="category-budget-info">
                     <span className="category-budget-name">
                       {category.name}
@@ -562,7 +561,7 @@ export function AccountPage() {
           )}
           {categoryBudgets?.map((row) => (
             <div key={row.categoryId} className="category-budget-row">
-              <span className="category-budget-emoji">{row.categoryEmoji ?? "✨"}</span>
+              <span className="category-budget-emoji">{initialOf(row.categoryName)}</span>
               <div className="category-budget-info">
                 <span className="category-budget-name">{row.categoryName}</span>
                 <span className="category-budget-spent">gasto: {formatCurrency(row.spent)}</span>
@@ -597,7 +596,7 @@ export function AccountPage() {
             lá. Gere um código aqui e envie ele pro número de teste que aparece no seu WhatsApp Business.
           </p>
           {whatsappCode && (
-            <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.1rem" }}>
+            <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.15rem" }}>
               {whatsappCode}
             </p>
           )}
@@ -623,7 +622,7 @@ export function AccountPage() {
             pra vincular sua conta.
           </p>
           {telegramCode && (
-            <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.1rem" }}>
+            <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.15rem" }}>
               {telegramCode}
             </p>
           )}

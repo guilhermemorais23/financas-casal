@@ -22,11 +22,10 @@ export function FinancialHealthBadge({ monthlyIncome, monthlyExpense }: Financia
     text = "Saúde financeira boa";
   }
 
-  const icon = level === "good" ? "🟢" : level === "warning" ? "🟡" : "🔴";
-
   return (
     <span className={`health-badge health-badge-${level}`} title="Entrada vs. gasto do mês selecionado">
-      {icon} {text}
+      <span className="health-badge-dot" aria-hidden="true" />
+      {text}
     </span>
   );
 }

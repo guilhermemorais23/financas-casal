@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { EmojiPicker } from "../components/EmojiPicker";
 import { Icon } from "../components/Icon";
 import { useSwipeDownToClose } from "../hooks/useSwipeDownToClose";
 import { useToast } from "../components/ToastProvider";
@@ -270,7 +269,7 @@ export function NewTransactionPage() {
               </option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.emoji ? `${account.emoji} ` : ""}
+                  
                   {account.name}
                 </option>
               ))}
@@ -292,7 +291,7 @@ export function NewTransactionPage() {
               <option value="">Sem categoria</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.emoji ? `${category.emoji} ` : ""}
+                  
                   {category.name}
                 </option>
               ))}
@@ -304,7 +303,6 @@ export function NewTransactionPage() {
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                 />
-                <EmojiPicker value={newCategoryEmoji} onChange={setNewCategoryEmoji} />
                 <button
                   type="button"
                   className="btn btn-outline"
@@ -338,7 +336,7 @@ export function NewTransactionPage() {
               <option value="">Não informado</option>
               {PAYMENT_METHOD_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.icon} {option.label}
+                  {option.label}
                 </option>
               ))}
             </select>

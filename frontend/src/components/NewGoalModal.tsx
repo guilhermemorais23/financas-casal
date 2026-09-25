@@ -1,11 +1,11 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { EmojiPicker } from "./EmojiPicker";
 import { useToast } from "./ToastProvider";
 import { compressToSquareDataUrl } from "../utils/imageCompression";
 import { formatCurrency } from "../utils/format";
 import { minimumMonthlySaving } from "../utils/goals";
+import { initialOf } from "../utils/initial";
 
 const PHOTO_SIZE = 240;
 
@@ -15,7 +15,6 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [targetAmount, setTargetAmount] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -51,7 +50,7 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
         token,
         body: {
           name: name.trim(),
-          emoji: emoji.trim() || null,
+          emoji: null,
           photoDataUrl,
           targetAmount: parsedTarget,
           deadline: deadline || null,
@@ -78,7 +77,7 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
             {photoDataUrl ? (
               <img src={photoDataUrl} alt="" className="profile-avatar-preview" />
             ) : (
-              <span className="profile-avatar-preview profile-avatar-fallback">{emoji || "🎯"}</span>
+              <span className="profile-avatar-preview profile-avatar-fallback">{initialOf(name)}</span>
             )}
             <div className="profile-avatar-actions">
               <button type="button" className="btn btn-outline" onClick={() => fileInputRef.current?.click()}>
@@ -97,10 +96,6 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
             <div className="field" style={{ flex: 2 }}>
               <label htmlFor="goal-name">Nome</label>
               <input id="goal-name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-            </div>
-            <div className="field" style={{ maxWidth: 90 }}>
-              <label>Emoji</label>
-              <EmojiPicker value={emoji} onChange={setEmoji} />
             </div>
           </div>
           <div className="field-row">

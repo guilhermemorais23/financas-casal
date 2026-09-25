@@ -13,7 +13,7 @@ interface MonthPickerProps {
 // with the OS/browser's own chrome (plain white box, default font, "Limpar"
 // that doesn't even make sense here since a month is always selected), which
 // looks out of place next to the rest of the app's styling. Same
-// toggle-panel-with-outside-click pattern as EmojiPicker.
+// toggle-panel-with-outside-click pattern usado nos menus do app.
 export function MonthPicker({ value, onChange, isLoading = false }: MonthPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewYear, setViewYear] = useState(() => Number(value.slice(0, 4)));

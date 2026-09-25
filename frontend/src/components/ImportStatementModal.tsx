@@ -225,7 +225,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                 <select id="import-account" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.emoji ? `${account.emoji} ` : ""}
+                      
                       {account.name}
                     </option>
                   ))}
@@ -271,7 +271,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                     <option value="">Sem categoria</option>
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
-                        {category.emoji ? `${category.emoji} ` : ""}
+                        
                         {category.name}
                       </option>
                     ))}
