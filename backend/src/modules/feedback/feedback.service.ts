@@ -17,9 +17,9 @@ export const FEEDBACK_KIND_LABELS: Record<FeedbackKind, string> = {
   praise: "💜 Elogio",
 };
 
-// The instant "we got it" reply, per kind. Sent on a conversation's first
-// message and again when someone comes back after a quiet spell, never on
-// every message of a back-and-forth.
+// A resposta instantânea de "recebemos", por tipo. Vai na primeira mensagem
+// da conversa e de novo quando a pessoa volta depois de um tempo sem
+// resposta, nunca em cada mensagem de um vai e volta.
 const AUTO_REPLIES: Record<FeedbackKind, string> = {
   idea: "Obrigado pela ideia! Ela chegou pra gente e vamos te responder por aqui.",
   problem: "Obrigado por avisar! Já recebemos e vamos te responder por aqui o quanto antes.",

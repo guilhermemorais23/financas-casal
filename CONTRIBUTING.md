@@ -48,6 +48,10 @@ docs: documenta processo de deploy e fluxo de branches
 
 A mensagem deve explicar **o que mudou**, não só repetir o prefixo — "fix: bug" não serve, "fix: corrige saldo negativo aparecendo pro pagador da própria despesa" serve.
 
+## Comentários no código
+
+Comentários no código (`//`, `/* */`, `{/* */}` no JSX) são escritos **em português**, no mesmo tom direto do resto do app. Nomes de variáveis, funções e arquivos continuam em inglês. Ao mexer num arquivo que ainda tem comentários antigos em inglês, vale traduzir os que estiver tocando.
+
 ## Antes de abrir o PR
 
 - [ ] `npm --prefix backend run build` sem erro

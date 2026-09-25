@@ -152,7 +152,7 @@ interface MonthTotals {
   // Net money moved into cartões com limite garantido this month -- left
   // the account without being a gasto (see getMonthlyTrendForUser).
   savedInCards?: number;
-  // Net money lent out through Empréstimos this month -- same treatment.
+  // Quanto saiu emprestado pelos Empréstimos no mês -- mesmo tratamento.
   lentOut?: number;
 }
 
@@ -170,10 +170,10 @@ interface DashboardResponse {
   personalPrevMonthTotals: MonthTotals;
   goalHighlight: GoalHighlight | null;
   nextInvoice: NextInvoice | null;
-  // Optional: responses cached by an older build don't have it.
+  // Opcional: respostas em cache de uma versão antiga não têm.
   savedInSecuredCards?: number;
   loansSummary?: { outstanding: string; overdue: string; overdueCount: number };
-  // Optional: responses cached by an older build don't have it.
+  // Opcional: respostas em cache de uma versão antiga não têm.
   upcoming?: UpcomingItem[];
   trend6m: MonthlyTrendPoint[];
   alerts: AlertRow[];
@@ -700,8 +700,8 @@ export function DashboardPage() {
           <p className="value">
             <AnimatedNumber value={moneyTotal} />
           </p>
-          {/* The three numbers that answer "how am I doing": what's there,
-              what's left per day, what's due this week. */}
+          {/* Os três números que respondem "como estou": o que tem, quanto
+              sobra por dia, o que vence na semana. */}
           <div className="hero-numbers">
             <div className="hero-number">
               <span>{dailyAllowance !== null ? "Por dia até o fim do mês" : `Sobra em ${monthLabel}`}</span>

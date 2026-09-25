@@ -4,10 +4,10 @@ import { listLoans, todayInBrazil } from "../loans/loans.service";
 import { listRecurringBillsForUser } from "../recurringBills/recurringBills.service";
 import { addMonths, dateForDayInMonth, daysBetween } from "../../utils/month";
 
-// "Vence logo": everything with a date in the next week -- what you have to
-// pay (faturas, parcelas, contas fixas) and what's due to come back to you
-// (empréstimos com prazo). Overdue items stay on it until they're dealt
-// with. The Painel lists it, the assistant reads it.
+// "Vence logo": tudo que tem data na próxima semana -- o que você tem que
+// pagar (faturas, parcelas, contas fixas) e o que vai voltar pra você
+// (empréstimos com prazo). Atrasados continuam na lista até serem resolvidos.
+// O Painel mostra, o assistente lê.
 export const UPCOMING_WINDOW_DAYS = 7;
 
 export type UpcomingKind = "card" | "debt" | "recurring" | "loan";
@@ -76,8 +76,8 @@ export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_W
     const month = bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
     const dueDate = dateForDayInMonth(month, bill.dayOfMonth);
     const daysUntil = daysBetween(today, dueDate);
-    // A conta fixa lança sozinha no dia -- once that day is past it's paid,
-    // never "overdue".
+    // A conta fixa lança sozinha no dia -- depois que o dia passa ela está
+    // paga, nunca "atrasada".
     if (daysUntil < 0 || daysUntil > windowDays) continue;
     items.push({
       id: `recurring-${bill.id}-${month}`,

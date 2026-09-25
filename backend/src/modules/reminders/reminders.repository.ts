@@ -44,8 +44,8 @@ export async function markReminderSent(key: string, meta: Record<string, unknown
   await reminderLogsCol.doc(key).set({ ...meta, sentAt: FieldValue.serverTimestamp() });
 }
 
-// One doc per day: create() throws if it already exists, so only one caller
-// gets to run that day's jobs.
+// Um documento por dia: create() dá erro se ele já existe, então só uma
+// chamada roda os jobs daquele dia.
 export async function claimDailyRun(day: string): Promise<void> {
   await db.collection("dailyJobRuns").doc(day).create({ startedAt: FieldValue.serverTimestamp() });
 }

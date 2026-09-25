@@ -24,8 +24,8 @@ interface NavItem {
   icon: IconName;
 }
 
-// Desktop sidebar, grouped so 10 links read as 4 short lists. "Nova
-// despesa" isn't here -- the floating + already does it on every screen.
+// Menu lateral do PC, agrupado pra 10 links virarem 4 listas curtas. "Nova
+// despesa" não está aqui -- o + flutuante já faz isso em toda tela.
 const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   {
     label: null,
@@ -62,8 +62,8 @@ const ADMIN_SUBLINKS = [
   { section: "logs", label: "Logs" },
 ];
 
-// Phone: Painel · Par · [+] · Contas · Mais. Everything else lives in the
-// "Mais" sheet, so every screen is at most two taps away.
+// Celular: Painel · Par · [+] · Contas · Mais. Todo o resto fica na folha
+// "Mais", então qualquer tela está a no máximo dois toques.
 const MORE_TILES: NavItem[] = [
   { to: "/reports", label: "Relatórios", icon: "chart" },
   { to: "/goals", label: "Metas", icon: "target" },
@@ -139,12 +139,12 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isMoreOpen]);
 
-  // The "Você recebeu uma resposta" email links to ?feedback=1.
+  // O email "Você recebeu uma resposta" aponta pra ?feedback=1.
   useEffect(() => {
     if (searchParams.get("feedback") === "1") setIsFeedbackOpen(true);
   }, [searchParams]);
 
-  // Any navigation (a tile, the back button) closes the sheet.
+  // Qualquer navegação (um atalho, o botão voltar) fecha a folha.
   useEffect(() => {
     setIsMoreOpen(false);
   }, [location.pathname]);

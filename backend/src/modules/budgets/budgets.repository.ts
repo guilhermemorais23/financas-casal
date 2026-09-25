@@ -122,7 +122,8 @@ export async function getMonthlyExpenseTotal(
     .where("occurredAt", "<", monthEnd)
     .select("amountCents", "securedCardId", "loanId")
     .get();
-  // Money parked in a cartão com limite garantido or lent to someone isn't spending.
+  // Dinheiro guardado no cartão com limite garantido ou emprestado pra alguém
+  // não é gasto.
   const totalCents = snapshot.docs.reduce(
     (sum, doc) => (doc.data().securedCardId || doc.data().loanId ? sum : sum + doc.data().amountCents),
     0

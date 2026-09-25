@@ -2,12 +2,12 @@ import nodemailer from "nodemailer";
 import { env } from "../config/env";
 import { logError } from "../utils/errorLog";
 
-// Render's free plan blocks outbound SMTP (ports 25/465/587) since
-// 2025-09-26, so Gmail SMTP just times out in production -- that's why
-// welcome emails stopped arriving. Brevo's HTTPS API goes over 443 and works
-// there: free plan (~300 emails/day) with a single verified sender address
-// (the same Gmail works), no domain needed. Gmail SMTP stays as the fallback
-// for local dev or a paid instance.
+// O plano grátis do Render bloqueia SMTP de saída (portas 25/465/587) desde
+// 26/09/2025, então o Gmail SMTP só dá timeout em produção -- por isso os
+// emails de boas-vindas pararam de chegar. A API HTTPS da Brevo sai pela
+// porta 443 e funciona lá: plano grátis (~300 emails/dia) com um único
+// remetente verificado (o mesmo Gmail serve), sem precisar de domínio. O
+// Gmail SMTP fica de reserva pro dev local ou pra uma instância paga.
 const transporter =
   env.gmailUser && env.gmailAppPassword
     ? nodemailer.createTransport({
@@ -60,11 +60,11 @@ async function sendViaBrevo(to: string, subject: string, html: string, replyTo?:
   }
 }
 
-// Best-effort: a missing provider or a failed send is logged (and shows up
-// in Admin > Logs), never thrown -- email is always a courtesy, never
-// something that should block the request that triggered it. The result
-// tells callers that care (reminders, the admin test button) whether it
-// actually went out.
+// Melhor esforço: sem provedor ou com falha no envio, fica registrado (e
+// aparece em Admin > Logs), nunca lança erro -- email é sempre uma cortesia,
+// nunca algo que deva travar a requisição que o disparou. O resultado diz a
+// quem se importa (lembretes, o botão de teste do admin) se o email saiu de
+// verdade.
 export async function sendEmail(to: string, subject: string, html: string, replyTo?: string): Promise<EmailResult> {
   const provider = emailProvider();
   if (provider === "none") {
@@ -86,8 +86,8 @@ export async function sendEmail(to: string, subject: string, html: string, reply
   }
 }
 
-// Where owner-facing notices (new sign-up, feedback) go: OWNER_EMAIL if set,
-// else the first ADMIN_EMAILS entry, else the Gmail sender account itself.
+// Pra onde vão os avisos pro dono (cadastro novo, feedback): OWNER_EMAIL se
+// existir, senão o primeiro de ADMIN_EMAILS, senão o próprio remetente.
 function ownerEmail(): string | undefined {
   const firstAdmin = (process.env.ADMIN_EMAILS ?? "")
     .split(",")
@@ -96,7 +96,7 @@ function ownerEmail(): string | undefined {
   return process.env.OWNER_EMAIL?.trim() || firstAdmin || senderAddress();
 }
 
-// User-typed text goes into these emails -- never let it become markup.
+// Texto digitado pelo usuário entra nesses emails -- nunca deixar virar HTML.
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")

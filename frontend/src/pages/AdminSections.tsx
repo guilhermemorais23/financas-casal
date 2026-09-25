@@ -29,8 +29,9 @@ function when(ms: number): string {
     : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
 }
 
-// Admin > Feedback: every "Fale com a gente" conversation, newest first.
-// Waiting = the last word was the person's (or the automatic thank-you).
+// Admin > Feedback: todas as conversas do "Fale com a gente", as mais
+// recentes primeiro. Aguardando = a última palavra foi da pessoa (ou do
+// agradecimento automático).
 export function AdminFeedback() {
   const { token } = useAuth();
   const { showToast } = useToast();
@@ -184,7 +185,7 @@ function Check({ ok, label, hint }: { ok: boolean; label: string; hint?: string 
   );
 }
 
-// Admin > Diagnóstico: is production actually configured, and does it work?
+// Admin > Diagnóstico: a produção está mesmo configurada, e funciona?
 export function AdminDiagnostics() {
   const { token } = useAuth();
   const { showToast } = useToast();

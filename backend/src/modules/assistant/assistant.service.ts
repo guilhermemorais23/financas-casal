@@ -168,8 +168,8 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
   try {
     raw = await askGemini(prompt, audio);
   } catch (err) {
-    // No key, quota, network: still answer from the numbers instead of
-    // leaving the person with an error.
+    // Sem chave, sem cota, sem rede: responde mesmo assim com os números, em
+    // vez de deixar a pessoa com um erro.
     if (!(err instanceof AssistantNotConfiguredError)) logError("assistant", err, { userId });
     return basicAnswer(userId, personalAccount?.id ?? null, text, audio !== undefined, financeContext.snapshot);
   }
@@ -353,7 +353,8 @@ Escreva uma única mensagem curta (1-2 frases, sem emojis, sem saudação genér
   }
 }
 
-// Used by Admin > Diagnóstico: is the AI key set, and does a real call work?
+// Usado em Admin > Diagnóstico: a chave da IA existe e uma chamada de verdade
+// funciona?
 export async function checkAssistant(): Promise<{ configured: boolean; ok: boolean; error?: string }> {
   if (!process.env.GEMINI_API_KEY) return { configured: false, ok: false, error: "GEMINI_API_KEY não configurada" };
   try {

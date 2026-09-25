@@ -20,14 +20,16 @@ export class InvalidLoanAccountError extends Error {}
 export class RepaymentTooLargeError extends Error {}
 export class RepaymentNotFoundError extends Error {}
 
-// Empréstimos ("a receber"): money you lent to family/friends. Lending from
-// an account books a transfer (loanId) that takes the money out of the
-// balance without counting as a gasto; each "Recebi" books the way back in.
-// Loans are personal -- only whoever lent sees them, even in a shared group.
+// Empréstimos ("a receber"): dinheiro que você emprestou pra família e
+// amigos. Emprestar de uma conta lança uma transferência (loanId) que tira o
+// dinheiro do saldo sem contar como gasto; cada "Recebi" lança a volta.
+// Empréstimos são pessoais -- só quem emprestou vê, mesmo num grupo
+// compartilhado.
 
 export interface LoanWithTotals extends LoanRow {
   received: string;
-  // Interest accrued so far (0.00 when there's no rate) and principal + it.
+  // Juros acumulados até agora (0.00 quando não tem taxa) e o valor
+  // emprestado + juros.
   interest: string;
   totalOwed: string;
   remaining: string;
@@ -35,18 +37,19 @@ export interface LoanWithTotals extends LoanRow {
 }
 
 export interface LoansSummary {
-  // Everything still owed to you (open loans only).
+  // Tudo que ainda te devem (só empréstimos em aberto).
   outstanding: string;
   overdue: string;
   overdueCount: number;
-  // Owed with a deadline in the next 30 days (not overdue yet).
+  // Devido com prazo nos próximos 30 dias (ainda não atrasado).
   dueSoon: string;
-  // Owed with no deadline at all.
+  // Devido sem prazo nenhum.
   noDueDate: string;
   openCount: number;
 }
 
-// "Today" in Brazil -- a due date is overdue from the day after it, local time.
+// "Hoje" no Brasil -- um prazo fica atrasado a partir do dia seguinte, no
+// horário local.
 export function todayInBrazil(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
 }
@@ -61,7 +64,7 @@ function receivedCents(loan: LoanRow): number {
   return loan.repayments.reduce((sum, r) => sum + toCents(Number(r.amount)), 0);
 }
 
-// Whole months from `from` to `to` (a month counts once its day comes).
+// Meses cheios de `from` até `to` (um mês conta quando o dia dele chega).
 export function fullMonthsBetween(from: string, to: string): number {
   const [fy, fm, fd] = from.split("-").map(Number);
   const [ty, tm, td] = to.split("-").map(Number);
@@ -69,8 +72,8 @@ export function fullMonthsBetween(from: string, to: string): number {
   return Math.max(0, months);
 }
 
-// Simple interest on the amount lent, per full month. It stops counting on
-// the day the loan was fully paid back.
+// Juros simples sobre o valor emprestado, por mês cheio. Para de contar no
+// dia em que o empréstimo foi quitado.
 export function interestCents(loan: LoanRow, today: string): number {
   if (!loan.interestRateMonthly) return 0;
   const lastRepayment = loan.repayments.map((r) => r.receivedAt).sort().at(-1);
@@ -99,7 +102,8 @@ function withTotals(loan: LoanRow, today: string): LoanWithTotals {
   };
 }
 
-// Open first (overdue, then by deadline, no deadline last), finished after.
+// Em aberto primeiro (atrasados, depois por prazo, sem prazo por último),
+// resolvidos depois.
 function compareLoans(a: LoanWithTotals, b: LoanWithTotals): number {
   const aOpen = a.status === "open" ? 0 : 1;
   const bOpen = b.status === "open" ? 0 : 1;
@@ -150,14 +154,15 @@ export async function listLoans(userId: string): Promise<{ loans: LoanWithTotals
   return { loans, summary: summarize(loans, today) };
 }
 
-// Every loan in a group, with totals -- for the daily reminders job, which
-// has no signed-in user.
+// Todos os empréstimos de um grupo, com os totais -- pro job diário de
+// lembretes, que não tem usuário logado.
 export async function findLoansByGroup(groupId: string): Promise<LoanWithTotals[]> {
   const today = todayInBrazil();
   return (await findLoansByGroupId(groupId)).map((loan) => withTotals(loan, today));
 }
 
-// Personal account of the lender or Nossa Conta -- never someone else's.
+// Conta pessoal de quem emprestou ou a Nossa Conta -- nunca a de outra
+// pessoa.
 async function resolveAccount(groupId: string, userId: string, accountId: string | null): Promise<AccountRow | null> {
   if (accountId === null) return null;
   const accounts = await findAccountsByGroupId(groupId);
@@ -285,7 +290,7 @@ export interface UpdateLoanInput {
   personName?: string;
   dueDate?: string | null;
   note?: string | null;
-  // "forgiven" = gave up on receiving the rest; "open" reopens it.
+  // "forgiven" = desistiu de receber o resto; "open" reabre.
   status?: "open" | "forgiven";
   interestRateMonthly?: number | null;
 }
@@ -305,8 +310,8 @@ export async function updateLoanForUser(userId: string, loanId: string, input: U
   return withTotals(updated, todayInBrazil());
 }
 
-// Deleting undoes everything it booked -- the balance goes back to how it
-// was before the loan was registered.
+// Excluir desfaz tudo que foi lançado -- o saldo volta a ser como era antes
+// do empréstimo ser registrado.
 export async function removeLoan(userId: string, loanId: string): Promise<void> {
   const { loan } = await requireOwnLoan(userId, loanId);
   const transactionIds = [loan.transactionId, ...loan.repayments.map((r) => r.transactionId)].filter(

@@ -7,7 +7,7 @@ interface ChatMessage {
   text: string;
 }
 
-// One tap to the questions a monthly check-in is made of.
+// Um toque pras perguntas de quem está acompanhando o mês.
 const SUGGESTIONS = ["Como está meu mês?", "O que vence essa semana?", "Quanto posso gastar por dia?", "Quem me deve?"];
 
 // Trigger button lives in AppLayout's sidebar footer (next to the theme

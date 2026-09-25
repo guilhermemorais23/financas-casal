@@ -8,8 +8,8 @@ export interface RepaymentRow {
   id: string;
   amount: string;
   receivedAt: string;
-  // Where the money came back into (null = received outside the app, just
-  // noted) and the transfer transaction booked for it.
+  // Pra onde o dinheiro voltou (null = recebido fora do app, só anotado) e a
+  // transação de transferência lançada pra ele.
   accountId: string | null;
   transactionId: string | null;
 }
@@ -21,17 +21,17 @@ export interface LoanRow {
   personName: string;
   amount: string;
   lentAt: string;
-  // No deadline is a normal case ("me paga quando der").
+  // Sem prazo é um caso normal ("me paga quando der").
   dueDate: string | null;
   note: string | null;
-  // Account the money left from (null = lent before using the app / not
-  // from a tracked account -- nothing was booked).
+  // Conta de onde o dinheiro saiu (null = emprestado antes de usar o app ou
+  // de fora das contas do app -- nada foi lançado).
   accountId: string | null;
   transactionId: string | null;
   repayments: RepaymentRow[];
   status: LoanStatus;
-  // Optional simple interest, % per full month since lentAt (2 = 2% a.m.).
-  // null = no interest, the usual case between family.
+  // Juros simples opcionais, % por mês cheio desde lentAt (2 = 2% a.m.). null
+  // = sem juros, o normal entre família.
   interestRateMonthly: number | null;
 }
 

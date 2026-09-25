@@ -74,9 +74,9 @@ const POPUP_UNAVAILABLE = new Set([
   "auth/web-storage-unsupported",
 ]);
 
-// Creates the profile doc on first sign-in (idempotent otherwise). The
-// welcome tour shows for every account that hasn't seen the current edition
-// (see utils/welcomeTour.ts), new or not.
+// Cria o documento de perfil no primeiro login (nos outros não faz nada). A
+// apresentação aparece pra toda conta que ainda não viu a edição atual (ver
+// utils/welcomeTour.ts), nova ou não.
 async function bootstrapProfile(idToken: string, displayName: string): Promise<AuthUser> {
   const { isNew: _isNew, ...profile } = await apiRequest<AuthUser & { isNew?: boolean }>("/me/bootstrap", {
     method: "POST",

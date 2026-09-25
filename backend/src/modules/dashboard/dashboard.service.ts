@@ -134,8 +134,8 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   return {
     group: { accounts: groupResult.accounts, members: groupResult.members },
     savedInSecuredCards: savedInSecuredCards / 100,
-    // Empréstimos: what's still to come back -- "Seu dinheiro" shows it as
-    // "quando receber tudo" on top of what's in the accounts.
+    // Empréstimos: o que ainda vai voltar -- "Seu dinheiro" mostra isso como
+    // "quando receber tudo" em cima do que está nas contas.
     loansSummary: loans.summary,
     // "Vence logo": pagar e receber nos próximos 7 dias (e atrasados).
     upcoming,

@@ -112,8 +112,8 @@ function categorySpikeAlerts(
   return alerts;
 }
 
-// includeDue: false on the Painel, which lists due dates in its own "Vence
-// logo" card (upcoming.service.ts) -- no need to say it twice.
+// includeDue: false no Painel, que já lista os vencimentos no próprio card
+// "Vence logo" (upcoming.service.ts) -- não precisa dizer duas vezes.
 export async function getAlertsForUser(userId: string, options: { includeDue?: boolean } = {}): Promise<AlertItem[]> {
   const includeDue = options.includeDue ?? true;
   // Not otherwise used here directly -- getCurrentBudget/listCards/listDebts/

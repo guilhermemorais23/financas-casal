@@ -55,14 +55,15 @@ export interface TransactionRow {
   // money in the card as a gasto. Owned by the card: deleting the card
   // deletes these too, and they can't be edited/deleted on their own.
   securedCardId: string | null;
-  // Set only on money lent out / received back through Empréstimos -- a
-  // transfer like securedCardId above: moves the balance, never counts as
-  // gasto/receita. Owned by the loan (edited/deleted only through it).
+  // Preenchido só em dinheiro emprestado / recebido de volta pelos
+  // Empréstimos -- uma transferência como o securedCardId acima: mexe no
+  // saldo, nunca conta como gasto/receita. Pertence ao empréstimo
+  // (editado/excluído só por ele).
   loanId: string | null;
 }
 
-// Transfers move money between the account and somewhere else (a secured
-// card, someone who owes you) without being income or spending.
+// Transferências movem dinheiro entre a conta e outro lugar (um cartão
+// garantido, alguém que te deve) sem ser receita nem gasto.
 export function isTransferData(data: FirebaseFirestore.DocumentData): boolean {
   return Boolean(data.securedCardId || data.loanId);
 }

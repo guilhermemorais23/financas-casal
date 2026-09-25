@@ -16,18 +16,19 @@ interface State {
   pathname: string;
 }
 
-// Catches render/lazy-import errors below it -- without this a crash is a
-// blank white screen. Almost every crash here comes from a tab running an
-// old build across a deploy (see utils/appRecovery.ts) or stale cached page
-// data (pageCache.ts), and a fresh reload fixes both -- so the app reloads
-// itself behind a "Atualizando o app..." screen instead of asking. The
-// fallback screen only shows if recovering already failed twice in a row.
+// Pega erros de renderização e de import lazy abaixo dele -- sem isso, um
+// erro vira uma tela branca. Quase todo erro aqui vem de uma aba rodando uma
+// versão antiga depois de um deploy (ver utils/appRecovery.ts) ou de dados
+// velhos no cache das páginas (pageCache.ts), e recarregar resolve os dois --
+// então o app se recarrega sozinho atrás de uma tela "Atualizando o app..."
+// em vez de perguntar. A tela de erro só aparece se a recuperação já falhou
+// duas vezes seguidas.
 class ErrorBoundaryInner extends Component<Props, State> {
   state: State = { hasError: false, isReloading: false, pathname: this.props.pathname };
 
   static getDerivedStateFromError(): Partial<State> {
-    // Read-only check here (must stay side-effect free); the reload itself
-    // starts in componentDidCatch.
+    // Aqui só consulta (não pode ter efeito colateral); o recarregamento
+    // começa no componentDidCatch.
     return { hasError: true, isReloading: canRecover() };
   }
 
@@ -36,7 +37,7 @@ class ErrorBoundaryInner extends Component<Props, State> {
     if (this.state.isReloading && !recoverApp()) this.setState({ isReloading: false });
   }
 
-  // Navigating away (menu, back button) gives the new page a fresh try.
+  // Mudar de página (menu, botão voltar) dá uma nova chance pra página nova.
   static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
     if (props.pathname === state.pathname) return null;
     return { pathname: props.pathname, hasError: state.hasError && state.isReloading };

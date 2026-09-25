@@ -210,8 +210,8 @@ export interface MonthlyTrendPoint {
   // did leave the account, so the hero number subtracts it while "Saída do
   // mês" and every report leave it out.
   savedInCards: number;
-  // Same idea for Empréstimos: net money lent out this month (lent minus
-  // received back).
+  // Mesma ideia pros Empréstimos: quanto saiu emprestado no mês (emprestado
+  // menos recebido de volta).
   lentOut: number;
   net: number;
 }

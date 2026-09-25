@@ -16,8 +16,8 @@ import { ProtectedRoute } from "./routes/ProtectedRoute";
 // export) -- each call site below still has its own literal `import("./
 // pages/X")`, which is what lets Vite give every page its own chunk; this
 // just removes the repeated `.then((m) => ({ default: m.Name }))` typo risk.
-// importWithRecovery: a chunk missing after a deploy reloads into the new
-// build (skeleton stays up) instead of crashing into the error screen.
+// importWithRecovery: um chunk que sumiu depois de um deploy recarrega na
+// versão nova (o skeleton continua na tela) em vez de cair na tela de erro.
 function namedLazy<K extends string>(loader: () => Promise<Record<K, ComponentType<object>>>, name: K) {
   return lazy(async () => ({ default: (await importWithRecovery(loader))[name] }));
 }
