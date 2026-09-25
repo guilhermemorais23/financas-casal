@@ -169,7 +169,7 @@ export function EditTransactionModal({
               <option value="">Sem categoria</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.emoji ? `${category.emoji} ` : ""}
+                  
                   {category.name}
                 </option>
               ))}
@@ -182,7 +182,7 @@ export function EditTransactionModal({
               <select id="edit-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.emoji ? `${account.emoji} ` : ""}
+                    
                     {account.name}
                   </option>
                 ))}
@@ -212,7 +212,7 @@ export function EditTransactionModal({
               <option value="">Não informado</option>
               {PAYMENT_METHOD_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.icon} {option.label}
+                  {option.label}
                 </option>
               ))}
             </select>

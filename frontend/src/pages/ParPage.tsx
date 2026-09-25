@@ -6,7 +6,7 @@ import { CategoryPieChart } from "../components/CategoryPieChart";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { SplitStatusPill } from "../components/SplitStatusPill";
 import { AppLayout } from "../layouts/AppLayout";
-import { categoryColor, personColor, personTint, tint } from "../utils/categoryColor";
+import { categoryColor, personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, parseLocalDate } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { readCache, writeCache } from "../utils/pageCache";
@@ -15,6 +15,7 @@ import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
+import { initialOf } from "../utils/initial";
 
 interface AccountRow {
   id: string;
@@ -269,7 +270,6 @@ export function ParPage() {
               key={member.id}
               style={{
                 ["--stat-box-accent" as string]: personColor(index),
-                background: tint(personColor(index)),
               }}
             >
               <div className="stat-box-header">
@@ -329,7 +329,7 @@ export function ParPage() {
               </div>
               {budgetSeverity && (
                 <p className={`budget-status ${budgetSeverity}`}>
-                  {budgetSeverity === "over" ? "⚠️ Passou do orçamento" : "⚠️ Perto do limite"}
+                  {budgetSeverity === "over" ? "Passou do orçamento" : "Perto do limite"}
                 </p>
               )}
             </>
@@ -384,9 +384,8 @@ export function ParPage() {
               <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
                 <span
                   className="transaction-icon"
-                  style={{ background: tint(categoryColor(tx.categoryId)) }}
                 >
-                  {tx.categoryEmoji ?? "💸"}
+                  {initialOf(tx.categoryName ?? tx.description)}
                 </span>
                 <div className="transaction-info">
                   <span className="transaction-desc">

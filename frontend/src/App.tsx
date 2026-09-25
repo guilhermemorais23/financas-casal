@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType } from "react";
+import { lazy, Suspense, useEffect, type ComponentType } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -18,8 +18,27 @@ import { ProtectedRoute } from "./routes/ProtectedRoute";
 // just removes the repeated `.then((m) => ({ default: m.Name }))` typo risk.
 // importWithRecovery: um chunk que sumiu depois de um deploy recarrega na
 // versão nova (o skeleton continua na tela) em vez de cair na tela de erro.
+// Cada página também entra em PAGE_LOADERS, pra ser baixada em segundo plano
+// logo depois que o app abre (preloadPages): trocar de tela não espera mais
+// a rede, que era o que dava a "travada" com o skeleton piscando.
+const PAGE_LOADERS: Array<() => Promise<unknown>> = [];
+
 function namedLazy<K extends string>(loader: () => Promise<Record<K, ComponentType<object>>>, name: K) {
+  PAGE_LOADERS.push(loader);
   return lazy(async () => ({ default: (await importWithRecovery(loader))[name] }));
+}
+
+let pagesPreloaded = false;
+function preloadPages() {
+  if (pagesPreloaded) return;
+  pagesPreloaded = true;
+  const run = () => {
+    // Uma de cada vez, pra não disputar a rede com os dados da tela aberta.
+    // Se uma falhar (sem internet), tudo bem: ela baixa quando for aberta.
+    PAGE_LOADERS.reduce<Promise<unknown>>((chain, load) => chain.then(() => load().catch(() => undefined)), Promise.resolve());
+  };
+  if ("requestIdleCallback" in window) window.requestIdleCallback(run, { timeout: 4000 });
+  else setTimeout(run, 2000);
 }
 
 // Lazy-loaded: everything past the login screen used to ship in the same
@@ -50,6 +69,7 @@ const ShoppingListPage = namedLazy(() => import("./pages/ShoppingListPage"), "Sh
 const LoansPage = namedLazy(() => import("./pages/LoansPage"), "LoansPage");
 
 function App() {
+  useEffect(preloadPages, []);
   return (
     <ToastProvider>
       <ConfirmProvider>

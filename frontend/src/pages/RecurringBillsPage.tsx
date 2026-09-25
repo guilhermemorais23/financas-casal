@@ -3,13 +3,13 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
-import { categoryColor, tint } from "../utils/categoryColor";
 import { formatCurrency } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
+import { initialOf } from "../utils/initial";
 
 interface AccountRow {
   id: string;
@@ -220,9 +220,9 @@ export function RecurringBillsPage() {
           <p className="card-title">
             <span
               className="transaction-icon"
-              style={{ background: tint(categoryColor(bill.categoryId)), marginRight: "0.5rem" }}
+              style={{ marginRight: "0.5rem" }}
             >
-              {category?.emoji ?? "🔁"}
+              {initialOf(category?.name ?? bill.description)}
             </span>
             {bill.description}
           </p>
@@ -361,7 +361,7 @@ export function RecurringBillsPage() {
                 <option value="">Sem categoria</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
-                    {category.emoji ? `${category.emoji} ` : ""}
+                    
                     {category.name}
                   </option>
                 ))}
@@ -411,10 +411,10 @@ export function RecurringBillsPage() {
 
         <div>
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            💞 Contas fixas do grupo
+            Contas fixas do grupo
           </p>
           {bills === null ? null : jointBills.length === 0 ? (
-            <EmptyState icon="✨">Nenhuma conta fixa do casal ainda.</EmptyState>
+            <EmptyState>Nenhuma conta fixa do casal ainda.</EmptyState>
           ) : (
             <div className="page-stack">{jointBills.map(renderBillCard)}</div>
           )}
@@ -422,10 +422,10 @@ export function RecurringBillsPage() {
 
         <div>
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            👤 Suas contas fixas
+            Suas contas fixas
           </p>
           {bills === null ? null : personalBills.length === 0 ? (
-            <EmptyState icon="✨">Nenhuma conta fixa pessoal ainda.</EmptyState>
+            <EmptyState>Nenhuma conta fixa pessoal ainda.</EmptyState>
           ) : (
             <div className="page-stack">{personalBills.map(renderBillCard)}</div>
           )}

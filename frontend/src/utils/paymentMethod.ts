@@ -4,10 +4,10 @@
 export type PaymentMethod = "credit" | "debit" | "pix" | "cash";
 
 export const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string; icon: string }[] = [
-  { value: "credit", label: "Crédito", icon: "💳" },
-  { value: "debit", label: "Débito", icon: "🏦" },
-  { value: "pix", label: "Pix", icon: "⚡" },
-  { value: "cash", label: "Dinheiro", icon: "💵" },
+  { value: "credit", label: "Crédito", icon: "" },
+  { value: "debit", label: "Débito", icon: "" },
+  { value: "pix", label: "Pix", icon: "" },
+  { value: "cash", label: "Dinheiro", icon: "" },
 ];
 
 export function paymentMethodLabel(method: PaymentMethod | null): string | null {

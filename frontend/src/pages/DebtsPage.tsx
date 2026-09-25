@@ -169,7 +169,7 @@ export function DebtsPage() {
       <div key={debt.id} className="card debt-card">
         <div className="section-header">
           <p className="card-title">
-            {debt.scope === "joint" ? "💞" : "💳"} {debt.name}
+            {debt.name}
           </p>
           <div className="transaction-row-actions">
             <button type="button" className="btn-icon" title="Editar dívida" onClick={() => setEditingDebt(debt)}>
@@ -365,10 +365,10 @@ export function DebtsPage() {
 
         <div>
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            💞 Dívidas do grupo
+            Dívidas do grupo
           </p>
           {debts === null ? null : jointDebts.length === 0 ? (
-            <EmptyState icon="🎉">Sem dívidas do casal — tudo em dia!</EmptyState>
+            <EmptyState>Sem dívidas do casal. Tudo em dia.</EmptyState>
           ) : (
             <div className="page-stack">{jointDebts.map(renderDebtCard)}</div>
           )}
@@ -376,10 +376,10 @@ export function DebtsPage() {
 
         <div>
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            👤 Suas dívidas pessoais
+            Suas dívidas pessoais
           </p>
           {debts === null ? null : personalDebts.length === 0 ? (
-            <EmptyState icon="✨">Nenhuma dívida pessoal — respira aliviado.</EmptyState>
+            <EmptyState>Nenhuma dívida pessoal.</EmptyState>
           ) : (
             <div className="page-stack">{personalDebts.map(renderDebtCard)}</div>
           )}

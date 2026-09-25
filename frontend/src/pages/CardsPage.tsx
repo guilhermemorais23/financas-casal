@@ -9,6 +9,7 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
+import { initialOf } from "../utils/initial";
 
 interface MemberRow {
   id: string;
@@ -351,7 +352,7 @@ export function CardsPage() {
       <div key={card.id} className="card debt-card">
         <div className="section-header">
           <p className="card-title">
-            {card.scope === "joint" ? "💞" : "👤"} 🧾 {card.name}
+            {card.name}
           </p>
           <div className="transaction-row-actions">
             <button type="button" className="btn-icon" title="Remover cartão" onClick={() => handleDeleteCard(card.id)}>
@@ -468,7 +469,7 @@ export function CardsPage() {
             {s.byPerson.map((person) => (
               <div className="stat" key={person.userId} style={{ flex: "1 1 100px" }}>
                 <p className="stat-label">{memberName(person.userId)}</p>
-                <p className="stat-value" style={{ fontSize: "0.95rem" }}>
+                <p className="stat-value" style={{ fontSize: "1rem" }}>
                   {formatCurrency(Number(person.total))}
                 </p>
               </div>
@@ -520,7 +521,7 @@ export function CardsPage() {
                     const category = categories.find((c) => c.id === purchase.categoryId);
                     return (
                       <li key={purchase.id} className="transaction-row">
-                        <span className="transaction-icon">{category?.emoji ?? "🧾"}</span>
+                        <span className="transaction-icon">{initialOf(category?.name ?? purchase.description)}</span>
                         <div className="transaction-info">
                           <span className="transaction-desc">
                             <span className="text-truncate">{purchase.description}</span>
@@ -804,10 +805,10 @@ export function CardsPage() {
 
         <div>
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            💞 Cartões do grupo
+            Cartões do grupo
           </p>
           {cards === null ? null : jointCards.length === 0 ? (
-            <EmptyState icon="🧾">Nenhum cartão do casal cadastrado ainda.</EmptyState>
+            <EmptyState>Nenhum cartão do casal cadastrado ainda.</EmptyState>
           ) : (
             <div className="page-stack">{jointCards.map(renderCard)}</div>
           )}
@@ -815,10 +816,10 @@ export function CardsPage() {
 
         <div>
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            👤 Seus cartões pessoais
+            Seus cartões pessoais
           </p>
           {cards === null ? null : personalCards.length === 0 ? (
-            <EmptyState icon="💳">Nenhum cartão pessoal cadastrado ainda.</EmptyState>
+            <EmptyState>Nenhum cartão pessoal cadastrado ainda.</EmptyState>
           ) : (
             <div className="page-stack">{personalCards.map(renderCard)}</div>
           )}

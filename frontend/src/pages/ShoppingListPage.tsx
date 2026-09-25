@@ -189,7 +189,7 @@ export function ShoppingListPage() {
 
         <div className="card">
           <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            🛒 Pra comprar
+            Pra comprar
           </p>
           {pendingItems.length === 0 ? (
             <p className="empty-state">Nada na lista por enquanto.</p>
@@ -237,7 +237,7 @@ export function ShoppingListPage() {
                         >
                           {accounts.map((account) => (
                             <option key={account.id} value={account.id}>
-                              {account.type === "joint" ? "💞 " : "👤 "}
+                              
                               {account.name}
                             </option>
                           ))}

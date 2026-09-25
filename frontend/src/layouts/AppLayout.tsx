@@ -74,6 +74,10 @@ const MORE_TILES: NavItem[] = [
 const BILLS_PATHS = BILLS_TABS.map((tab) => tab.to);
 const MORE_PATHS = [...MORE_TILES.map((tile) => tile.to), "/account", "/admin"];
 
+// Último valor dos widgets da barra lateral, por mês (vive enquanto o app
+// estiver aberto).
+const sidebarCache = new Map<string, unknown>();
+
 export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const { user, token, logout } = useAuth();
   const { theme, toggle } = useTheme();
@@ -86,8 +90,6 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const [isAdminNavOpen, setIsAdminNavOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
-  const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[] | null>(null);
   const location = useLocation();
   const isOnNewTransaction = location.pathname === "/transactions/new";
   // Dashboard/Reports keep their selected month in the URL (?month=...) --
@@ -95,17 +97,32 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   // browsed instead of always defaulting to the real current month.
   const [searchParams] = useSearchParams();
   const sidebarMonth = searchParams.get("month") ?? currentMonthParam();
+  // Cada página monta o próprio AppLayout, então sem cache a barra lateral
+  // sumia e voltava a cada troca de tela. Começa com o último valor do mês e
+  // atualiza por trás.
+  const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(
+    () => (sidebarCache.get(`${user?.id}:budget:${sidebarMonth}`) as BudgetSummary | undefined) ?? null
+  );
+  const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[] | null>(
+    () => (sidebarCache.get(`${user?.id}:trend:${sidebarMonth}`) as DailyTrendPoint[] | undefined) ?? null
+  );
 
   useEffect(() => {
     if (!token) return;
     // Decorative sidebar widgets -- a failed fetch just hides them, no error UI.
     apiRequest<BudgetSummary>(`/budgets/current?month=${sidebarMonth}`, { token })
-      .then(setBudgetSummary)
+      .then((data) => {
+        sidebarCache.set(`${user?.id}:budget:${sidebarMonth}`, data);
+        setBudgetSummary(data);
+      })
       .catch(() => setBudgetSummary(null));
     apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${sidebarMonth}`, { token })
-      .then(setDailyTrend)
+      .then((data) => {
+        sidebarCache.set(`${user?.id}:trend:${sidebarMonth}`, data);
+        setDailyTrend(data);
+      })
       .catch(() => setDailyTrend(null));
-  }, [token, sidebarMonth]);
+  }, [token, sidebarMonth, user?.id]);
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
