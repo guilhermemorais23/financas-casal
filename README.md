@@ -47,6 +47,12 @@ npm run seed
 
 Dados do emulador ficam salvos em `emulator-data/` entre execuções (import/export automático, configurado em `package.json`).
 
+Pra entrar direto num Painel já preenchido (duas pessoas, conta conjunta com gastos divididos, conta fixa, cartão, meta e orçamento), rode também:
+```
+npm run seed:demo
+```
+e entre em `http://localhost:5173/login` com **demo@par.local** / **demo1234** (a outra pessoa do grupo é **ana.demo@par.local**, mesma senha). Só funciona contra o emulador: não toca no Firebase de produção nem gasta a cota dele.
+
 ## Verificando que funciona
 
 1. Acesse `http://localhost:4001` — UI do emulador, deve mostrar Firestore e Authentication rodando.
