@@ -150,6 +150,8 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const [returnToSummary, setReturnToSummary] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
   const [showRows, setShowRows] = useState(false);
+  // Linhas de ida e volta que a pessoa mandou não contar.
+  const [excluded, setExcluded] = useState<Set<number>>(() => new Set());
   const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -183,11 +185,40 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   // respondidos, mas podem ser mudados no resumo).
   const questions = useMemo(() => preview?.groups.filter((group) => !group.rule) ?? [], [preview]);
 
+  // Ida e volta: mesmo nome, mesmo valor, um entrou e o outro saiu com até 3
+  // dias de diferença (ex.: o pai mandou R$ 170 e o filho devolveu). Cada
+  // linha entra em um par só.
+  const roundTrips = useMemo(() => {
+    const pairs: [number, number][] = [];
+    if (!preview) return pairs;
+    const used = new Set<number>();
+    const day = (iso: string) => parseLocalDate(iso).getTime() / 86_400_000;
+    preview.rows.forEach((row, i) => {
+      if (row.transactionType !== "income" || row.isDuplicate || used.has(i)) return;
+      const j = preview.rows.findIndex(
+        (other, k) =>
+          !used.has(k) &&
+          other.transactionType === "expense" &&
+          !other.isDuplicate &&
+          other.groupKey === row.groupKey &&
+          other.amount === row.amount &&
+          Math.abs(day(other.date) - day(row.date)) <= 3
+      );
+      if (j >= 0) {
+        used.add(i);
+        used.add(j);
+        pairs.push([i, j]);
+      }
+    });
+    return pairs;
+  }, [preview]);
+
   function startReview(result: PreviewResponse) {
     setPreview(result);
     const initial: Record<string, Answer> = {};
     for (const group of result.groups) initial[`${group.transactionType}:${group.key}`] = blankAnswer(group);
     setAnswers(initial);
+    setExcluded(new Set());
     setQuestionIndex(0);
     setShowDescription(false);
     setStage(result.groups.some((group) => !group.rule) ? "questions" : "summary");
@@ -238,6 +269,23 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   const current = stage === "questions" ? questions[questionIndex] : undefined;
   const currentAnswer = current ? answers[groupKey(current)] : undefined;
+  // O mesmo nome no outro sentido (ex.: o filho mandou e também recebeu).
+  const mirror = current ? preview?.groups.find((g) => g.key === current.key && g.transactionType !== current.transactionType) : undefined;
+  const currentTrips = current ? roundTrips.filter(([a, b]) => current.rowIndexes.includes(a) || current.rowIndexes.includes(b)) : [];
+
+  function toggleTrip([a, b]: [number, number]) {
+    setExcluded((set) => {
+      const next = new Set(set);
+      if (next.has(a)) {
+        next.delete(a);
+        next.delete(b);
+      } else {
+        next.add(a);
+        next.add(b);
+      }
+      return next;
+    });
+  }
 
   function patchAnswer(group: PreviewGroup, patch: Partial<Answer>) {
     const key = groupKey(group);
@@ -332,6 +380,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     let incoming = 0;
     let outgoing = 0;
     let skippedNotExpense = 0;
+    let skippedRoundTrip = 0;
     // Não conciliado: linhas que vão entrar sem categoria nenhuma.
     const unmatched: { index: number; group: PreviewGroup | null; description: string }[] = [];
     const answeredByRow = new Map<number, { group: PreviewGroup; answer: Answer }>();
@@ -341,6 +390,10 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     }
     preview.rows.forEach((row, index) => {
       if (row.isDuplicate && !includeDuplicates) return;
+      if (excluded.has(index)) {
+        skippedRoundTrip++;
+        return;
+      }
       const entry = answeredByRow.get(index);
       const answer = entry?.answer;
       if (answer?.status === "answered" && answer.notExpense) {
@@ -374,8 +427,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         notExpense: answer.notExpense,
       }));
     const withoutCategory = unmatched.length;
-    return { items, rules, incoming, outgoing, skippedNotExpense, withoutCategory, unmatched };
-  }, [preview, answers, includeDuplicates]);
+    return { items, rules, incoming, outgoing, skippedNotExpense, skippedRoundTrip, withoutCategory, unmatched };
+  }, [preview, answers, includeDuplicates, excluded]);
+
 
   const duplicateCount = preview?.rows.filter((row) => row.isDuplicate).length ?? 0;
   const unreadLines = preview?.pdf?.unreadLines ?? [];
@@ -640,12 +694,59 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                         {parseLocalDate(row.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                         {row.time && ` às ${row.time}`}
                         {row.kind && <small> · {row.kind}</small>}
+                        {excluded.has(index) && <small> · ida e volta, não conta</small>}
                       </span>
                       <strong className={`transaction-amount ${row.transactionType}`}>{formatCurrency(Number(row.amount))}</strong>
                     </li>
                   );
                 })}
               </ul>
+            )}
+            {mirror && (
+              <div className="import-mirror">
+                <p>
+                  <strong>{current.name}</strong> aparece nos dois sentidos este mês:
+                </p>
+                <ul>
+                  {(current.transactionType === "income" ? [current, mirror] : [mirror, current]).map((g) => (
+                      <li key={g.transactionType}>
+                        <span className={`import-question-type ${g.transactionType}`}>{g.transactionType === "income" ? "Entrou" : "Saiu"}</span>
+                        {g.count}× · <strong className={`transaction-amount ${g.transactionType}`}>{formatCurrency(Number(g.total))}</strong>
+                        {g === current && <small> (esta pergunta)</small>}
+                      </li>
+                  ))}
+                </ul>
+                {(() => {
+                  const inc = Number((current.transactionType === "income" ? current : mirror).total);
+                  const out = Number((current.transactionType === "expense" ? current : mirror).total);
+                  const net = inc - out;
+                  return (
+                    <p className="import-mirror-net">
+                      {net === 0
+                        ? "No mês, o que entrou e o que saiu se anulam."
+                        : net > 0
+                          ? `No mês, entrou ${formatCurrency(net)} a mais do que saiu.`
+                          : `No mês, saiu ${formatCurrency(-net)} a mais do que entrou.`}{" "}
+                      Aqui você responde só o que {current.transactionType === "income" ? "entrou" : "saiu"}; o outro lado é outra pergunta.
+                    </p>
+                  );
+                })()}
+                {currentTrips.map((trip) => {
+                  const row = preview!.rows[trip[0]];
+                  const off = excluded.has(trip[0]);
+                  return (
+                    <label key={trip.join("-")} className="import-trip">
+                      <input type="checkbox" checked={off} onChange={() => toggleTrip(trip)} />
+                      <span>
+                        {formatCurrency(Number(row.amount))} entrou e voltou (
+                        {parseLocalDate(preview!.rows[trip[0]].date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} e{" "}
+                        {parseLocalDate(preview!.rows[trip[1]].date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}).
+                        Não contar essa ida e volta
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             )}
             <p className="import-question-ask">O que é isso?</p>
             <div className="chip-row import-chips">
@@ -792,6 +893,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
           <p className="import-summary">
             Em <strong>{accounts.find((a) => a.id === accountId)?.name ?? "—"}</strong>
             {plan.skippedNotExpense > 0 && <> · {plan.skippedNotExpense} não entram (não é gasto)</>}
+            {plan.skippedRoundTrip > 0 && <> · {plan.skippedRoundTrip} não entram (ida e volta)</>}
             {plan.withoutCategory > 0 && <> · {plan.withoutCategory} entram sem categoria</>}
           </p>
           {duplicateCount > 0 && (
