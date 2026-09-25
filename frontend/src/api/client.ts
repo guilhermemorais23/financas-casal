@@ -2,10 +2,12 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 export class ApiError extends Error {
   status: number;
+  code: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -55,7 +57,7 @@ export async function apiRequest<T>(
     if (response.status === 402 && data?.code === "premium_required") {
       window.dispatchEvent(new CustomEvent("par:premium-required"));
     }
-    throw new ApiError(data?.error ?? "Request failed", response.status);
+    throw new ApiError(data?.error ?? "Request failed", response.status, typeof data?.code === "string" ? data.code : null);
   }
 
   return data as T;
@@ -81,7 +83,7 @@ export async function apiDownload(path: string, token: string | null, filename: 
     if (response.status === 402 && data?.code === "premium_required") {
       window.dispatchEvent(new CustomEvent("par:premium-required"));
     }
-    throw new ApiError(data?.error ?? "Request failed", response.status);
+    throw new ApiError(data?.error ?? "Request failed", response.status, typeof data?.code === "string" ? data.code : null);
   }
 
   const blob = await response.blob();

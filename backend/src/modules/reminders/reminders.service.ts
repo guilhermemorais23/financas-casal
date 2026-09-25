@@ -254,13 +254,24 @@ async function runLoanReminders(groupId: string, members: MemberWithEmail[]): Pr
 
     const days = daysBetween(loan.dueDate, today);
     const when = days === 0 ? "hoje" : `há ${days} dia${days === 1 ? "" : "s"}`;
-    const sent = await sendToMembers(
+    // "Eu devo": o lembrete é pra quem pegou emprestado devolver.
+    const sent = loan.direction === "borrowed"
+      ? await sendToMembers(
+          [lender],
+          `Prazo pra devolver ${formatBRL(remaining)} pra ${loan.personName}${when === "hoje" ? " é hoje" : ""}`,
+          `
+        <h1 style="font-size: 20px;">Prazo de empréstimo</h1>
+        <p>O prazo que você combinou pra devolver <strong>${formatBRL(remaining)}</strong> pra <strong>${escapeHtml(loan.personName)}</strong> foi ${when} (${formatBRDate(loan.dueDate)}).</p>
+        <p>Já pagou? Toque em "Paguei" em Contas &gt; Empréstimos &gt; Eu devo, no PAR.</p>
+      `
+        )
+      : await sendToMembers(
       [lender],
       `${loan.personName} tinha que devolver ${formatBRL(remaining)} ${when === "hoje" ? "hoje" : ""}`.trim(),
       `
         <h1 style="font-size: 20px;">Prazo de empréstimo</h1>
         <p>O prazo de <strong>${escapeHtml(loan.personName)}</strong> devolver <strong>${formatBRL(remaining)}</strong> foi ${when} (${formatBRDate(loan.dueDate)}).</p>
-        <p>Recebeu? Toque em "Recebi" em Contas &gt; A receber, no PAR.</p>
+        <p>Recebeu? Toque em "Recebi" em Contas &gt; Empréstimos, no PAR.</p>
       `
     );
     if (sent > 0) {

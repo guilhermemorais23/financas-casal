@@ -8,6 +8,7 @@ import { personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
+import { ImportRulesCard } from "../components/ImportRulesCard";
 import { ImportStatementModal } from "../components/ImportStatementModal";
 import { initialOf } from "../utils/initial";
 
@@ -73,6 +74,7 @@ export function AccountPage() {
   const [copied, setCopied] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importsDone, setImportsDone] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -454,7 +456,17 @@ export function AccountPage() {
           </div>
         </div>
 
-        {isImportOpen && <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load()} />}
+        <ImportRulesCard categories={categories ?? []} reloadKey={importsDone} />
+
+        {isImportOpen && (
+          <ImportStatementModal
+            onClose={() => setIsImportOpen(false)}
+            onImported={() => {
+              setImportsDone((n) => n + 1);
+              void load();
+            }}
+          />
+        )}
 
         <div className="card form-card">
           <p className="card-title">Orçamento do mês</p>

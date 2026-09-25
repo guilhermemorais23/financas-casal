@@ -3,6 +3,9 @@ import { db } from "../../db/firestore";
 import { fromCents, toCents } from "../../utils/money";
 
 export type LoanStatus = "open" | "paid" | "forgiven";
+// "lent" = emprestei (a pessoa me deve); "borrowed" = peguei emprestado (eu
+// devo pra ela). Empréstimos antigos, de antes do "Eu devo", são "lent".
+export type LoanDirection = "lent" | "borrowed";
 
 export interface RepaymentRow {
   id: string;
@@ -16,6 +19,7 @@ export interface RepaymentRow {
 
 export interface LoanRow {
   id: string;
+  direction: LoanDirection;
   groupId: string;
   ownerUserId: string;
   personName: string;
@@ -56,6 +60,7 @@ function toLoanRow(doc: FirebaseFirestore.DocumentSnapshot): LoanRow {
   }));
   return {
     id: doc.id,
+    direction: data.direction === "borrowed" ? "borrowed" : "lent",
     groupId: data.groupId,
     ownerUserId: data.ownerUserId,
     personName: data.personName,
@@ -81,6 +86,7 @@ export async function insertLoan(
 ): Promise<LoanRow> {
   const ref = loansCol.doc(id);
   await ref.set({
+    direction: input.direction,
     groupId: input.groupId,
     ownerUserId: input.ownerUserId,
     personName: input.personName,

@@ -60,6 +60,12 @@ export function PrivacyPage() {
             aquele relatório até ele expirar ou você revogar.
           </li>
           <li>
+            <strong>Extrato do banco:</strong> quando você importa um extrato em PDF, o texto dele é enviado ao Google
+            Gemini só para copiar data, nome e valor de cada lançamento. O arquivo e a senha do PDF não ficam guardados;
+            ficam só os lançamentos que você confirmar e as respostas “nome do extrato → categoria”, para as próximas
+            importações.
+          </li>
+          <li>
             <strong>Serviços que fazem o app funcionar:</strong> Google Firebase (login e banco de dados), Render
             (servidor), Brevo (envio de emails), Google Gemini (assistente com inteligência artificial, só para quem
             usa), Asaas (pagamento do Premium, só para quem assina) e, só se você conectar, Telegram ou WhatsApp

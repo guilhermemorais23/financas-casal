@@ -43,7 +43,7 @@ const SLIDES: Slide[] = [
     icon: "coin",
     tag: "Novidade",
     title: "Quem te deve, num lugar só",
-    text: "Em Contas > A receber: quanto te devem e quanto você vai ter quando cada pessoa pagar.",
+    text: "Em Contas > Empréstimos: quanto te devem, quanto você deve e quanto é seu de verdade.",
     bullets: ["Com ou sem prazo pra devolver", "Juros por mês, se quiser", "Não conta como gasto"],
   },
   {

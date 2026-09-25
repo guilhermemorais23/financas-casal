@@ -18,6 +18,9 @@ export interface MonthSnapshot {
   loansOutstanding: number;
   loansOverdue: number;
   loans: { personName: string; remaining: number; dueDate: string | null; isOverdue: boolean }[];
+  // "Eu devo": o que a pessoa pegou emprestado e ainda vai devolver.
+  owedOutstanding: number;
+  owed: { personName: string; remaining: number; dueDate: string | null; isOverdue: boolean }[];
 }
 
 export function brl(amount: number): string {
@@ -50,8 +53,12 @@ export async function buildMonthSnapshot(userId: string): Promise<MonthSnapshot>
     upcoming,
     loansOutstanding: Number(loans.summary.outstanding),
     loansOverdue: Number(loans.summary.overdue),
+    owedOutstanding: Number(loans.owedSummary.outstanding),
+    owed: loans.loans
+      .filter((loan) => loan.direction === "borrowed" && loan.status === "open" && Number(loan.remaining) > 0)
+      .map((loan) => ({ personName: loan.personName, remaining: Number(loan.remaining), dueDate: loan.dueDate, isOverdue: loan.isOverdue })),
     loans: loans.loans
-      .filter((loan) => loan.status === "open" && Number(loan.remaining) > 0)
+      .filter((loan) => loan.direction === "lent" && loan.status === "open" && Number(loan.remaining) > 0)
       .map((loan) => ({
         personName: loan.personName,
         remaining: Number(loan.remaining),
@@ -77,11 +84,16 @@ export function snapshotAsText(s: MonthSnapshot): string {
   const loansText = s.loans.length
     ? s.loans.map((loan) => `${loan.personName} deve ${brl(loan.remaining)}${loan.dueDate ? `, prazo ${loan.dueDate}` : ", sem prazo"}${loan.isOverdue ? " (atrasado)" : ""}`).join("; ")
     : "ninguém deve nada";
+  const owedText = s.owed.length
+    ? s.owed.map((loan) => `deve ${brl(loan.remaining)} pra ${loan.personName}${loan.dueDate ? `, prazo ${loan.dueDate}` : ", sem prazo"}${loan.isOverdue ? " (atrasado)" : ""}`).join("; ")
+    : "não deve nada pra ninguém";
   return `Saldo nas contas hoje: ${brl(s.balanceToday)}.
 Este mês (conta pessoal): entrou ${brl(s.income)}, saiu ${brl(s.expense)}, sobra ${brl(s.monthLeft)}.
 Faltam ${s.daysLeft} dias pro mês acabar: dá pra gastar ${brl(Math.max(0, s.dailyAllowance))} por dia.
 Vence nos próximos 7 dias: ${upcomingText}.
-Empréstimos a receber: ${loansText}. Total a receber: ${brl(s.loansOutstanding)}; quando receber tudo, fica com ${brl(s.balanceToday + s.loansOutstanding)}.`;
+Empréstimos a receber: ${loansText}. Total a receber: ${brl(s.loansOutstanding)}.
+Empréstimos que a pessoa deve devolver: ${owedText}. Total que deve: ${brl(s.owedOutstanding)}.
+Seu de verdade (contas + a receber - o que deve): ${brl(s.balanceToday + s.loansOutstanding - s.owedOutstanding)}.`;
 }
 
 // Respostas em linguagem simples direto dos números -- usadas quando a IA não
@@ -108,12 +120,16 @@ export function answerFromSnapshot(s: MonthSnapshot, question: string): string {
         : "Nada pra pagar nos próximos 7 dias."
     );
   }
-  if (wantsLoans || (!wantsDue && !wantsDaily && s.loans.length > 0)) {
+  if (wantsLoans || (!wantsDue && !wantsDaily && (s.loans.length > 0 || s.owed.length > 0))) {
     lines.push(
       s.loans.length
-        ? `Te devem ${brl(s.loansOutstanding)}${s.loansOverdue > 0 ? ` (${brl(s.loansOverdue)} atrasado)` : ""}. Quando receber tudo, você fica com ${brl(s.balanceToday + s.loansOutstanding)}.`
+        ? `Te devem ${brl(s.loansOutstanding)}${s.loansOverdue > 0 ? ` (${brl(s.loansOverdue)} atrasado)` : ""}.`
         : "Ninguém te deve nada agora."
     );
+    if (s.owed.length) {
+      lines.push(`Você deve ${brl(s.owedOutstanding)}: ${s.owed.map((o) => `${brl(o.remaining)} pra ${o.personName}`).join(", ")}.`);
+    }
+    lines.push(`Seu de verdade (contas + a receber - o que deve): ${brl(s.balanceToday + s.loansOutstanding - s.owedOutstanding)}.`);
   }
   return lines.join("\n");
 }

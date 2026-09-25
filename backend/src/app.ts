@@ -67,6 +67,8 @@ export function createApp() {
   app.use(cors(allowedOrigins ? { origin: allowedOrigins } : undefined));
   // Default 100kb body limit is too small for a profile photo data URL
   // (base64 blows up ~33% over the raw image bytes).
+  // Extrato em PDF vem em base64 (até 4MB de arquivo => ~5.4MB de JSON).
+  app.use("/api/statements/preview", express.json({ limit: "6mb" }));
   app.use(express.json({ limit: "1mb" }));
   app.use("/api", apiLimiter);
   app.use("/api", readCacheScope);

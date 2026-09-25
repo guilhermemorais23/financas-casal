@@ -349,7 +349,7 @@ const SCREENS: { path: string; label: string }[] = [
   { path: "/cards", label: "Cartões" },
   { path: "/debts", label: "Dívidas" },
   { path: "/recurring-bills", label: "Contas fixas" },
-  { path: "/loans", label: "A receber" },
+  { path: "/loans", label: "Empréstimos" },
   { path: "/goals", label: "Metas" },
   { path: "/investments", label: "Investimentos" },
   { path: "/shopping", label: "Lista de compras" },

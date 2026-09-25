@@ -10,6 +10,7 @@ import {
   insertLoan,
   newLoanId,
   updateLoan,
+  type LoanDirection,
   type LoanRow,
   type LoanStatus,
 } from "./loans.repository";
@@ -19,9 +20,12 @@ export class InvalidLoanAccountError extends Error {}
 export class RepaymentTooLargeError extends Error {}
 export class RepaymentNotFoundError extends Error {}
 
-// Empréstimos ("a receber"): dinheiro que você emprestou pra família e
-// amigos. Emprestar de uma conta lança uma transferência (loanId) que tira o
-// dinheiro do saldo sem contar como gasto; cada "Recebi" lança a volta.
+// Empréstimos, nos dois sentidos:
+// - "Me devem" (lent): dinheiro que você emprestou. Emprestar de uma conta
+//   lança uma transferência (loanId) que tira o dinheiro do saldo sem contar
+//   como gasto; cada "Recebi" lança a volta.
+// - "Eu devo" (borrowed): dinheiro que alguém te emprestou. Entra na conta
+//   sem contar como renda; cada "Paguei" tira sem contar como gasto.
 // Empréstimos são pessoais -- só quem emprestou vê, mesmo num grupo
 // compartilhado. A exceção é o que saiu da Nossa Conta: o dinheiro era dos
 // dois, então os dois veem (só quem emprestou mexe).
@@ -166,7 +170,9 @@ export function summarize(loans: LoanWithTotals[], today: string): LoansSummary 
   };
 }
 
-export async function listLoans(userId: string): Promise<{ loans: LoanWithTotals[]; summary: LoansSummary }> {
+export async function listLoans(
+  userId: string
+): Promise<{ loans: LoanWithTotals[]; summary: LoansSummary; owedSummary: LoansSummary }> {
   const groupId = await requireGroupId(userId);
   const today = todayInBrazil();
   const [rows, accounts] = await Promise.all([findLoansByGroupId(groupId), findAccountsByGroupId(groupId)]);
@@ -175,7 +181,12 @@ export async function listLoans(userId: string): Promise<{ loans: LoanWithTotals
     .filter((loan) => loan.ownerUserId === userId || (loan.accountId !== null && jointIds.has(loan.accountId)))
     .map((loan) => withTotals(loan, today, userId))
     .sort(compareLoans);
-  return { loans, summary: summarize(loans, today) };
+  return {
+    loans,
+    // "Me devem" e "Eu devo" somados separado -- nunca um desconta do outro.
+    summary: summarize(loans.filter((loan) => loan.direction === "lent"), today),
+    owedSummary: summarize(loans.filter((loan) => loan.direction === "borrowed"), today),
+  };
 }
 
 // Todos os empréstimos de um grupo, com os totais -- pro job diário de
@@ -202,7 +213,7 @@ async function bookTransfer(
   groupId: string,
   account: AccountRow,
   loanId: string,
-  direction: "lend" | "receive",
+  direction: "lend" | "receive" | "borrow" | "repay",
   personName: string,
   amount: number,
   occurredAt: string
@@ -215,9 +226,15 @@ async function bookTransfer(
     categoryId: null,
     payerId: userId,
     createdBy: userId,
-    description: direction === "lend" ? `Emprestado para ${personName}` : `Recebido de ${personName}`,
+    description: {
+      lend: `Emprestado para ${personName}`,
+      receive: `Recebido de ${personName}`,
+      borrow: `Emprestado de ${personName}`,
+      repay: `Devolvido a ${personName}`,
+    }[direction],
     amount,
-    transactionType: direction === "lend" ? "expense" : "income",
+    // Sai da conta: emprestar e devolver. Entra: receber e pegar emprestado.
+    transactionType: direction === "lend" || direction === "repay" ? "expense" : "income",
     occurredAt,
     isPrivate: false,
     splitType: "none",
@@ -236,6 +253,7 @@ async function requireOwnLoan(userId: string, loanId: string) {
 }
 
 export interface CreateLoanInput {
+  direction?: LoanDirection;
   personName: string;
   amount: number;
   lentAt: string;
@@ -249,10 +267,12 @@ export async function createLoan(userId: string, input: CreateLoanInput): Promis
   const groupId = await requireGroupId(userId);
   const account = await resolveAccount(groupId, userId, input.accountId);
   const id = newLoanId();
+  const direction: LoanDirection = input.direction === "borrowed" ? "borrowed" : "lent";
   const transactionId = account
-    ? await bookTransfer(userId, groupId, account, id, "lend", input.personName, input.amount, input.lentAt)
+    ? await bookTransfer(userId, groupId, account, id, direction === "borrowed" ? "borrow" : "lend", input.personName, input.amount, input.lentAt)
     : null;
   const loan = await insertLoan(id, {
+    direction,
     groupId,
     ownerUserId: userId,
     personName: input.personName,
@@ -281,7 +301,16 @@ export async function addRepayment(userId: string, loanId: string, input: Repaym
   }
   const account = await resolveAccount(groupId, userId, input.accountId);
   const transactionId = account
-    ? await bookTransfer(userId, groupId, account, loan.id, "receive", loan.personName, input.amount, input.receivedAt)
+    ? await bookTransfer(
+        userId,
+        groupId,
+        account,
+        loan.id,
+        loan.direction === "borrowed" ? "repay" : "receive",
+        loan.personName,
+        input.amount,
+        input.receivedAt
+      )
     : null;
   const repayments = [
     ...loan.repayments,

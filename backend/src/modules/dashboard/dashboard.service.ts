@@ -138,6 +138,8 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     // Empréstimos: o que ainda vai voltar -- "Seu dinheiro" mostra isso como
     // "quando receber tudo" em cima do que está nas contas.
     loansSummary: loans.summary,
+    // "Eu devo": o que você pegou emprestado e ainda vai devolver.
+    owedSummary: loans.owedSummary,
     // "Vence logo": pagar e receber nos próximos 7 dias (e atrasados).
     upcoming,
     recent,

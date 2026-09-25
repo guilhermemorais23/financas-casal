@@ -19,6 +19,8 @@ interface Repayment {
 
 interface Loan {
   id: string;
+  // "lent" = me devem (emprestei); "borrowed" = eu devo (peguei emprestado).
+  direction?: "lent" | "borrowed";
   personName: string;
   amount: string;
   lentAt: string;
@@ -50,6 +52,8 @@ interface LoansSummary {
 interface LoansResponse {
   loans: Loan[];
   summary: LoansSummary;
+  // "Eu devo", somado à parte.
+  owedSummary?: LoansSummary;
   // Contas + guardado em cartões garantidos, igual ao Painel.
   moneyToday?: number;
   // Faturas, parcelas e contas fixas até o último prazo em aberto.
@@ -82,8 +86,14 @@ function daysBetween(fromIso: string, toIso: string): number {
 
 // "Vence em 5 dias" / "Atrasado há 3 dias" / "Sem prazo" -- o que importa
 // bater o olho em cada linha.
+type Side = "lent" | "borrowed";
+
+function sideOf(loan: Loan): Side {
+  return loan.direction === "borrowed" ? "borrowed" : "lent";
+}
+
 function dueLabel(loan: Loan): { text: string; tone: "bad" | "warn" | "muted" | "good" } {
-  if (loan.status === "paid") return { text: "Recebido", tone: "good" };
+  if (loan.status === "paid") return { text: sideOf(loan) === "borrowed" ? "Pago" : "Recebido", tone: "good" };
   if (loan.status === "forgiven") return { text: "Perdoado", tone: "muted" };
   if (!loan.dueDate) return { text: "Sem prazo", tone: "muted" };
   const days = daysBetween(todayISO(), loan.dueDate);
@@ -112,6 +122,10 @@ export function LoansPage() {
   const [editing, setEditing] = useState<Loan | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showFinished, setShowFinished] = useState(false);
+  // Me devem / Eu devo. O atalho do Painel abre "Eu devo" com ?lado=devo.
+  const [side, setSide] = useState<Side>(() =>
+    new URLSearchParams(window.location.search).get("lado") === "devo" ? "borrowed" : "lent"
+  );
 
   async function load() {
     try {
@@ -135,8 +149,18 @@ export function LoansPage() {
 
   const inAccounts = data?.moneyToday ?? accounts.reduce((sum, account) => sum + account.balance, 0);
   const outstanding = Number(data?.summary.outstanding ?? 0);
-  const openLoans = useMemo(() => (data?.loans ?? []).filter((loan) => loan.status === "open"), [data]);
-  const finishedLoans = useMemo(() => (data?.loans ?? []).filter((loan) => loan.status !== "open"), [data]);
+  const owed = Number(data?.owedSummary?.outstanding ?? 0);
+  const sideSummary = side === "lent" ? data?.summary : data?.owedSummary;
+  const openLoans = useMemo(
+    () => (data?.loans ?? []).filter((loan) => loan.status === "open" && sideOf(loan) === side),
+    [data, side]
+  );
+  const finishedLoans = useMemo(
+    () => (data?.loans ?? []).filter((loan) => loan.status !== "open" && sideOf(loan) === side),
+    [data, side]
+  );
+  const openCount = (which: Side) => (data?.loans ?? []).filter((loan) => loan.status === "open" && sideOf(loan) === which).length;
+  const owe = side === "borrowed";
   const personalAccount = accounts.find((a) => a.type === "personal" && a.ownerUserId === user?.id);
 
   // "Quando pagar, você fica com R$ X": o saldo subindo empréstimo por
@@ -173,9 +197,12 @@ export function LoansPage() {
 
   async function handleForgive(loan: Loan) {
     const ok = await confirm({
-      title: `Perdoar ${loan.personName}?`,
-      body: `Os ${formatCurrency(Number(loan.remaining))} que faltam saem do "a receber". Dá pra reabrir depois.`,
-      confirmLabel: "Perdoar",
+      title: sideOf(loan) === "borrowed" ? `${loan.personName} te perdoou?` : `Perdoar ${loan.personName}?`,
+      body:
+        sideOf(loan) === "borrowed"
+          ? `Os ${formatCurrency(Number(loan.remaining))} que faltam saem do "eu devo". Dá pra reabrir depois.`
+          : `Os ${formatCurrency(Number(loan.remaining))} que faltam saem do "me devem". Dá pra reabrir depois.`,
+      confirmLabel: sideOf(loan) === "borrowed" ? "Me perdoou" : "Perdoar",
       tone: "primary",
     });
     if (!ok) return;
@@ -200,7 +227,9 @@ export function LoansPage() {
     const ok = await confirm({
       title: "Excluir esse empréstimo?",
       body: loan.accountId
-        ? "O valor volta pro saldo da conta como se nunca tivesse saído, e os recebimentos somem do extrato."
+        ? sideOf(loan) === "borrowed"
+          ? "A entrada e os pagamentos somem do extrato e o saldo da conta volta a ser como antes."
+          : "O valor volta pro saldo da conta como se nunca tivesse saído, e os recebimentos somem do extrato."
         : "Ele some da lista. Nenhuma conta é alterada.",
       confirmLabel: "Excluir",
     });
@@ -216,14 +245,14 @@ export function LoansPage() {
 
   async function handleUndoRepayment(loan: Loan, repayment: Repayment) {
     const ok = await confirm({
-      title: "Desfazer esse recebimento?",
+      title: sideOf(loan) === "borrowed" ? "Desfazer esse pagamento?" : "Desfazer esse recebimento?",
       body: `${formatCurrency(Number(repayment.amount))} de ${shortDate(repayment.receivedAt)} volta a ficar em aberto.`,
       confirmLabel: "Desfazer",
     });
     if (!ok) return;
     try {
       replaceLoan(await apiRequest<Loan>(`/loans/${loan.id}/repayments/${repayment.id}`, { method: "DELETE", token }));
-      showToast("Recebimento desfeito", { variant: "info" });
+      showToast(sideOf(loan) === "borrowed" ? "Pagamento desfeito" : "Recebimento desfeito", { variant: "info" });
     } catch (err) {
       showToast("Não deu pra desfazer", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
     }
@@ -239,6 +268,8 @@ export function LoansPage() {
     const after = balanceAfter.get(loan.id);
     const atDue = loan.remainingAtDue ? Number(loan.remainingAtDue) : null;
     const ownerName = members.find((m) => m.id === loan.ownerUserId)?.displayName?.split(" ")[0] ?? "a outra pessoa";
+    const iOwe = sideOf(loan) === "borrowed";
+    const verb = iOwe ? "Paguei" : "Recebi";
     return (
       <li key={loan.id} className={`loan-row${loan.isOverdue ? " is-overdue" : ""}${loan.status !== "open" ? " is-done" : ""}`}>
         <div className="loan-row-head">
@@ -248,7 +279,7 @@ export function LoansPage() {
           onClick={() => setExpandedId(isExpanded ? null : loan.id)}
           aria-expanded={isExpanded}
         >
-          <span className="loan-avatar" aria-hidden="true">
+          <span className={`loan-avatar${iOwe ? " is-owe" : ""}`} aria-hidden="true">
             {loan.personName.charAt(0).toUpperCase()}
           </span>
           <span className="loan-info">
@@ -266,16 +297,16 @@ export function LoansPage() {
         </button>
         {loan.status === "open" && loan.isMine && (
           <button type="button" className="btn btn-primary btn-sm loan-receive" onClick={() => setReceiving(loan)}>
-            Recebi
+            {verb}
           </button>
         )}
         </div>
         {loan.status === "open" && received > 0 && (
           <div className="progress-track thin loan-progress">
-            <div className="progress-fill" style={{ width: `${percent}%` }} />
+            <div className={`progress-fill${iOwe ? " is-owe" : ""}`} style={{ width: `${percent}%` }} />
           </div>
         )}
-        {loan.status === "open" && after && accounts.length > 0 && (
+        {!iOwe && loan.status === "open" && after && accounts.length > 0 && (
           <p className="loan-projection">
             <Icon name="trend" />
             <span>
@@ -292,19 +323,21 @@ export function LoansPage() {
           </p>
         )}
         {!loan.isMine && (
-          <p className="loan-projection loan-projection-note">Registrado por {ownerName}. Saiu da Nossa Conta.</p>
+          <p className="loan-projection loan-projection-note">
+            Registrado por {ownerName}. {iOwe ? "Entrou na Nossa Conta." : "Saiu da Nossa Conta."}
+          </p>
         )}
 
         {isExpanded && (
           <div className="loan-details">
             <p className="loan-detail-line">
-              Emprestado em {shortDate(loan.lentAt)}
+              {iOwe ? "Pegou emprestado em" : "Emprestado em"} {shortDate(loan.lentAt)}
               {loan.dueDate ? ` · prazo ${shortDate(loan.dueDate)}` : " · sem prazo"}
             </p>
             {loan.interestRateMonthly && (
               <p className="loan-detail-line">
                 Juros de {String(loan.interestRateMonthly).replace(".", ",")}% ao mês: {formatCurrency(interest)} até hoje
-                (emprestou {formatCurrency(Number(loan.amount))}).
+                ({iOwe ? "pegou" : "emprestou"} {formatCurrency(Number(loan.amount))}).
               </p>
             )}
             {loan.note && <p className="loan-detail-line">{loan.note}</p>}
@@ -312,7 +345,9 @@ export function LoansPage() {
               <ul className="loan-repayments">
                 {loan.repayments.map((repayment) => (
                   <li key={repayment.id}>
-                    <span>Recebeu {formatCurrency(Number(repayment.amount))} · {shortDate(repayment.receivedAt)}</span>
+                    <span>
+                      {iOwe ? "Pagou" : "Recebeu"} {formatCurrency(Number(repayment.amount))} · {shortDate(repayment.receivedAt)}
+                    </span>
                     <button type="button" className="link-button" onClick={() => handleUndoRepayment(loan, repayment)}>
                       Desfazer
                     </button>
@@ -325,13 +360,13 @@ export function LoansPage() {
               {loan.status === "open" ? (
                 <>
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => setReceiving(loan)}>
-                    Recebi
+                    {verb}
                   </button>
                   <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(loan)}>
                     Editar
                   </button>
                   <button type="button" className="btn btn-outline btn-sm" onClick={() => handleForgive(loan)}>
-                    Perdoar
+                    {iOwe ? "Me perdoou" : "Perdoar"}
                   </button>
                 </>
               ) : (
@@ -358,12 +393,38 @@ export function LoansPage() {
         <BillsTabs />
         <div className="section-header">
           <div>
-            <h1>A receber</h1>
-            <p className="card-subtitle">Dinheiro que você emprestou e ainda vai voltar.</p>
+            <h1>Empréstimos</h1>
+            <p className="card-subtitle">
+              {owe ? "Dinheiro que você pegou emprestado e vai devolver." : "Dinheiro que você emprestou e ainda vai voltar."}
+            </p>
           </div>
-          <button type="button" className="btn btn-primary btn-sm" style={{ width: "auto" }} onClick={() => setIsCreateOpen(true)}>
-            + Emprestei
+          <button
+            type="button"
+            className={`btn btn-sm ${owe ? "btn-owe" : "btn-primary"}`}
+            style={{ width: "auto" }}
+            onClick={() => setIsCreateOpen(true)}
+          >
+            {owe ? "+ Peguei emprestado" : "+ Emprestei"}
           </button>
+        </div>
+
+        <div className="segmented loans-sides" role="tablist" aria-label="Lado">
+          {(["lent", "borrowed"] as const).map((which) => (
+            <button
+              key={which}
+              type="button"
+              role="tab"
+              aria-selected={side === which}
+              className={`segmented-option${side === which ? " active" : ""}`}
+              onClick={() => {
+                setSide(which);
+                setExpandedId(null);
+              }}
+            >
+              {which === "lent" ? "Me devem" : "Eu devo"}
+              {data && <span className="loans-side-count">{openCount(which)}</span>}
+            </button>
+          ))}
         </div>
 
         {error && <p className="alert">{error}</p>}
@@ -377,35 +438,39 @@ export function LoansPage() {
             <span className="loans-hero-label">+ Vão te pagar</span>
             <span className="loans-hero-value accent">{formatCurrency(outstanding)}</span>
           </div>
+          <div className="loans-hero-row">
+            <span className="loans-hero-label">− Você deve</span>
+            <span className="loans-hero-value owe">{formatCurrency(owed)}</span>
+          </div>
           <div className="loans-hero-divider" />
           <div className="loans-hero-row total">
-            <span className="loans-hero-label">Quando receber tudo</span>
-            <span className="loans-hero-total">{formatCurrency(inAccounts + outstanding)}</span>
+            <span className="loans-hero-label">Seu de verdade</span>
+            <span className="loans-hero-total">{formatCurrency(inAccounts + outstanding - owed)}</span>
           </div>
-          {data && data.summary.openCount > 0 && (
+          {sideSummary && sideSummary.openCount > 0 && (
             <div className="loans-chips">
-              {data.summary.overdueCount > 0 && (
-                <span className="loans-chip bad">
-                  Atrasado {formatCurrency(Number(data.summary.overdue))}
-                </span>
+              {sideSummary.overdueCount > 0 && (
+                <span className="loans-chip bad">Atrasado {formatCurrency(Number(sideSummary.overdue))}</span>
               )}
-              {Number(data.summary.dueSoon) > 0 && (
-                <span className="loans-chip warn">Próx. 30 dias {formatCurrency(Number(data.summary.dueSoon))}</span>
+              {Number(sideSummary.dueSoon) > 0 && (
+                <span className="loans-chip warn">Próx. 30 dias {formatCurrency(Number(sideSummary.dueSoon))}</span>
               )}
-              {Number(data.summary.noDueDate) > 0 && (
-                <span className="loans-chip">Sem prazo {formatCurrency(Number(data.summary.noDueDate))}</span>
+              {Number(sideSummary.noDueDate) > 0 && (
+                <span className="loans-chip">Sem prazo {formatCurrency(Number(sideSummary.noDueDate))}</span>
               )}
             </div>
           )}
         </div>
 
         <div className="card">
-          <p className="card-title">Em aberto</p>
+          <p className="card-title">{owe ? "Você deve pra" : "Te devem"}</p>
           {data && openLoans.length === 0 ? (
             <div className="loans-empty">
-              <p>Ninguém te deve nada agora.</p>
+              <p>{owe ? "Você não deve nada pra ninguém agora." : "Ninguém te deve nada agora."}</p>
               <p className="field-hint">
-                Emprestou pra alguém? Registre aqui e o PAR. mostra quanto você vai ter quando receber, com ou sem prazo.
+                {owe
+                  ? "Pegou dinheiro emprestado com alguém? Registre aqui: entra na conta sem contar como renda, e cada pagamento sai sem contar como gasto."
+                  : "Emprestou pra alguém? Registre aqui e o PAR. mostra quanto você vai ter quando receber, com ou sem prazo."}
               </p>
             </div>
           ) : (
@@ -426,6 +491,7 @@ export function LoansPage() {
 
       {isCreateOpen && (
         <CreateLoanModal
+          direction={side}
           accounts={accounts}
           defaultAccountId={personalAccount?.id ?? NO_ACCOUNT}
           onClose={() => setIsCreateOpen(false)}
@@ -487,11 +553,13 @@ function AccountSelect({
 }
 
 function CreateLoanModal({
+  direction,
   accounts,
   defaultAccountId,
   onClose,
   onCreated,
 }: {
+  direction: Side;
   accounts: AccountRow[];
   defaultAccountId: string;
   onClose: () => void;
@@ -515,7 +583,8 @@ function CreateLoanModal({
     event.preventDefault();
     const parsed = parseAmount(amount);
     const rate = hasInterest ? Number(interestRate.replace(",", ".")) : null;
-    if (!personName.trim()) return setError("Pra quem você emprestou?");
+    const owe = direction === "borrowed";
+    if (!personName.trim()) return setError(owe ? "Quem te emprestou?" : "Pra quem você emprestou?");
     if (rate !== null && !(rate > 0 && rate <= 20)) return setError("Juros entre 0,1% e 20% ao mês.");
     if (!(parsed > 0)) return setError("Informe um valor válido.");
     if (hasDueDate && !dueDate) return setError("Escolha o prazo ou desmarque \"Tem prazo\".");
@@ -526,6 +595,7 @@ function CreateLoanModal({
         method: "POST",
         token,
         body: {
+          direction,
           personName: personName.trim(),
           amount: parsed,
           lentAt,
@@ -536,7 +606,11 @@ function CreateLoanModal({
         },
       });
       showToast("Empréstimo registrado", {
-        description: accountId ? "Saiu da conta sem contar como gasto" : "Nenhuma conta foi alterada",
+        description: !accountId
+          ? "Nenhuma conta foi alterada"
+          : owe
+            ? "Entrou na conta sem contar como renda"
+            : "Saiu da conta sem contar como gasto",
       });
       onCreated();
     } catch (err) {
@@ -545,18 +619,21 @@ function CreateLoanModal({
     }
   }
 
+  const owe = direction === "borrowed";
   return (
     <Sheet onClose={onClose}>
-      <h1>Emprestei dinheiro</h1>
-      <p className="card-subtitle">Não conta como gasto. É seu e vai voltar.</p>
+      <h1>{owe ? "Peguei emprestado" : "Emprestei dinheiro"}</h1>
+      <p className="card-subtitle">
+        {owe ? "Não conta como renda. É de outra pessoa e vai voltar pra ela." : "Não conta como gasto. É seu e vai voltar."}
+      </p>
       <form onSubmit={handleSubmit}>
         <div className="field">
-          <label htmlFor="loan-person">Pra quem</label>
+          <label htmlFor="loan-person">{owe ? "De quem" : "Pra quem"}</label>
           <input
             id="loan-person"
             value={personName}
             onChange={(e) => setPersonName(e.target.value)}
-            placeholder="Mãe, João, Tia Rita..."
+            placeholder={owe ? "Pai, Carlos do trabalho..." : "Mãe, João, Tia Rita..."}
             maxLength={80}
             autoFocus
           />
@@ -577,13 +654,13 @@ function CreateLoanModal({
         </label>
         {hasDueDate && (
           <div className="field">
-            <label htmlFor="loan-due">Devolve até</label>
+            <label htmlFor="loan-due">{owe ? "Devolvo até" : "Devolve até"}</label>
             <input id="loan-due" type="date" min={lentAt} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
         )}
         <label className="checkbox-field">
           <input type="checkbox" checked={hasInterest} onChange={(e) => setHasInterest(e.target.checked)} />
-          <span>Cobrar juros</span>
+          <span>{owe ? "Tem juros" : "Cobrar juros"}</span>
         </label>
         {hasInterest && (
           <div className="field">
@@ -599,13 +676,13 @@ function CreateLoanModal({
           </div>
         )}
         <div className="field">
-          <label htmlFor="loan-account">Saiu de qual conta</label>
+          <label htmlFor="loan-account">{owe ? "Entrou em qual conta" : "Saiu de qual conta"}</label>
           <AccountSelect
             id="loan-account"
             accounts={accounts}
             value={accountId}
             onChange={setAccountId}
-            noneLabel="Não tirar de conta (já saiu antes)"
+            noneLabel={owe ? "Não entrou em conta (dinheiro vivo ou antes)" : "Não tirar de conta (já saiu antes)"}
           />
         </div>
         <div className="field">
@@ -663,9 +740,17 @@ function ReceiveModal({
         token,
         body: { amount: parsed, receivedAt, accountId: accountId || null },
       });
-      showToast(updated.status === "paid" ? `${loan.personName} quitou tudo` : "Recebimento anotado", {
-        description: updated.status === "paid" ? undefined : `Falta ${formatCurrency(Number(updated.remaining))}`,
-      });
+      const iOwe = sideOf(loan) === "borrowed";
+      showToast(
+        updated.status === "paid"
+          ? iOwe
+            ? `Você quitou ${loan.personName}`
+            : `${loan.personName} quitou tudo`
+          : iOwe
+            ? "Pagamento anotado"
+            : "Recebimento anotado",
+        { description: updated.status === "paid" ? undefined : `Falta ${formatCurrency(Number(updated.remaining))}` }
+      );
       onSaved(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar");
@@ -673,14 +758,17 @@ function ReceiveModal({
     }
   }
 
+  const iOwe = sideOf(loan) === "borrowed";
   return (
     <Sheet onClose={onClose}>
-      <h1>Recebi de {loan.personName}</h1>
-      <p className="card-subtitle">Falta {formatCurrency(remaining)}.</p>
+      <h1>{iOwe ? `Paguei ${loan.personName}` : `Recebi de ${loan.personName}`}</h1>
+      <p className="card-subtitle">
+        Falta {formatCurrency(remaining)}. {iOwe ? "Não entra como gasto: você está devolvendo." : "Não entra como renda: o dinheiro já era seu."}
+      </p>
       <form onSubmit={handleSubmit}>
-        <div className="segmented" role="radiogroup" aria-label="Quanto recebeu">
+        <div className="segmented" role="radiogroup" aria-label={iOwe ? "Quanto pagou" : "Quanto recebeu"}>
           <button type="button" role="radio" aria-checked={!isPartial} className={`segmented-option${!isPartial ? " active" : ""}`} onClick={() => setIsPartial(false)}>
-            Recebeu tudo
+            {iOwe ? "Paguei tudo" : "Recebeu tudo"}
           </button>
           <button type="button" role="radio" aria-checked={isPartial} className={`segmented-option${isPartial ? " active" : ""}`} onClick={() => setIsPartial(true)}>
             Só uma parte
@@ -699,13 +787,13 @@ function ReceiveModal({
           </div>
         </div>
         <div className="field">
-          <label htmlFor="repay-account">Entrou em qual conta</label>
+          <label htmlFor="repay-account">{iOwe ? "Saiu de qual conta" : "Entrou em qual conta"}</label>
           <AccountSelect
             id="repay-account"
             accounts={accounts}
             value={accountId}
             onChange={setAccountId}
-            noneLabel="Não entrou em conta (dinheiro vivo)"
+            noneLabel={iOwe ? "Não saiu de conta (dinheiro vivo)" : "Não entrou em conta (dinheiro vivo)"}
           />
         </div>
         {error && <p className="alert">{error}</p>}
@@ -714,7 +802,7 @@ function ReceiveModal({
             Cancelar
           </button>
           <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
-            {isSubmitting ? "Salvando..." : isPartial ? "Salvar" : `Recebi ${formatCurrency(remaining)}`}
+            {isSubmitting ? "Salvando..." : isPartial ? "Salvar" : `${iOwe ? "Paguei" : "Recebi"} ${formatCurrency(remaining)}`}
           </button>
         </div>
       </form>
@@ -765,11 +853,11 @@ function EditLoanModal({ loan, onClose, onSaved }: { loan: Loan; onClose: () => 
     <Sheet onClose={onClose}>
       <h1>Editar empréstimo</h1>
       <p className="card-subtitle">
-        {formatCurrency(Number(loan.amount))} emprestados em {shortDate(loan.lentAt)}.
+        {formatCurrency(Number(loan.amount))} {sideOf(loan) === "borrowed" ? "pegos emprestados" : "emprestados"} em {shortDate(loan.lentAt)}.
       </p>
       <form onSubmit={handleSubmit}>
         <div className="field">
-          <label htmlFor="edit-loan-person">Pra quem</label>
+          <label htmlFor="edit-loan-person">{sideOf(loan) === "borrowed" ? "De quem" : "Pra quem"}</label>
           <input id="edit-loan-person" value={personName} onChange={(e) => setPersonName(e.target.value)} maxLength={80} />
         </div>
         <label className="checkbox-field">

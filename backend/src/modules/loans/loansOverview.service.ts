@@ -32,6 +32,12 @@ export async function getLoansOverview(userId: string): Promise<LoansOverview> {
   return {
     ...list,
     moneyToday: (accountsCents + savedInSecuredCardsCents(cards)) / 100,
-    paymentsAhead: paymentsUntil({ cards, debts, bills, today, until: lastDue }),
+    paymentsAhead: [
+      ...paymentsUntil({ cards, debts, bills, today, until: lastDue }),
+      // "Eu devo" com prazo: também vai sair da conta.
+      ...list.loans
+        .filter((loan) => loan.direction === "borrowed" && loan.status === "open" && loan.dueDate && loan.dueDate <= lastDue)
+        .map((loan) => ({ dueDate: loan.dueDate!, amount: Number(loan.remaining) })),
+    ].sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1)),
   };
 }
