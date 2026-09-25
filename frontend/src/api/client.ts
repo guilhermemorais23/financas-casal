@@ -50,6 +50,11 @@ export async function apiRequest<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    // Recurso do Premium: avisa o app (components/PremiumPrompt abre a janela
+    // "Isso é do Premium") além de devolver o erro pra tela que chamou.
+    if (response.status === 402 && data?.code === "premium_required") {
+      window.dispatchEvent(new CustomEvent("par:premium-required"));
+    }
     throw new ApiError(data?.error ?? "Request failed", response.status);
   }
 
@@ -73,6 +78,9 @@ export async function apiDownload(path: string, token: string | null, filename: 
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
+    if (response.status === 402 && data?.code === "premium_required") {
+      window.dispatchEvent(new CustomEvent("par:premium-required"));
+    }
     throw new ApiError(data?.error ?? "Request failed", response.status);
   }
 

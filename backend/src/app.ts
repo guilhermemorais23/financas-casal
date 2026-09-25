@@ -3,6 +3,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import { adminRouter } from "./modules/admin/admin.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
+import { billingRouter } from "./modules/billing/billing.routes";
 import { alertsRouter } from "./modules/alerts/alerts.routes";
 import { assistantRouter } from "./modules/assistant/assistant.routes";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
@@ -104,6 +105,7 @@ export function createApp() {
   app.use("/api/statements", statementsRouter);
   app.use("/api/feedback", feedbackRouter);
   app.use("/api/announcements", announcementsRouter);
+  app.use("/api/billing", billingRouter);
   app.use("/api/loans", loansRouter);
   app.use("/api/month-close", monthCloseRouter);
   app.use("/api/public/shares", publicSharesRouter);

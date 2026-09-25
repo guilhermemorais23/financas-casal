@@ -14,7 +14,7 @@ export function PrivacyPage() {
       <Brand />
       <article className="card legal-card">
         <h1>Política de privacidade</h1>
-        <p className="card-subtitle">Atualizada em 23 de setembro de 2026</p>
+        <p className="card-subtitle">Atualizada em 25 de setembro de 2026</p>
 
         <p>
           O PAR. é um app para organizar as finanças de casais e grupos pequenos. Esta página explica quais dados a
@@ -61,10 +61,24 @@ export function PrivacyPage() {
           </li>
           <li>
             <strong>Serviços que fazem o app funcionar:</strong> Google Firebase (login e banco de dados), Render
-            (servidor), Gmail (envio de emails) e, só se você conectar, Telegram ou WhatsApp (assistente por
-            mensagem). Eles tratam os dados apenas para prestar esse serviço.
+            (servidor), Brevo (envio de emails), Google Gemini (assistente com inteligência artificial, só para quem
+            usa), Asaas (pagamento do Premium, só para quem assina) e, só se você conectar, Telegram ou WhatsApp
+            (assistente por mensagem). Eles tratam os dados apenas para prestar esse serviço.
           </li>
         </ul>
+
+        <h2>Pagamentos (Premium)</h2>
+        <p>
+          Quem assina o Premium paga pelo <strong>Asaas</strong>, que processa o pagamento como responsável por ele.
+          Para emitir a cobrança, o Asaas precisa do seu nome, email e CPF ou CNPJ (exigência das regras de pagamento
+          no Brasil). O CPF/CNPJ é enviado direto ao Asaas e <strong>não fica guardado no PAR.</strong>; o número
+          do cartão é digitado na página do próprio Asaas e nunca passa pelo PAR.
+        </p>
+        <p>
+          No PAR. ficam só os dados da assinatura: plano, situação (em teste, ativa, cancelada), datas, quem assinou
+          e a versão dos termos aceita. Eles são mantidos enquanto a conta existir e, depois, pelo tempo que a lei
+          exigir para comprovar pagamentos.
+        </p>
 
         <h2>Seus direitos (LGPD)</h2>
         <p>

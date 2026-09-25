@@ -60,6 +60,7 @@ const ADMIN_SUBLINKS = [
   { section: "overview", label: "Visão geral" },
   { section: "feedback", label: "Feedback" },
   { section: "announcements", label: "Novidades" },
+  { section: "billing", label: "Assinaturas" },
   { section: "diagnostics", label: "Diagnóstico" },
   { section: "logs", label: "Logs" },
 ];

@@ -21,6 +21,7 @@ import { createTransaction } from "../transactions/transactions.service";
 import { currentMonthParam, parseMonthRange } from "../../utils/month";
 import { todayInBrazil } from "../loans/loans.service";
 import { logError } from "../../utils/errorLog";
+import { isPremiumUser } from "../billing/billing.service";
 import { answerFromSnapshot, brl, buildMonthSnapshot, parseQuickEntry, snapshotAsText, type MonthSnapshot } from "./monthSnapshot";
 
 export class AssistantNotConfiguredError extends Error {}
@@ -163,6 +164,13 @@ Responda APENAS com um JSON puro (sem markdown, sem texto fora do JSON), em um d
 {"intent":"chat","reply":"resposta curta, direta, em português do Brasil, baseada SOMENTE nos dados reais acima"}
 
 Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento real (ex: "gastei 50 no mercado", "recebi 200 de salário"). Use "set_financial_goal" quando a pessoa disser qual é o objetivo financeiro dela (ex: "quero quitar minhas dívidas até dezembro", "meu objetivo é juntar pra uma viagem"). Use "set_savings" quando ela disser quanto já tem guardado/reserva (ex: "tenho 5000 guardado"). Use "chat" pra perguntas, conversa, pedido de análise ou qualquer coisa que não seja um lançamento -- responda com base nos dados reais acima, nunca invente um gasto/categoria/dívida que não esteja listado. Se fizer sentido, termine com uma pergunta curta pra entender melhor o que a pessoa quer (ex: se não há meta cadastrada, pergunte se ela quer criar uma; se há dívida em aberto, pergunte se o foco agora é pagar ela ou economizar mais primeiro).`;
+
+  // Sem Premium: nada de IA (é o que custa por mensagem). Continua lançando
+  // "gastei 50 no mercado" e respondendo com os números, como sem chave.
+  if (!(await isPremiumUser(userId))) {
+    const answer = await basicAnswer(userId, personalAccount?.id ?? null, text, audio !== undefined, financeContext.snapshot);
+    return `${answer}\n\nCom o Premium eu entendo qualquer mensagem e áudio e faço análises do mês.`;
+  }
 
   let raw: string;
   try {
@@ -345,6 +353,8 @@ ${financeContext.text}
 Escreva uma única mensagem curta (1-2 frases, sem emojis, sem saudação genérica tipo "olá") puxando assunto com base em algo real dos dados acima: a categoria que mais pesou, uma dívida em aberto, o progresso de uma meta, ou -- se faltar objetivo financeiro e reserva -- pergunte isso. Termine com uma pergunta curta convidando a pessoa a continuar. Responda só com o texto da mensagem, sem JSON, sem aspas.`;
 
   try {
+    // Sem Premium, a abertura vem pronta dos números (sem IA).
+    if (!(await isPremiumUser(userId))) throw new AssistantNotConfiguredError();
     return await askGemini(prompt);
   } catch (err) {
     if (!(err instanceof AssistantNotConfiguredError)) logError("assistant-greeting", err, { userId });

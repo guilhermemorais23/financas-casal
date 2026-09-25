@@ -51,7 +51,7 @@ export function AnnouncementContent({ announcement }: { announcement: Pick<Annou
 }
 
 // Mesmas telas onde a apresentação de boas-vindas não aparece.
-const HIDDEN_ON = ["/login", "/register", "/privacidade", "/r/", "/invite/", "/group-setup"];
+const HIDDEN_ON = ["/login", "/register", "/privacidade", "/termos", "/r/", "/invite/", "/group-setup"];
 
 // Pop-ups mandados pelo Admin > Novidades: um de cada vez, cada um aparece
 // uma vez só pra cada pessoa (o "já vi" fica no servidor, vale pra todos os

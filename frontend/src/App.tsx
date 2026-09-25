@@ -6,6 +6,7 @@ import { PageSkeleton } from "./components/Skeleton";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import { ToastProvider } from "./components/ToastProvider";
 import { AnnouncementPopup } from "./components/AnnouncementPopup";
+import { PremiumPrompt } from "./components/PremiumPrompt";
 import { WelcomeTour } from "./components/WelcomeTour";
 import { importWithRecovery } from "./utils/appRecovery";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
@@ -54,6 +55,8 @@ function preloadPages() {
 const SharedReportPage = lazy(() => importWithRecovery(() => import("./pages/SharedReportPage")));
 const RegisterPage = namedLazy(() => import("./pages/RegisterPage"), "RegisterPage");
 const PrivacyPage = namedLazy(() => import("./pages/PrivacyPage"), "PrivacyPage");
+const TermsPage = namedLazy(() => import("./pages/TermsPage"), "TermsPage");
+const PlanPage = namedLazy(() => import("./pages/PlanPage"), "PlanPage");
 const GroupSetupPage = namedLazy(() => import("./pages/GroupSetupPage"), "GroupSetupPage");
 const DashboardPage = namedLazy(() => import("./pages/DashboardPage"), "DashboardPage");
 const ParPage = namedLazy(() => import("./pages/ParPage"), "ParPage");
@@ -83,6 +86,7 @@ function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/r/:token" element={<SharedReportPage />} />
             <Route path="/privacidade" element={<PrivacyPage />} />
+            <Route path="/termos" element={<TermsPage />} />
             <Route
               path="/group-setup"
               element={
@@ -165,6 +169,14 @@ function App() {
               }
             />
             <Route
+              path="/plano"
+              element={
+                <ProtectedRoute requireGroup>
+                  <PlanPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin"
               element={
                 <ProtectedRoute requireGroup>
@@ -200,6 +212,7 @@ function App() {
         </Suspense>
         <WelcomeTour />
         <AnnouncementPopup />
+        <PremiumPrompt />
         </ErrorBoundary>
       </AuthProvider>
       </ConfirmProvider>

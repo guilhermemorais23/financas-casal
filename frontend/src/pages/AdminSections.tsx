@@ -662,3 +662,231 @@ export function AdminAnnouncements() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Admin > Assinaturas: como está a cobrança, quem assina e cortesias.
+// ---------------------------------------------------------------------------
+
+type AccessStateName = "trial" | "active" | "past_due" | "canceled_active" | "courtesy" | "free";
+
+interface BillingAdmin {
+  config: {
+    enabled: boolean;
+    asaasConfigured: boolean;
+    asaasEnv: "sandbox" | "production";
+    webhookConfigured: boolean;
+    prices: { monthly: number; yearly: number };
+    trialDays: number;
+  };
+  totals: { active: number; pastDue: number; canceledActive: number; trial: number; courtesy: number; free: number; mrr: number };
+  groups: {
+    groupId: string;
+    members: string[];
+    access: { premium: boolean; state: AccessStateName; endsAt: number | null };
+    plan: "monthly" | "yearly" | null;
+    payerName: string | null;
+    courtesyNote: string | null;
+  }[];
+  events: { id: string; event: string; groupId: string | null; value: number | null; receivedAt: number }[];
+  actions: { id: string; adminEmail: string; action: string; groupId: string | null; detail: string; at: number }[];
+}
+
+const STATE_LABELS: Record<AccessStateName, string> = {
+  trial: "Em teste",
+  active: "Assinante",
+  past_due: "Pagamento atrasado",
+  canceled_active: "Cancelou (ainda vale)",
+  courtesy: "Cortesia",
+  free: "Grátis",
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  PAYMENT_CONFIRMED: "Pagamento confirmado",
+  PAYMENT_RECEIVED: "Pagamento recebido",
+  PAYMENT_OVERDUE: "Pagamento atrasado",
+  PAYMENT_REFUNDED: "Reembolso",
+  PAYMENT_CHARGEBACK_REQUESTED: "Contestação no cartão",
+  SUBSCRIPTION_DELETED: "Assinatura cancelada",
+  SUBSCRIPTION_INACTIVATED: "Assinatura desativada",
+};
+
+function brl(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export function AdminBilling() {
+  const { token } = useAuth();
+  const { showToast } = useToast();
+  const confirm = useConfirm();
+  const [data, setData] = useState<BillingAdmin | null>(null);
+  const [filter, setFilter] = useState<AccessStateName | "all">("all");
+
+  function load() {
+    apiRequest<BillingAdmin>("/billing/admin", { token })
+      .then(setData)
+      .catch(() => setData(null));
+  }
+  useEffect(load, [token]);
+
+  async function grant(groupId: string, days: number | null) {
+    const ok = await confirm({
+      title: days ? `Dar ${days} dias de Premium?` : "Dar Premium sem prazo?",
+      body: "O grupo passa a ter tudo do Premium sem pagar. Fica registrado nas ações do admin.",
+      confirmLabel: "Dar cortesia",
+      tone: "primary",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest("/billing/admin/courtesy", { method: "POST", token, body: { groupId, days, note: "" } });
+      showToast("Cortesia dada");
+      load();
+    } catch (err) {
+      showToast("Não foi possível", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    }
+  }
+
+  async function revoke(groupId: string) {
+    try {
+      await apiRequest("/billing/admin/courtesy/revoke", { method: "POST", token, body: { groupId } });
+      showToast("Cortesia removida");
+      load();
+    } catch (err) {
+      showToast("Não foi possível", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    }
+  }
+
+  if (!data) return <p className="empty-state">Carregando...</p>;
+  const { config, totals } = data;
+  const visible = filter === "all" ? data.groups : data.groups.filter((g) => g.access.state === filter);
+
+  return (
+    <div className="page-stack admin-billing">
+      <div className="card">
+        <p className="card-title">Configuração</p>
+        <ul className="diag-list">
+          <Check ok={config.enabled} label="Cobrança ligada" hint="BILLING_ENABLED=true no Render. Desligada, todo mundo tem tudo." />
+          <Check ok={config.asaasConfigured} label={`Chave do Asaas (${config.asaasEnv === "production" ? "produção" : "testes"})`} hint="ASAAS_API_KEY e ASAAS_ENV" />
+          <Check ok={config.webhookConfigured} label="Webhook do Asaas" hint="ASAAS_WEBHOOK_TOKEN, o mesmo token cadastrado no painel do Asaas" />
+        </ul>
+        <p className="field-hint">
+          Preços: {brl(config.prices.monthly)}/mês ou {brl(config.prices.yearly)}/ano · teste de {config.trialDays} dias.
+        </p>
+      </div>
+
+      <div className="stat-row wrap">
+        <div className="stat-box tone-accent">
+          <p className="label">Receita por mês (MRR)</p>
+          <p className="value-sm">{brl(totals.mrr)}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Assinantes</p>
+          <p className="value-sm">{totals.active + totals.pastDue}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Em teste</p>
+          <p className="value-sm">{totals.trial}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Atrasados</p>
+          <p className="value-sm">{totals.pastDue}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Cortesia</p>
+          <p className="value-sm">{totals.courtesy}</p>
+        </div>
+        <div className="stat-box">
+          <p className="label">Grátis</p>
+          <p className="value-sm">{totals.free}</p>
+        </div>
+      </div>
+
+      <div className="card">
+        <p className="card-title">Grupos</p>
+        <div className="admin-feedback-filters announce-row">
+          {(["all", "active", "past_due", "trial", "courtesy", "canceled_active", "free"] as const).map((f) => (
+            <button key={f} type="button" className={`chat-kind-pick${filter === f ? " active" : ""}`} onClick={() => setFilter(f)}>
+              {f === "all" ? "Todos" : STATE_LABELS[f]}
+            </button>
+          ))}
+        </div>
+        {visible.length === 0 ? (
+          <p className="empty-state">
+            {data.groups.length === 0 ? "Nenhum grupo ainda. Eles aparecem aqui quando a cobrança está ligada e alguém abre o app." : "Nenhum grupo nesse filtro."}
+          </p>
+        ) : (
+          <ul className="announce-sent-list">
+            {visible.map((g) => (
+              <li key={g.groupId}>
+                <span className="announce-sent-info">
+                  <strong className="text-truncate">{g.members.join(" e ") || "Grupo sem nomes"}</strong>
+                  <small>
+                    {STATE_LABELS[g.access.state]}
+                    {g.plan ? ` · ${g.plan === "yearly" ? "anual" : "mensal"}` : ""}
+                    {g.access.endsAt ? ` · até ${new Date(g.access.endsAt).toLocaleDateString("pt-BR")}` : ""}
+                    {g.payerName ? ` · paga: ${g.payerName}` : ""}
+                  </small>
+                </span>
+                {g.access.state === "courtesy" ? (
+                  <button type="button" className="link-button" onClick={() => revoke(g.groupId)}>
+                    Tirar cortesia
+                  </button>
+                ) : (
+                  <span className="admin-grant">
+                    <button type="button" className="link-button" onClick={() => grant(g.groupId, 30)}>
+                      +30 dias
+                    </button>
+                    <button type="button" className="link-button" onClick={() => grant(g.groupId, null)}>
+                      Sem prazo
+                    </button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card">
+        <p className="card-title">Últimos eventos do Asaas</p>
+        {data.events.length === 0 ? (
+          <p className="empty-state">Nenhum pagamento ainda.</p>
+        ) : (
+          <ul className="announce-sent-list">
+            {data.events.map((ev) => (
+              <li key={ev.id}>
+                <span className="announce-sent-info">
+                  <strong>{EVENT_LABELS[ev.event] ?? ev.event}</strong>
+                  <small>
+                    {when(ev.receivedAt)}
+                    {ev.value !== null ? ` · ${brl(ev.value)}` : ""}
+                  </small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card">
+        <p className="card-title">Ações do admin</p>
+        {data.actions.length === 0 ? (
+          <p className="empty-state">Nenhuma ação registrada.</p>
+        ) : (
+          <ul className="announce-sent-list">
+            {data.actions.map((a) => (
+              <li key={a.id}>
+                <span className="announce-sent-info">
+                  <strong>{a.action === "grant_courtesy" ? "Deu cortesia" : a.action === "revoke_courtesy" ? "Tirou cortesia" : a.action}</strong>
+                  <small>
+                    {a.adminEmail} · {when(a.at)}
+                    {a.detail ? ` · ${a.detail}` : ""}
+                  </small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}

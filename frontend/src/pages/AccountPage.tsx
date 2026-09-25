@@ -351,6 +351,14 @@ export function AccountPage() {
       <div className="page-stack">
         <h1>Conta</h1>
 
+        <Link to="/plano" className="card plan-link">
+          <span>
+            <span className="card-title">Plano</span>
+            <span className="card-subtitle">Grátis ou Premium, assinatura e cancelamento</span>
+          </span>
+          <Icon name="chevron" className="icon plan-link-chevron" />
+        </Link>
+
         <div className="card">
           <p className="card-title">Grupo</p>
           <ul className="member-list">
@@ -685,7 +693,7 @@ export function AccountPage() {
         </div>
 
         <p className="app-version-footer">
-          PAR. v{__APP_VERSION__} · <Link to="/privacidade">Privacidade</Link>
+          PAR. v{__APP_VERSION__} · <Link to="/termos">Termos</Link> · <Link to="/privacidade">Privacidade</Link>
         </p>
       </div>
     </AppLayout>

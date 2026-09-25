@@ -7463,3 +7463,172 @@ select {
     position: static;
   }
 }
+
+/* Plano (pages/PlanPage) ---------------------------------------------------- */
+.plan-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.plan-link > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.plan-link-chevron {
+  width: 18px;
+  height: 18px;
+  transform: rotate(-90deg);
+  color: var(--color-text-muted);
+}
+
+.plan-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.plan-status-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--color-bg-soft);
+  color: var(--color-text-muted);
+}
+
+.plan-status.is-premium .plan-status-icon {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.plan-status-icon .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.plan-compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.plan-compare .card,
+.plan-page .card {
+  max-width: none;
+}
+
+.plan-premium {
+  border: 1.5px solid var(--color-primary);
+}
+
+.plan-price {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-price small {
+  margin-left: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.plan-features,
+.plan-rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.plan-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  line-height: 1.4;
+}
+
+.plan-features .icon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-primary);
+}
+
+.plan-checkout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.plan-checkout .field {
+  margin-bottom: 0;
+}
+
+.plan-accept {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.plan-accept input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.plan-rules li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.plan-rules li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.plan-cancel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.plan-cancel-actions .btn {
+  margin-top: 0;
+}
+
+.admin-grant {
+  display: flex;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.admin-billing .card {
+  max-width: none;
+}
