@@ -677,7 +677,7 @@ export function DashboardPage() {
       <div className="dashboard">
         <div className="section-header" style={{ alignItems: "flex-start" }}>
           <div className="dashboard-greeting">
-            <h1>Olá, {user?.displayName?.split(" ")[0]} 👋</h1>
+            <h1>Olá, {user?.displayName?.split(" ")[0]}</h1>
             <p className="card-subtitle">{monthLabel}</p>
             <FinancialHealthBadge monthlyIncome={income} monthlyExpense={expense} />
           </div>
@@ -694,8 +694,6 @@ export function DashboardPage() {
 
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
         <div className="stat-card wide">
-          <span className="stat-card-circle" />
-          <span className="stat-card-circle stat-card-circle-2" />
           {/* O número grande é o que sobra no mês (entrou - saiu), não o
               saldo acumulado das contas: quem lança só o salário todo mês e
               não lança todo gasto veria o saldo crescer mês a mês sem ter
@@ -858,8 +856,6 @@ export function DashboardPage() {
               </div>
             )}
             <div className={`card budget-card${cap ? "" : " is-empty"}`}>
-              <span className="stat-card-circle" />
-              <span className="stat-card-circle stat-card-circle-2" />
               <div className="budget-header">
                 <p className="card-title">Orçamento do mês</p>
                 {!cap && (
@@ -874,7 +870,7 @@ export function DashboardPage() {
                     percent={budgetPercent}
                     size={92}
                     strokeWidth={9}
-                    trackColor="rgba(247, 239, 229, 0.25)"
+                    trackColor="var(--tan-track)"
                     color={
                       budgetSeverity === "over"
                         ? "var(--status-critical)"

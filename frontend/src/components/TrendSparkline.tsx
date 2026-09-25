@@ -54,13 +54,13 @@ export function TrendSparkline({ points }: { points: MonthlyNetPoint[] }) {
     >
       <defs>
         <linearGradient id="hero-trend-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--cream)" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="var(--cream)" stopOpacity="0" />
+          <stop offset="0%" stopColor="currentColor" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={areaPath} fill="url(#hero-trend-fill)" stroke="none" />
-      <path d={path} fill="none" stroke="var(--cream)" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-      {lastDot && <circle cx={lastDot.x} cy={lastDot.y} r={2.5} fill="var(--cream)" />}
+      <path d={path} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+      {lastDot && <circle cx={lastDot.x} cy={lastDot.y} r={2.5} fill="currentColor" />}
     </svg>
   );
 }
