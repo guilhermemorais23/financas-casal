@@ -23,6 +23,13 @@ function isPositiveAmount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 && value < 100_000_000;
 }
 
+// % ao mês: absent/null/0 = sem juros; otherwise 0.01–20.
+function readInterest(value: unknown): number | null | "invalid" {
+  if (value === undefined || value === null || value === 0) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 20) return "invalid";
+  return Math.round(value * 100) / 100;
+}
+
 function optionalText(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim().slice(0, max);
@@ -64,7 +71,12 @@ export async function listLoansHandler(req: Request, res: Response) {
 }
 
 export async function createLoanHandler(req: Request, res: Response) {
-  const { personName, amount, lentAt, dueDate, note, accountId } = req.body ?? {};
+  const { personName, amount, lentAt, dueDate, note, accountId, interestRateMonthly } = req.body ?? {};
+  const interest = readInterest(interestRateMonthly);
+  if (interest === "invalid") {
+    res.status(400).json({ error: "Juros entre 0 e 20% ao mês." });
+    return;
+  }
   const name = optionalText(personName, 80);
   if (!name) {
     res.status(400).json({ error: "Pra quem você emprestou?" });
@@ -94,6 +106,7 @@ export async function createLoanHandler(req: Request, res: Response) {
       dueDate: isIsoDate(dueDate) ? dueDate : null,
       note: optionalText(note, 300),
       accountId: typeof accountId === "string" && accountId ? accountId : null,
+      interestRateMonthly: interest,
     });
     res.status(201).json(loan);
   } catch (err) {
@@ -132,7 +145,12 @@ export async function removeRepaymentHandler(req: Request, res: Response) {
 }
 
 export async function updateLoanHandler(req: Request, res: Response) {
-  const { personName, dueDate, note, status } = req.body ?? {};
+  const { personName, dueDate, note, status, interestRateMonthly } = req.body ?? {};
+  const interest = interestRateMonthly === undefined ? undefined : readInterest(interestRateMonthly);
+  if (interest === "invalid") {
+    res.status(400).json({ error: "Juros entre 0 e 20% ao mês." });
+    return;
+  }
   if (personName !== undefined && !optionalText(personName, 80)) {
     res.status(400).json({ error: "Pra quem você emprestou?" });
     return;
@@ -151,6 +169,7 @@ export async function updateLoanHandler(req: Request, res: Response) {
       ...(dueDate !== undefined ? { dueDate } : {}),
       ...(note !== undefined ? { note: optionalText(note, 300) } : {}),
       ...(status !== undefined ? { status } : {}),
+      ...(interest !== undefined ? { interestRateMonthly: interest } : {}),
     });
     res.json(loan);
   } catch (err) {

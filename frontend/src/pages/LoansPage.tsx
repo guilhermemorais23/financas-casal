@@ -27,6 +27,9 @@ interface Loan {
   repayments: Repayment[];
   status: "open" | "paid" | "forgiven";
   received: string;
+  interest: string;
+  totalOwed: string;
+  interestRateMonthly: number | null;
   remaining: string;
   isOverdue: boolean;
 }
@@ -94,7 +97,8 @@ export function LoansPage() {
   const [data, setData] = useState<LoansResponse | null>(() => readCache<LoansResponse>(cacheKey));
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  // Painel's "Emprestei" shortcut opens this with ?novo=1.
+  const [isCreateOpen, setIsCreateOpen] = useState(() => new URLSearchParams(window.location.search).get("novo") === "1");
   const [receiving, setReceiving] = useState<Loan | null>(null);
   const [editing, setEditing] = useState<Loan | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -205,8 +209,9 @@ export function LoansPage() {
 
   function renderLoan(loan: Loan) {
     const due = dueLabel(loan);
-    const total = Number(loan.amount);
+    const total = Number(loan.totalOwed ?? loan.amount);
     const received = Number(loan.received);
+    const interest = Number(loan.interest ?? 0);
     const percent = total > 0 ? Math.min(100, (received / total) * 100) : 0;
     const isExpanded = expandedId === loan.id;
     return (
@@ -226,7 +231,11 @@ export function LoansPage() {
           </span>
           <span className="loan-amounts">
             <strong>{formatCurrency(Number(loan.status === "open" ? loan.remaining : loan.amount))}</strong>
-            {loan.status === "open" && received > 0 && <small>de {formatCurrency(total)}</small>}
+            {loan.status === "open" && (received > 0 || interest > 0) && (
+              <small>
+                {interest > 0 ? `com ${formatCurrency(interest)} de juros` : `de ${formatCurrency(total)}`}
+              </small>
+            )}
           </span>
         </button>
         {loan.status === "open" && received > 0 && (
@@ -250,6 +259,12 @@ export function LoansPage() {
               Emprestado em {shortDate(loan.lentAt)}
               {loan.dueDate ? ` · prazo ${shortDate(loan.dueDate)}` : " · sem prazo"}
             </p>
+            {loan.interestRateMonthly && (
+              <p className="loan-detail-line">
+                Juros de {String(loan.interestRateMonthly).replace(".", ",")}% ao mês: {formatCurrency(interest)} até hoje
+                (emprestou {formatCurrency(Number(loan.amount))}).
+              </p>
+            )}
             {loan.note && <p className="loan-detail-line">{loan.note}</p>}
             {loan.repayments.length > 0 && (
               <ul className="loan-repayments">
@@ -447,13 +462,17 @@ function CreateLoanModal({
   const [dueDate, setDueDate] = useState("");
   const [accountId, setAccountId] = useState(defaultAccountId);
   const [note, setNote] = useState("");
+  const [hasInterest, setHasInterest] = useState(false);
+  const [interestRate, setInterestRate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const parsed = parseAmount(amount);
+    const rate = hasInterest ? Number(interestRate.replace(",", ".")) : null;
     if (!personName.trim()) return setError("Pra quem você emprestou?");
+    if (rate !== null && !(rate > 0 && rate <= 20)) return setError("Juros entre 0,1% e 20% ao mês.");
     if (!(parsed > 0)) return setError("Informe um valor válido.");
     if (hasDueDate && !dueDate) return setError("Escolha o prazo ou desmarque \"Tem prazo\".");
     setError(null);
@@ -469,6 +488,7 @@ function CreateLoanModal({
           dueDate: hasDueDate ? dueDate : null,
           note: note.trim() || null,
           accountId: accountId || null,
+          interestRateMonthly: rate,
         },
       });
       showToast("Empréstimo registrado", {
@@ -516,6 +536,23 @@ function CreateLoanModal({
             <div className="field">
               <label htmlFor="loan-due">Devolve até</label>
               <input id="loan-due" type="date" min={lentAt} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          )}
+          <label className="checkbox-field">
+            <input type="checkbox" checked={hasInterest} onChange={(e) => setHasInterest(e.target.checked)} />
+            <span>Cobrar juros</span>
+          </label>
+          {hasInterest && (
+            <div className="field">
+              <label htmlFor="loan-interest">Juros (% ao mês)</label>
+              <input
+                id="loan-interest"
+                inputMode="decimal"
+                value={interestRate}
+                onChange={(e) => setInterestRate(e.target.value)}
+                placeholder="2"
+              />
+              <p className="field-hint">Juros simples, contados a cada mês cheio desde o empréstimo.</p>
             </div>
           )}
           <div className="field">
@@ -639,12 +676,16 @@ function EditLoanModal({ loan, onClose, onSaved }: { loan: Loan; onClose: () => 
   const [hasDueDate, setHasDueDate] = useState(loan.dueDate !== null);
   const [dueDate, setDueDate] = useState(loan.dueDate ?? "");
   const [note, setNote] = useState(loan.note ?? "");
+  const [hasInterest, setHasInterest] = useState(Boolean(loan.interestRateMonthly));
+  const [interestRate, setInterestRate] = useState(loan.interestRateMonthly ? String(loan.interestRateMonthly).replace(".", ",") : "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!personName.trim()) return setError("Informe o nome.");
+    const rate = hasInterest ? Number(interestRate.replace(",", ".")) : null;
+    if (rate !== null && !(rate > 0 && rate <= 20)) return setError("Juros entre 0,1% e 20% ao mês.");
     if (hasDueDate && !dueDate) return setError("Escolha o prazo ou desmarque \"Tem prazo\".");
     setError(null);
     setIsSubmitting(true);
@@ -652,7 +693,12 @@ function EditLoanModal({ loan, onClose, onSaved }: { loan: Loan; onClose: () => 
       const updated = await apiRequest<Loan>(`/loans/${loan.id}`, {
         method: "PATCH",
         token,
-        body: { personName: personName.trim(), dueDate: hasDueDate ? dueDate : null, note: note.trim() || null },
+        body: {
+          personName: personName.trim(),
+          dueDate: hasDueDate ? dueDate : null,
+          note: note.trim() || null,
+          interestRateMonthly: rate,
+        },
       });
       showToast("Empréstimo atualizado");
       onSaved(updated);
@@ -682,6 +728,16 @@ function EditLoanModal({ loan, onClose, onSaved }: { loan: Loan; onClose: () => 
             <div className="field">
               <label htmlFor="edit-loan-due">Devolve até</label>
               <input id="edit-loan-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          )}
+          <label className="checkbox-field">
+            <input type="checkbox" checked={hasInterest} onChange={(e) => setHasInterest(e.target.checked)} />
+            <span>Cobrar juros</span>
+          </label>
+          {hasInterest && (
+            <div className="field">
+              <label htmlFor="edit-loan-interest">Juros (% ao mês)</label>
+              <input id="edit-loan-interest" inputMode="decimal" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
             </div>
           )}
           <div className="field">

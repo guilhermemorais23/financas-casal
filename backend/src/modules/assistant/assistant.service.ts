@@ -19,6 +19,9 @@ import { requireGroupId } from "../groups/groups.service";
 import { getMonthlySummary } from "../transactions/transactions.repository";
 import { createTransaction } from "../transactions/transactions.service";
 import { currentMonthParam, parseMonthRange } from "../../utils/month";
+import { todayInBrazil } from "../loans/loans.service";
+import { logError } from "../../utils/errorLog";
+import { answerFromSnapshot, brl, buildMonthSnapshot, parseQuickEntry, snapshotAsText, type MonthSnapshot } from "./monthSnapshot";
 
 export class AssistantNotConfiguredError extends Error {}
 
@@ -49,6 +52,7 @@ interface FinanceContext {
   text: string;
   financialGoal: string | null;
   savingsAmount: number | null;
+  snapshot: MonthSnapshot;
 }
 
 // Grounds every reply in the couple's real numbers -- without this, the
@@ -59,12 +63,13 @@ async function buildFinanceContext(userId: string, groupId: string): Promise<Fin
   const month = currentMonthParam();
   const { monthStart, monthEnd } = parseMonthRange(month);
 
-  const [summary, budget, debts, goals, group] = await Promise.all([
+  const [summary, budget, debts, goals, group, snapshot] = await Promise.all([
     getMonthlySummary(groupId, userId, monthStart, monthEnd, "visible"),
     getCurrentBudget(userId, month),
     listDebts(userId),
     listGoals(userId),
     findGroupById(groupId),
+    buildMonthSnapshot(userId),
   ]);
 
   const categoriesText = summary.byCategory.length
@@ -93,9 +98,10 @@ Reserva/poupança guardada: ${savingsAmount === null ? "ainda não informada" : 
 Gastos por categoria: ${categoriesText}. Total do mês: R$ ${summary.total}.
 Orçamento: ${budgetText}.
 Dívidas em aberto: ${debtsText}.
-Metas de economia: ${goalsText}.`;
+Metas de economia: ${goalsText}.
+${snapshotAsText(snapshot)}`;
 
-  return { text, financialGoal, savingsAmount };
+  return { text, financialGoal, savingsAmount, snapshot };
 }
 
 async function askGemini(prompt: string, audio?: AudioPayload): Promise<string> {
@@ -142,7 +148,7 @@ async function processAssistantMessage(
       ? "\nO casal ainda não te contou o objetivo financeiro nem quanto tem guardado -- se a mensagem não for um lançamento nem já responder isso, pergunte de forma natural (uma coisa de cada vez) qual é o objetivo financeiro deles e quanto eles têm guardado hoje de reserva."
       : "";
 
-  const prompt = `Você é o assistente financeiro do app PAR. (finanças de casal), conversando por mensagem. Categorias disponíveis pra lançamento: ${categoryNames || "nenhuma cadastrada"}.
+  const prompt = `Você é o assistente de controle do mês do app PAR.: ajuda a pessoa a saber quanto tem, quanto pode gastar por dia até o mês acabar, o que vence nos próximos dias e quem ainda deve dinheiro pra ela. Fale como um amigo organizado, em frases curtas, sempre com os números reais abaixo. Categorias disponíveis pra lançamento: ${categoryNames || "nenhuma cadastrada"}.
 
 ${financeContext.text}
 ${missingProfile}
@@ -158,7 +164,15 @@ Responda APENAS com um JSON puro (sem markdown, sem texto fora do JSON), em um d
 
 Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento real (ex: "gastei 50 no mercado", "recebi 200 de salário"). Use "set_financial_goal" quando a pessoa disser qual é o objetivo financeiro dela (ex: "quero quitar minhas dívidas até dezembro", "meu objetivo é juntar pra uma viagem"). Use "set_savings" quando ela disser quanto já tem guardado/reserva (ex: "tenho 5000 guardado"). Use "chat" pra perguntas, conversa, pedido de análise ou qualquer coisa que não seja um lançamento -- responda com base nos dados reais acima, nunca invente um gasto/categoria/dívida que não esteja listado. Se fizer sentido, termine com uma pergunta curta pra entender melhor o que a pessoa quer (ex: se não há meta cadastrada, pergunte se ela quer criar uma; se há dívida em aberto, pergunte se o foco agora é pagar ela ou economizar mais primeiro).`;
 
-  const raw = await askGemini(prompt, audio);
+  let raw: string;
+  try {
+    raw = await askGemini(prompt, audio);
+  } catch (err) {
+    // No key, quota, network: still answer from the numbers instead of
+    // leaving the person with an error.
+    if (!(err instanceof AssistantNotConfiguredError)) logError("assistant", err, { userId });
+    return basicAnswer(userId, personalAccount?.id ?? null, text, audio !== undefined, financeContext.snapshot);
+  }
   const parsed = parseAssistantReply(raw);
   if (!parsed) {
     return raw || "Não entendi, pode repetir?";
@@ -175,7 +189,7 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
       description: parsed.description || "Lançamento via assistente",
       amount: parsed.amount,
       transactionType: parsed.intent === "log_expense" ? "expense" : "income",
-      occurredAt: new Date().toISOString().slice(0, 10),
+      occurredAt: todayInBrazil(),
       isPrivate: false,
       splitType: "none",
     });
@@ -284,6 +298,32 @@ export async function handleWhatsappMessage(
   }
 }
 
+async function basicAnswer(
+  userId: string,
+  personalAccountId: string | null,
+  text: string | undefined,
+  isAudio: boolean,
+  snapshot: MonthSnapshot
+): Promise<string> {
+  if (isAudio || !text) return "Por enquanto só consigo ler mensagens de texto. Me escreve o que precisa?";
+  const entry = parseQuickEntry(text);
+  if (entry && personalAccountId) {
+    await createTransaction(userId, {
+      accountId: personalAccountId,
+      categoryId: null,
+      payerId: userId,
+      description: entry.description,
+      amount: entry.amount,
+      transactionType: entry.type,
+      occurredAt: todayInBrazil(),
+      isPrivate: false,
+      splitType: "none",
+    });
+    return `${entry.type === "expense" ? "💸" : "💰"} Registrado: ${entry.description} — ${brl(entry.amount)}.`;
+  }
+  return answerFromSnapshot(snapshot, text);
+}
+
 // Same assistant, reached from the in-app chat widget instead of Telegram --
 // the caller is already an authenticated PAR. user, so no link/code step.
 export async function answerAssistantMessage(userId: string, message: string): Promise<string> {
@@ -304,5 +344,22 @@ ${financeContext.text}
 
 Escreva uma única mensagem curta (1-2 frases, sem emojis, sem saudação genérica tipo "olá") puxando assunto com base em algo real dos dados acima: a categoria que mais pesou, uma dívida em aberto, o progresso de uma meta, ou -- se faltar objetivo financeiro e reserva -- pergunte isso. Termine com uma pergunta curta convidando a pessoa a continuar. Responda só com o texto da mensagem, sem JSON, sem aspas.`;
 
-  return askGemini(prompt);
+  try {
+    return await askGemini(prompt);
+  } catch (err) {
+    if (!(err instanceof AssistantNotConfiguredError)) logError("assistant-greeting", err, { userId });
+    const s = financeContext.snapshot;
+    return `${answerFromSnapshot(s, "quanto posso gastar por dia")}\n${answerFromSnapshot(s, "o que vence")}\nQuer que eu olhe mais alguma coisa do mês?`;
+  }
+}
+
+// Used by Admin > Diagnóstico: is the AI key set, and does a real call work?
+export async function checkAssistant(): Promise<{ configured: boolean; ok: boolean; error?: string }> {
+  if (!process.env.GEMINI_API_KEY) return { configured: false, ok: false, error: "GEMINI_API_KEY não configurada" };
+  try {
+    const reply = await askGemini("Responda apenas: ok");
+    return { configured: true, ok: reply.length > 0 };
+  } catch (err) {
+    return { configured: true, ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

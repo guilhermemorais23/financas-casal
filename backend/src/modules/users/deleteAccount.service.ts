@@ -70,6 +70,7 @@ export async function deleteAccountForUser(userId: string): Promise<void> {
     deleteDocs(db.collection("whatsappLinks").where("userId", "==", userId)),
     deleteDocs(db.collection("telegramLinkCodes").where("userId", "==", userId)),
     deleteDocs(db.collection("accessLogs").where("userId", "==", userId)),
+    deleteDocs(db.collection("feedbackThreads").where("userId", "==", userId)),
   ]);
   await db.recursiveDelete(db.collection("users").doc(userId));
 

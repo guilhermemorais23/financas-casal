@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
+import { AdminDiagnostics, AdminFeedback } from "./AdminSections";
 
 interface ErrorLogEntry {
   id: string;
@@ -49,7 +50,10 @@ export function AdminPage() {
   const [searchParams] = useSearchParams();
   // Only one section is ever on screen at a time -- driven entirely by the
   // sidebar's "Admin > Visão geral"/"Logs" sub-links (?section=...).
-  const section = searchParams.get("section") === "logs" ? "logs" : "overview";
+  const requested = searchParams.get("section");
+  const section =
+    requested === "logs" || requested === "feedback" || requested === "diagnostics" ? requested : "overview";
+  const sectionTitle = { overview: "Visão geral", logs: "Logs", feedback: "Feedback", diagnostics: "Diagnóstico" }[section];
 
   useEffect(() => {
     apiRequest<AdminOverview>("/admin/overview", { token })
@@ -97,7 +101,9 @@ export function AdminPage() {
   return (
     <AppLayout wide>
       <div className="page-stack">
-        <h1>Admin · {section === "overview" ? "Visão geral" : "Logs"}</h1>
+        <h1>Admin · {sectionTitle}</h1>
+        {section === "feedback" && <AdminFeedback />}
+        {section === "diagnostics" && <AdminDiagnostics />}
 
         {section === "overview" && (
           <>

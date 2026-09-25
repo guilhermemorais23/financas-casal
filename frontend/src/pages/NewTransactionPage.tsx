@@ -37,7 +37,10 @@ export function NewTransactionPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
 
-  const [transactionType, setTransactionType] = useState<"expense" | "income">("expense");
+  // Painel's "Receita" shortcut opens this with ?tipo=receita.
+  const [transactionType, setTransactionType] = useState<"expense" | "income">(() =>
+    new URLSearchParams(window.location.search).get("tipo") === "receita" ? "income" : "expense"
+  );
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState("");

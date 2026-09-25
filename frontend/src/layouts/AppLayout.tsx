@@ -9,7 +9,7 @@ import { Icon, type IconName } from "../components/Icon";
 import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
 import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
 import { BILLS_TABS } from "../components/BillsTabs";
-import { FeedbackModal } from "../components/FeedbackModal";
+import { FeedbackChat, useFeedbackUnread } from "../components/FeedbackChat";
 import { useTheme } from "../hooks/useTheme";
 import { currentMonthParam, formatCurrency, monthLongName } from "../utils/format";
 
@@ -57,6 +57,8 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
 // in the JSX below) instead of navigating straight to a page.
 const ADMIN_SUBLINKS = [
   { section: "overview", label: "Visão geral" },
+  { section: "feedback", label: "Feedback" },
+  { section: "diagnostics", label: "Diagnóstico" },
   { section: "logs", label: "Logs" },
 ];
 
@@ -77,6 +79,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const { theme, toggle } = useTheme();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const feedbackUnread = useFeedbackUnread();
   const navigate = useNavigate();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
@@ -135,6 +138,11 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isMoreOpen]);
+
+  // The "Você recebeu uma resposta" email links to ?feedback=1.
+  useEffect(() => {
+    if (searchParams.get("feedback") === "1") setIsFeedbackOpen(true);
+  }, [searchParams]);
 
   // Any navigation (a tile, the back button) closes the sheet.
   useEffect(() => {
@@ -269,7 +277,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
                       setIsAssistantOpen((open) => !open);
                     }}
                   >
-                    <Icon name="chat" />
+                    <Icon name="spark" />
                     Assistente PAR.
                   </button>
                   <button
@@ -281,8 +289,9 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
                       setIsFeedbackOpen(true);
                     }}
                   >
-                    <Icon name="spark" />
-                    Enviar feedback
+                    <Icon name="chat" />
+                    Fale com a gente
+                    {feedbackUnread > 0 && <span className="unread-badge">{feedbackUnread}</span>}
                   </button>
                   <button
                     type="button"
@@ -337,7 +346,10 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
           onClick={() => setIsMoreOpen((open) => !open)}
           aria-expanded={isMoreOpen}
         >
-          <span className="app-bottom-nav-icon"><Icon name="more" /></span>
+          <span className="app-bottom-nav-icon">
+            <Icon name="more" />
+            {feedbackUnread > 0 && <span className="nav-dot" aria-label="Nova resposta" />}
+          </span>
           Mais
         </button>
       </nav>
@@ -383,12 +395,13 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
                 <span>Editar perfil</span>
               </button>
               <button type="button" className="more-sheet-row" onClick={() => fromSheet(() => setIsAssistantOpen(true))}>
-                <Icon name="chat" />
-                <span>Assistente PAR.</span>
+                <Icon name="spark" />
+                <span>Assistente do mês</span>
               </button>
               <button type="button" className="more-sheet-row" onClick={() => fromSheet(() => setIsFeedbackOpen(true))}>
-                <Icon name="spark" />
-                <span>Enviar feedback</span>
+                <Icon name="chat" />
+                <span>Fale com a gente</span>
+                {feedbackUnread > 0 && <span className="unread-badge">{feedbackUnread}</span>}
               </button>
               <button type="button" className="more-sheet-row" onClick={toggle}>
                 <Icon name={theme === "dark" ? "sun" : "moon"} />
@@ -409,7 +422,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         </div>
       )}
 
-      {isFeedbackOpen && <FeedbackModal onClose={() => setIsFeedbackOpen(false)} />}
+      {isFeedbackOpen && <FeedbackChat onClose={() => setIsFeedbackOpen(false)} />}
 
       {!isOnNewTransaction && (
         <Link to="/transactions/new" className="global-fab" aria-label="Nova despesa" title="Nova despesa">

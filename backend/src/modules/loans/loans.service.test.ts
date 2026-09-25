@@ -10,6 +10,7 @@ import {
   listLoans,
   removeLoan,
   removeRepayment,
+  fullMonthsBetween,
   summarize,
   updateLoanForUser,
 } from "./loans.service";
@@ -90,8 +91,32 @@ describe("loans", () => {
   });
 });
 
+describe("interest", () => {
+  it("counts whole months only", () => {
+    expect(fullMonthsBetween("2026-01-15", "2026-02-14")).toBe(0);
+    expect(fullMonthsBetween("2026-01-15", "2026-02-15")).toBe(1);
+    expect(fullMonthsBetween("2026-01-31", "2026-04-30")).toBe(2);
+  });
+
+  it("adds simple monthly interest to what's still owed", async () => {
+    const { userAId } = await createTestGroup();
+    const loan = await createLoan(userAId, {
+      personName: "Vizinho",
+      amount: 1000,
+      lentAt: "2026-01-10",
+      dueDate: null,
+      note: null,
+      accountId: null,
+      interestRateMonthly: 2,
+    });
+    const months = fullMonthsBetween("2026-01-10", todayISO());
+    expect(loan.interest).toBe((1000 * 0.02 * months).toFixed(2));
+    expect(loan.remaining).toBe((1000 + 1000 * 0.02 * months).toFixed(2));
+  });
+});
+
 describe("summarize", () => {
-  const base = { groupId: "g", ownerUserId: "u", lentAt: "2026-01-01", note: null, accountId: null, transactionId: null, repayments: [], received: "0.00", status: "open" as const };
+  const base = { groupId: "g", ownerUserId: "u", lentAt: "2026-01-01", note: null, accountId: null, transactionId: null, repayments: [], received: "0.00", interest: "0.00", totalOwed: "0.00", interestRateMonthly: null, status: "open" as const };
   it("splits what's owed into overdue, due soon and no deadline", () => {
     const summary = summarize(
       [

@@ -112,7 +112,10 @@ function categorySpikeAlerts(
   return alerts;
 }
 
-export async function getAlertsForUser(userId: string): Promise<AlertItem[]> {
+// includeDue: false on the Painel, which lists due dates in its own "Vence
+// logo" card (upcoming.service.ts) -- no need to say it twice.
+export async function getAlertsForUser(userId: string, options: { includeDue?: boolean } = {}): Promise<AlertItem[]> {
+  const includeDue = options.includeDue ?? true;
   // Not otherwise used here directly -- getCurrentBudget/listCards/listDebts/
   // getMonthlySummaryForUser each call requireGroupId themselves anyway, but
   // this one throws NoGroupError up front instead of waiting for whichever
@@ -142,7 +145,7 @@ export async function getAlertsForUser(userId: string): Promise<AlertItem[]> {
 
   const todayISO = today.toISOString().slice(0, 10);
 
-  for (const card of cards) {
+  for (const card of includeDue ? cards : []) {
     if (card.currentStatement.isPaid || Number(card.currentStatement.total) <= 0) continue;
     const daysUntil = daysBetween(todayISO, card.currentStatement.dueDate);
     if (daysUntil > DUE_WINDOW_DAYS) continue;
@@ -153,7 +156,7 @@ export async function getAlertsForUser(userId: string): Promise<AlertItem[]> {
     });
   }
 
-  for (const debt of debts) {
+  for (const debt of includeDue ? debts : []) {
     const nextUnpaid = debt.installments.filter((i) => !i.isPaid).sort((a, b) => a.installmentNumber - b.installmentNumber)[0];
     if (!nextUnpaid?.dueDate) continue;
     const daysUntil = daysBetween(todayISO, nextUnpaid.dueDate);

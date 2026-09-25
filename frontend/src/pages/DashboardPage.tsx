@@ -173,8 +173,22 @@ interface DashboardResponse {
   // Optional: responses cached by an older build don't have it.
   savedInSecuredCards?: number;
   loansSummary?: { outstanding: string; overdue: string; overdueCount: number };
+  // Optional: responses cached by an older build don't have it.
+  upcoming?: UpcomingItem[];
   trend6m: MonthlyTrendPoint[];
   alerts: AlertRow[];
+}
+
+interface UpcomingItem {
+  id: string;
+  kind: "card" | "debt" | "recurring" | "loan";
+  direction: "pay" | "receive";
+  title: string;
+  detail: string;
+  amount: number;
+  dueDate: string;
+  daysUntil: number;
+  link: string;
 }
 
 interface AlertRow {
@@ -195,6 +209,20 @@ function dueLabel(days: number): string {
   if (days === 0) return "vence hoje";
   if (days === 1) return "vence amanhã";
   return `vence em ${days} dias`;
+}
+
+const MONTH_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+
+function upcomingWhen(item: UpcomingItem): string {
+  const d = item.daysUntil;
+  if (item.direction === "receive") {
+    if (d < 0) return `Atrasado ${-d} ${-d === 1 ? "dia" : "dias"}`;
+    if (d === 0) return "Prazo hoje";
+    return d === 1 ? "Prazo amanhã" : `Prazo em ${d} dias`;
+  }
+  if (d < 0) return `Venceu há ${-d} ${-d === 1 ? "dia" : "dias"}`;
+  if (d === 0) return "Vence hoje";
+  return d === 1 ? "Vence amanhã" : `Vence em ${d} dias`;
 }
 
 export function DashboardPage() {
@@ -251,6 +279,7 @@ export function DashboardPage() {
   const [savedInSecuredCards, setSavedInSecuredCards] = useState<number>(
     () => readCache(staticKey("savedInSecuredCards")) ?? 0
   );
+  const [upcoming, setUpcoming] = useState<UpcomingItem[]>(() => readCache(staticKey("upcoming")) ?? []);
   const [loansOutstanding, setLoansOutstanding] = useState<number>(
     () => readCache(staticKey("loansOutstanding")) ?? 0
   );
@@ -291,6 +320,7 @@ export function DashboardPage() {
       setNextInvoice(data.nextInvoice);
       setSavedInSecuredCards(data.savedInSecuredCards ?? 0);
       setLoansOutstanding(Number(data.loansSummary?.outstanding ?? 0));
+      setUpcoming(data.upcoming ?? []);
       setTrend6m(data.trend6m);
       // ?? []: a response cached by an older build has no `alerts` at all.
       setAlerts(data.alerts ?? []);
@@ -303,6 +333,7 @@ export function DashboardPage() {
     writeCache(sKey("nextInvoice"), data.nextInvoice);
     writeCache(sKey("savedInSecuredCards"), data.savedInSecuredCards ?? 0);
     writeCache(sKey("loansOutstanding"), Number(data.loansSummary?.outstanding ?? 0));
+    writeCache(sKey("upcoming"), data.upcoming ?? []);
     writeCache(mKey("personalMonthTotals"), data.personalMonthTotals);
     writeCache(mKey("personalPrevMonthTotals"), data.personalPrevMonthTotals);
     writeCache(mKey("recent"), data.recent);
@@ -581,6 +612,8 @@ export function DashboardPage() {
   const accountsTotal = visibleAccounts.reduce((sum, account) => sum + account.balance, 0);
   const moneyTotal = accountsTotal + savedInSecuredCards;
 
+  const upcomingToPay = upcoming.filter((item) => item.direction === "pay").reduce((sum, item) => sum + item.amount, 0);
+
   // "Dá pra gastar por dia": only for the month actually being lived --
   // browsing a past month, "até o fim do mês" means nothing.
   const monthLeft = income - expense - savedInCards - lentOut;
@@ -663,16 +696,32 @@ export function DashboardPage() {
         <div className="stat-card wide">
           <span className="stat-card-circle" />
           <span className="stat-card-circle stat-card-circle-2" />
-          <p className="label">Você tem no mês</p>
+          <p className="label">Você tem hoje</p>
           <p className="value">
-            <AnimatedNumber value={monthLeft} />
+            <AnimatedNumber value={moneyTotal} />
           </p>
-          {dailyAllowance !== null && income > 0 && (
-            <p className="hero-note">
-              {dailyAllowance > 0
-                ? `Dá pra gastar ${formatCurrency(dailyAllowance)} por dia até o fim do mês.`
-                : "Você já gastou mais do que entrou este mês."}
-            </p>
+          {/* The three numbers that answer "how am I doing": what's there,
+              what's left per day, what's due this week. */}
+          <div className="hero-numbers">
+            <div className="hero-number">
+              <span>{dailyAllowance !== null ? "Por dia até o fim do mês" : `Sobra em ${monthLabel}`}</span>
+              <strong className={(dailyAllowance ?? monthLeft) < 0 ? "negative" : ""}>
+                {formatCurrency(dailyAllowance !== null ? Math.max(0, dailyAllowance) : monthLeft)}
+              </strong>
+            </div>
+            <div className="hero-number">
+              <span>Vence em 7 dias</span>
+              <strong>{formatCurrency(upcomingToPay)}</strong>
+            </div>
+            {loansOutstanding > 0 && (
+              <div className="hero-number">
+                <span>Vão te pagar</span>
+                <strong>{formatCurrency(loansOutstanding)}</strong>
+              </div>
+            )}
+          </div>
+          {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
+            <p className="hero-note">Você já gastou mais do que entrou este mês.</p>
           )}
           {savedInCards !== 0 && (
             <p className="hero-note">
@@ -692,6 +741,60 @@ export function DashboardPage() {
             <div className="hero-trend">
               <TrendSparkline points={trend6m} />
             </div>
+          )}
+        </div>
+
+        <nav className="quick-actions" aria-label="Atalhos">
+          <Link to="/transactions/new" className="quick-action">
+            <span className="quick-action-icon expense"><Icon name="download" /></span>
+            Despesa
+          </Link>
+          <Link to="/transactions/new?tipo=receita" className="quick-action">
+            <span className="quick-action-icon income"><Icon name="upload" /></span>
+            Receita
+          </Link>
+          <Link to="/loans?novo=1" className="quick-action">
+            <span className="quick-action-icon loan"><Icon name="coin" /></span>
+            Emprestei
+          </Link>
+          <Link to="/cards" className="quick-action">
+            <span className="quick-action-icon bills"><Icon name="receipt" /></span>
+            Contas
+          </Link>
+        </nav>
+
+        <div className="card upcoming-card">
+          <div className="section-header">
+            <p className="card-title">Vence logo</p>
+            <Link to="/cards" className="link">
+              Ver contas
+            </Link>
+          </div>
+          {upcoming.length === 0 ? (
+            <p className="empty-state">Nada pra pagar ou receber nos próximos 7 dias.</p>
+          ) : (
+            <ul className="upcoming-list">
+              {upcoming.map((item) => (
+                <li key={item.id}>
+                  <Link to={item.link} className={`upcoming-row${item.daysUntil < 0 ? " overdue" : ""}`}>
+                    <span className={`upcoming-date ${item.direction}`}>
+                      <strong>{item.dueDate.slice(8, 10)}</strong>
+                      <small>{MONTH_SHORT[Number(item.dueDate.slice(5, 7)) - 1]}</small>
+                    </span>
+                    <span className="upcoming-info">
+                      <span className="text-truncate upcoming-title">{item.title}</span>
+                      <span className={`upcoming-when${item.daysUntil <= 1 ? " soon" : ""}`}>
+                        {upcomingWhen(item)} · {item.detail}
+                      </span>
+                    </span>
+                    <span className={`upcoming-amount ${item.direction}`}>
+                      {item.direction === "receive" ? "+" : ""}
+                      {formatCurrency(item.amount)}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
@@ -1002,7 +1105,7 @@ export function DashboardPage() {
 
           <div className="dashboard-col">
             <div className="card money-card">
-              <p className="card-title">Seu dinheiro hoje</p>
+              <p className="card-title">Onde está seu dinheiro</p>
               <p className="money-card-total">{formatCurrency(moneyTotal)}</p>
               <ul className="money-card-list">
                 {visibleAccounts.map((account) => (
