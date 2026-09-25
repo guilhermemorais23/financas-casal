@@ -23,6 +23,8 @@ export interface PreviewRow {
   transactionType: "expense" | "income";
   suggestedCategoryId: string | null;
   isDuplicate: boolean;
+  // "Pix enviado", "Compra no débito"... (null quando o extrato não separa).
+  kind: string | null;
   // Nome normalizado: os lançamentos com o mesmo nome viram uma pergunta só.
   groupKey: string;
 }
@@ -34,6 +36,7 @@ export interface PreviewGroup {
   key: string;
   name: string;
   transactionType: "expense" | "income";
+  kind: string | null;
   count: number;
   total: string;
   rowIndexes: number[];
@@ -48,6 +51,7 @@ export interface PdfCheck {
   closingBalance: string | null;
   readBy: "ai" | "text";
   unreadLines: string[];
+  bank: "bradesco" | "nubank" | null;
 }
 
 export interface StatementInput {
@@ -81,6 +85,7 @@ async function readInput(input: StatementInput): Promise<{ format: "ofx" | "csv"
         closingBalance: read.closingBalanceCents === null ? null : (read.closingBalanceCents / 100).toFixed(2),
         readBy: read.readBy,
         unreadLines: read.unreadLines,
+        bank: read.bank,
       },
     };
   }
@@ -127,12 +132,17 @@ export async function previewStatement(userId: string, input: StatementInput) {
   const preview: PreviewRow[] = rows.map((row) => {
     const transactionType = assumedAllExpenses || row.amountCents < 0 ? "expense" : "income";
     const cents = Math.abs(row.amountCents);
-    const description = cleanStatementDescription(row.description);
-    const groupKey = normalizeStatementName(description);
+    const cleaned = cleanStatementDescription(row.description);
+    const groupKey = normalizeStatementName(cleaned);
     const rule = rules.get(groupKey);
+    // O nome guardado na resposta (a pessoa pode ter digitado o nome inteiro
+    // que o banco corta) vale pras próximas importações.
+    const renamed = rule?.label?.trim() && normalizeStatementName(rule.label) !== rule.key;
+    const description = renamed ? rule!.label.trim() : cleaned;
     return {
       date: row.date,
       description,
+      kind: row.kind ?? null,
       amount: fromCents(cents),
       transactionType,
       suggestedCategoryId: rule ? rule.categoryId : (categoryHints.get(normalizeDescription(description)) ?? null),
@@ -155,6 +165,7 @@ export async function previewStatement(userId: string, input: StatementInput) {
           key: row.groupKey,
           name: row.description,
           transactionType: row.transactionType,
+          kind: row.kind,
           count: 0,
           total: "0.00",
           rowIndexes: [],

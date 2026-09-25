@@ -16,6 +16,7 @@ interface PreviewRow {
   transactionType: TxType;
   suggestedCategoryId: string | null;
   isDuplicate: boolean;
+  kind: string | null;
   groupKey: string;
 }
 
@@ -23,6 +24,7 @@ interface PreviewGroup {
   key: string;
   name: string;
   transactionType: TxType;
+  kind: string | null;
   count: number;
   total: string;
   rowIndexes: number[];
@@ -36,6 +38,7 @@ interface PdfCheck {
   closingBalance: string | null;
   readBy: "ai" | "text";
   unreadLines?: string[];
+  bank?: "bradesco" | "nubank" | null;
 }
 
 interface PreviewResponse {
@@ -72,6 +75,8 @@ interface Answer {
 }
 
 type Stage = "file" | "questions" | "summary";
+
+const BANK_NAMES = { bradesco: "Bradesco", nubank: "Nubank" } as const;
 
 const INCOME_HINT = /sal[aá]r|renda|receb|freel|reembol|venda|rendiment|b[oô]nus|comiss|extra/i;
 
@@ -317,7 +322,14 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     const rules = preview.groups
       .map((group) => ({ group, answer: answers[groupKey(group)] }))
       .filter(({ answer }) => answer?.status === "answered" && !answer.fromRule && (answer.notExpense || answer.categoryId))
-      .map(({ group, answer }) => ({ key: group.key, label: group.name, categoryId: answer.categoryId, notExpense: answer.notExpense }));
+      .map(({ group, answer }) => ({
+        key: group.key,
+        // Nome digitado pra todos (o banco corta nomes compridos) fica guardado
+        // e aparece assim nas próximas importações.
+        label: (answer.descMode === "all" && answer.description.trim()) || group.name,
+        categoryId: answer.categoryId,
+        notExpense: answer.notExpense,
+      }));
     const withoutCategory = unmatched.length;
     return { items, rules, incoming, outgoing, skippedNotExpense, withoutCategory, unmatched };
   }, [preview, answers, includeDuplicates]);
@@ -364,23 +376,26 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       ? [...categories].sort((a, b) => Number(INCOME_HINT.test(b.name)) - Number(INCOME_HINT.test(a.name)))
       : categories;
 
+  const bankName = preview?.pdf?.bank ? BANK_NAMES[preview.pdf.bank] : null;
+  // O saldo do extrato só serve pra conferir: não aparece e não é importado.
   const pdfBanner = preview?.pdf && (
     <p className={`import-check ${preview.pdf.reconciled === false ? "warn" : preview.pdf.reconciled ? "ok" : ""}`}>
       {preview.pdf.reconciled === true && (
         <>
-          <Icon name="check" /> Conferido: a soma dos lançamentos bate com o saldo do extrato (
-          {formatCurrency(Number(preview.pdf.openingBalance))} → {formatCurrency(Number(preview.pdf.closingBalance))}).
+          <Icon name="check" /> Conferido com o extrato{bankName ? ` do ${bankName}` : ""}: nenhum lançamento ficou de fora.
         </>
       )}
       {preview.pdf.reconciled === false && (
         <>
-          A soma dos lançamentos não bate com o saldo do extrato (diferença de {formatCurrency(Number(preview.pdf.difference))}).
-          Pode ter faltado alguma linha: confira no app do banco antes de importar.
+          A soma dos lançamentos não bate com o extrato (diferença de {formatCurrency(Number(preview.pdf.difference))}). O que não
+          bateu está em “Não conciliado” no final.
         </>
       )}
       {preview.pdf.reconciled === null && <>O extrato não mostra saldo inicial e final, então não deu pra conferir a soma.</>}
     </p>
   );
+
+  const repeatedGroups = preview?.groups.filter((group) => group.count > 1) ?? [];
 
   return (
     <Sheet onClose={onClose} className="import-panel" labelledBy="import-title">
@@ -474,6 +489,13 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               />
             </div>
           )}
+          <div className="import-banks">
+            <small>Lê o PDF do extrato de:</small>
+            <span className="import-bank ok">Bradesco</span>
+            <span className="import-bank ok">Nubank</span>
+            <span className="import-bank">Outros bancos (leitura geral)</span>
+            <span className="import-bank">OFX/CSV de qualquer banco</span>
+          </div>
           <div className="import-connect">
             <span className="import-connect-icon">
               <Icon name="bank" />
@@ -492,7 +514,15 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
           {questionIndex === 0 && !returnToSummary && pdfBanner}
           {questionIndex === 0 && !returnToSummary && (
             <p className="import-summary">
-              <strong>{preview!.rows.length}</strong> lançamentos em {fileName}
+              <strong>{preview!.rows.length}</strong> lançamentos em {fileName} viraram <strong>{preview!.groups.length}</strong>{" "}
+              nomes
+              {repeatedGroups.length > 0 && (
+                <>
+                  {" "}
+                  ({repeatedGroups.length} se repetem: {repeatedGroups.reduce((total, group) => total + group.count, 0)} lançamentos
+                  respondidos de uma vez)
+                </>
+              )}
               {duplicateCount > 0 && <> · {duplicateCount} já estavam no app</>}
               {preview!.groups.length > questions.length && (
                 <> · {preview!.groups.length - questions.length} nomes o PAR. já conhecia</>
@@ -500,8 +530,11 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
             </p>
           )}
           <div className="import-question">
-            <span className={`import-question-type ${current.transactionType}`}>
-              {current.transactionType === "income" ? "Entrou" : "Saiu"}
+            <span className="import-question-tags">
+              <span className={`import-question-type ${current.transactionType}`}>
+                {current.transactionType === "income" ? "Entrou" : "Saiu"}
+              </span>
+              {current.kind && <span className="import-question-kind">{current.kind}</span>}
             </span>
             <h2 className="import-question-name">{current.name}</h2>
             <p className="import-question-meta">
@@ -564,10 +597,13 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
             {!showDescription ? (
               <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
-                + Descrição (opcional)
+                + Nome completo ou descrição (opcional)
               </button>
             ) : (
               <div className="import-description">
+                <small className="import-hint">
+                  O banco às vezes corta o nome. Digite o nome inteiro e o PAR. usa ele nas próximas importações.
+                </small>
                 {current.count > 1 && (
                   <div className="segmented" role="tablist">
                     {(["all", "each"] as const).map((mode) => (
@@ -680,6 +716,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                           <small>
                             {parseLocalDate(row.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ·{" "}
                             {row.transactionType === "income" ? "entrou" : "saiu"}
+                            {row.kind && ` · ${row.kind}`}
                           </small>
                         </span>
                         <span className={`import-rules-answer transaction-amount ${row.transactionType}`}>
@@ -711,7 +748,8 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                     <span className="import-rules-name">
                       {group.name}
                       <small>
-                        {group.count}× · {formatCurrency(Number(group.total))}
+                        {group.transactionType === "income" ? "Entrou" : "Saiu"} · {group.count}× · {formatCurrency(Number(group.total))}
+                        {group.kind && ` · ${group.kind}`}
                         {answer?.fromRule && " · já sabia"}
                       </small>
                     </span>

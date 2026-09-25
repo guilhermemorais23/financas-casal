@@ -7,6 +7,9 @@ export interface ParsedStatementRow {
   description: string;
   amountCents: number; // signed: negative = expense
   externalId: string | null; // OFX FITID, when the file has one
+  // O tipo que o banco escreve ("Pix enviado", "Compra cartão"), quando o
+  // extrato separa isso do nome. A descrição fica só com o nome.
+  kind?: string | null;
 }
 
 export type StatementFormat = "ofx" | "csv";

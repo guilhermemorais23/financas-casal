@@ -1,7 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PdfPasswordError, findUnreadLines, parsePdfStatement, readBalanceColumn, readLinesWithoutAi, reconcile } from "./pdfStatement";
+import {
+  PdfPasswordError,
+  findUnreadLines,
+  parsePdfStatement,
+  readBalanceColumn,
+  readLinesWithoutAi,
+  readNubank,
+  reconcile,
+  splitNubankDescription,
+} from "./pdfStatement";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, "__fixtures__", name)));
 
@@ -110,14 +119,15 @@ describe("readBalanceColumn (layout do Bradesco Celular)", () => {
     "Total 0,00 24,16 900,00",
   ];
 
-  it("junta histórico + nome, tira o sinal do saldo e nunca lança linha de saldo", () => {
+  it("nome vira a descrição, histórico vira o tipo, data do Pix, e linha de saldo nunca entra", () => {
     const read = readBalanceColumn(lines)!;
-    expect(read.rows.map((row) => [row.date, row.description, row.amountCents])).toEqual([
-      ["2026-09-01", "PIX RECEBIDO - Maria de Lourdes Silv", 5000],
-      ["2026-09-01", "RENTAB.INVEST FACILCRED*", 22],
-      ["2026-09-01", "COMPRA CARTAO VISA - REDE COMPRAS AEROCLU", -2606],
-      ["2026-09-02", "PIX ENVIADO - JOAO PESSOA SERVICO D", -10000],
-      ["2026-09-03", "PIX QR CODE DINAMICO - REDE BOM COMERCIO LTD", -2416],
+    expect(read.rows.map((row) => [row.date, row.kind, row.description, row.amountCents])).toEqual([
+      ["2026-09-01", "Pix recebido", "Maria de Lourdes Silv", 5000],
+      ["2026-09-01", null, "RENTAB.INVEST FACILCRED", 22],
+      ["2026-09-01", "Compra cartao visa", "REDE COMPRAS AEROCLU", -2606],
+      // Lançado dia 02, mas o Pix foi feito dia 01 (data do DES:).
+      ["2026-09-01", "Pix enviado", "JOAO PESSOA SERVICO D", -10000],
+      ["2026-09-03", "Pix qr code dinamico", "REDE BOM COMERCIO LTD", -2416],
     ]);
     expect(read.openingBalanceCents).toBe(100000);
     expect(read.closingBalanceCents).toBe(90000);
@@ -128,5 +138,47 @@ describe("readBalanceColumn (layout do Bradesco Celular)", () => {
   it("põe na lista do não conciliado a linha em que o saldo não bate (linha faltando)", () => {
     const missing = lines.filter((line) => !line.startsWith("RENTAB"));
     expect(readBalanceColumn(missing)!.mismatched).toEqual(["0501620 26,06 1.024,16"]);
+  });
+});
+
+describe("readNubank", () => {
+  const lines = [
+    "Extrato de conta",
+    "Saldo inicial 1.000,00",
+    "Total de entradas + 1.500,00",
+    "Total de saídas - 250,00",
+    "Saldo final do período 2.250,00",
+    "Movimentações",
+    "01 SET 2026 Total de entradas + 1.500,00",
+    "Transferência recebida pelo Pix JOAO DA SILVA - •••.123.456-•• - ITAÚ",
+    "UNIBANCO S.A. (0341) Agência: 1234 Conta: 12345-6 1.500,00",
+    "Total de saídas - 200,00",
+    "Transferência enviada pelo Pix MARIA DE LOURDES SILVA - •••.654.321-•• - NU PAGAMENTOS - IP (0260) 150,00",
+    "Compra no débito PADARIA SOL 50,00",
+    "Tem alguma dúvida? Mande uma mensagem para nosso time de atendimento.",
+    "02 SET 2026 Total de saídas - 50,00",
+    "Pagamento de fatura 50,00",
+  ];
+
+  it("tira o sinal da seção, separa tipo e nome inteiro e confere o total do dia", () => {
+    const read = readNubank(lines)!;
+    expect(read.rows.map((row) => [row.date, row.kind, row.description, row.amountCents])).toEqual([
+      ["2026-09-01", "Transferência recebida pelo Pix", "JOAO DA SILVA", 150000],
+      ["2026-09-01", "Transferência enviada pelo Pix", "MARIA DE LOURDES SILVA", -15000],
+      ["2026-09-01", "Compra no débito", "PADARIA SOL", -5000],
+      ["2026-09-02", null, "Pagamento de fatura", -5000],
+    ]);
+    expect(read.mismatched).toEqual([]);
+    expect(reconcile(read)).toEqual({ reconciled: true, differenceCents: 0 });
+  });
+
+  it("avisa quando o total do dia não bate", () => {
+    const missing = lines.filter((line) => !line.startsWith("Compra no débito"));
+    expect(readNubank(missing)!.mismatched).toHaveLength(1);
+  });
+
+  it("não é Nubank sem os cabeçalhos de dia", () => {
+    expect(readNubank(["02/09 MERCADO -10,00"])).toBeNull();
+    expect(splitNubankDescription("Compra no débito via NuPay iFood - x")).toEqual({ kind: "Compra no débito via NuPay", name: "iFood" });
   });
 });

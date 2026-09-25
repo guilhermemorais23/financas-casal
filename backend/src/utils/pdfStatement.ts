@@ -93,9 +93,11 @@ export interface PdfStatement {
   // Linhas do PDF com data e valor que não viraram lançamento: a "listinha
   // do que não conciliou" mostrada antes de importar.
   unreadLines: string[];
+  // Layout reconhecido (leitura própria, conferida linha a linha).
+  bank: "bradesco" | "nubank" | null;
 }
 
-type PdfRead = Omit<PdfStatement, "reconciled" | "differenceCents" | "readBy" | "unreadLines">;
+type PdfRead = Omit<PdfStatement, "reconciled" | "differenceCents" | "readBy" | "unreadLines" | "bank">;
 
 // ---- leitura sem IA: "dd/mm[/aaaa] descrição ... -1.234,56" -------------
 
@@ -211,6 +213,12 @@ const PAGE_HEADER = /^(data:|nome:|extrato de:|data\s+hist)|folha:\s*\d+\s*\/\s*
 
 const noDigits = (line: string) => line.replace(/\d/g, "");
 
+// "PIX QR CODE DINAMICO" -> "Pix qr code dinamico" (tipo, em letra menor).
+export function sentenceCase(text: string): string {
+  const clean = text.replace(/\*+$/, "").trim().toLowerCase();
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
 // "DES: Maria de Lourdes Silv 01/09" -> "Maria de Lourdes Silv".
 function nameFrom(line: string): string {
   return line
@@ -237,10 +245,25 @@ export function readBalanceColumn(lines: string[]): BalanceColumnRead | null {
   let pending: string[] = [];
   let last: ParsedStatementRow | null = null;
 
+  // As linhas de baixo são o nome (DES:/REM:/loja). O nome vira a descrição e
+  // o histórico ("PIX ENVIADO") vira o tipo. A data do DES:/REM: é o dia em
+  // que o Pix foi feito (o lançamento pode cair no dia útil seguinte).
   const attachName = (texts: string[]) => {
     if (!last) return;
-    const name = texts.filter((t) => !/^(bco|age|cta)\s*:/i.test(t)).map(nameFrom).filter(Boolean).join(" ");
-    if (name) last.description = `${last.description} - ${name}`;
+    const useful = texts.filter((t) => !/^(bco|age|cta)\s*:/i.test(t));
+    const name = useful.map(nameFrom).filter(Boolean).join(" ");
+    if (name) {
+      last.kind = sentenceCase(last.description);
+      last.description = name;
+    }
+    const when = useful.map((t) => t.match(/\s(\d{2})\/(\d{2})$/)).find(Boolean);
+    if (when) {
+      const [year, month] = last.date.split("-").map(Number);
+      const m = Number(when[2]);
+      const y = m > month ? year - 1 : year;
+      const date = parseDate(`${when[1]}/${when[2]}/${y}`);
+      if (date && date <= last.date) last.date = date;
+    }
   };
 
   for (const line of lines) {
@@ -297,13 +320,128 @@ export function readBalanceColumn(lines: string[]): BalanceColumnRead | null {
       opening = newBalance + Math.abs(amount); // melhor palpite: foi saída
     }
     balance = newBalance;
-    last = { date, description: history || "Lançamento", amountCents: cents, externalId: null };
+    last = { date, description: (history || "Lançamento").replace(/\*+$/, "").trim(), amountCents: cents, externalId: null, kind: null };
     rows.push(last);
   }
   attachName(pending);
 
   if (rows.length < 3) return null;
   return { rows, openingBalanceCents: opening, closingBalanceCents: balance, mismatched };
+}
+
+// ---- extrato do Nubank (conta) ------------------------------------------
+//
+//   01 SET 2026 Total de entradas + 1.500,00
+//   Transferência recebida pelo Pix JOAO DA SILVA - •••.123.456-•• - ITAÚ
+//   UNIBANCO S.A. (0341) Agência: 1234 Conta: 12345-6 1.500,00
+//   Total de saídas - 250,00
+//   Compra no débito PADARIA SOL 50,00
+//
+// O valor vem sem sinal: entrada ou saída sai da seção (Total de entradas /
+// Total de saídas). O total de cada seção confere as linhas daquele dia.
+
+const MONTHS: Record<string, string> = { JAN: "01", FEV: "02", MAR: "03", ABR: "04", MAI: "05", JUN: "06", JUL: "07", AGO: "08", SET: "09", OUT: "10", NOV: "11", DEZ: "12" };
+const NU_DAY = /^(\d{2}) (JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ) (\d{4})\b\s*(.*)$/i;
+const NU_SECTION = new RegExp(String.raw`^total de (entradas|sa[ií]das)\s*[+\-−]?\s*(?:R\$\s*)?(${MONEY.replace("-?", "")})$`, "i");
+const NU_ROW = new RegExp(String.raw`^(.*?)\s*(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})$`);
+const NU_NOISE = /^(tem alguma d[uú]vida|extrato gerado|n[aã]o nos responsabilizamos|ouvidoria|caso a solu[cç][aã]o|nu (pagamentos|financeira) s\.?a|cnpj|asseguramos|valores em r\$|movimenta[cç][oõ]es$|\d+ de \d+$)/i;
+const NU_KINDS = [
+  /^transfer[eê]ncia (?:enviada|recebida)(?: pelo pix)?/i,
+  /^transfer[eê]ncia de saldo \S+/i,
+  /^reembolso (?:recebido|enviado) pelo pix/i,
+  /^compra no d[eé]bito(?: via nupay)?/i,
+  /^pagamento de (?:fatura|boleto efetuado|boleto)/i,
+  /^dep[oó]sito recebido por boleto/i,
+  /^(?:aplica[cç][aã]o|resgate) (?:rdb|nuinvest|caixinha)?/i,
+  /^pix no cr[eé]dito/i,
+  /^estorno(?: de)?/i,
+  /^d[eé]bito em conta/i,
+];
+
+// "Transferência enviada pelo Pix MARIA SILVA - •••.123.456-•• - NU PAGAMENTOS"
+// -> tipo "Transferência enviada pelo Pix", nome "MARIA SILVA".
+export function splitNubankDescription(text: string): { kind: string | null; name: string } {
+  for (const re of NU_KINDS) {
+    const m = text.match(re);
+    if (!m) continue;
+    const name = text.slice(m[0].length).split(/\s+-\s+/)[0].trim();
+    return name ? { kind: m[0].trim(), name } : { kind: null, name: m[0].trim() };
+  }
+  return { kind: null, name: text.split(/\s+-\s+/)[0].trim() || text.trim() };
+}
+
+export interface SectionRead extends PdfRead {
+  mismatched: string[];
+}
+
+export function readNubank(lines: string[]): SectionRead | null {
+  if (!lines.some((line) => NU_DAY.test(line)) || !lines.some((line) => /total de (entradas|sa[ií]das)/i.test(line))) return null;
+  const rows: ParsedStatementRow[] = [];
+  const mismatched: string[] = [];
+  let date: string | null = null;
+  let sign = 0;
+  let pending: string[] = [];
+  let section: { label: string; expected: number; sum: number } | null = null;
+
+  const closeSection = () => {
+    if (section && section.sum !== section.expected) {
+      mismatched.push(`${section.label}: o extrato diz ${fromCentsBr(section.expected)}, as linhas somam ${fromCentsBr(section.sum)}`);
+    }
+    section = null;
+  };
+
+  for (const raw of lines) {
+    let line = raw;
+    const day = line.match(NU_DAY);
+    if (day) {
+      date = `${day[3]}-${MONTHS[day[2].toUpperCase()]}-${day[1]}`;
+      line = day[4].trim();
+      pending = [];
+      if (!line) continue;
+    }
+    const sec = line.match(NU_SECTION);
+    // O resumo do topo também tem "Total de entradas"; só vale depois de um dia.
+    if (sec && date) {
+      closeSection();
+      sign = /entrada/i.test(sec[1]) ? 1 : -1;
+      const expected = parseAmountToCents(sec[2]) ?? 0;
+      section = { label: `${date ?? ""} ${sign > 0 ? "entradas" : "saídas"}`.trim(), expected: Math.abs(expected), sum: 0 };
+      pending = [];
+      continue;
+    }
+    if (/^saldo|^rendimento/i.test(line)) {
+      closeSection();
+      sign = 0;
+      pending = [];
+      continue;
+    }
+    if (NU_NOISE.test(line)) continue;
+    if (!sign || !date) continue;
+    const row = line.match(NU_ROW);
+    if (!row) {
+      pending.push(line);
+      continue;
+    }
+    const cents = parseAmountToCents(row[2]);
+    const text = [...pending, row[1]].join(" ").replace(/\s+/g, " ").trim();
+    pending = [];
+    if (!cents || !text) continue;
+    const { kind, name } = splitNubankDescription(text);
+    rows.push({ date, description: name, kind, amountCents: sign * Math.abs(cents), externalId: null });
+    if (section) section.sum += Math.abs(cents);
+  }
+  closeSection();
+  if (rows.length === 0) return null;
+  return {
+    rows,
+    openingBalanceCents: balanceFrom(lines, /saldo (inicial|anterior)/),
+    closingBalanceCents: balanceFrom(lines, /saldo final/),
+    mismatched,
+  };
+}
+
+function fromCentsBr(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 // Linhas que têm data e valor mas não viraram lançamento (nem são saldo):
@@ -393,8 +531,17 @@ export async function parsePdfStatement(data: Uint8Array, password?: string): Pr
     const { mismatched, ...read } = byBalance;
     const check = reconcile(read);
     if (check.reconciled !== false || mismatched.length > 0) {
-      return { ...read, ...check, readBy: "text", unreadLines: mismatched.slice(0, 30) };
+      const bank = lines.some((line) => /bradesco/i.test(line)) ? "bradesco" : null;
+      return { ...read, ...check, readBy: "text", unreadLines: mismatched.slice(0, 30), bank };
     }
+  }
+  const byNubank = readNubank(lines);
+  if (byNubank) {
+    const { mismatched, ...read } = byNubank;
+    const check = reconcile(read);
+    // Sem os dois saldos, o total de cada dia é a conferência.
+    const reconciled = check.reconciled ?? (mismatched.length === 0 ? true : false);
+    return { ...read, ...check, reconciled, readBy: "text", unreadLines: mismatched.slice(0, 30), bank: "nubank" };
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -415,5 +562,5 @@ export async function parsePdfStatement(data: Uint8Array, password?: string): Pr
   if (read.rows.length === 0) {
     throw new StatementParseError("Não encontrei lançamentos nesse PDF. Se o banco tiver, use a opção OFX ou CSV.");
   }
-  return { ...read, ...reconcile(read), readBy, unreadLines: findUnreadLines(lines, read.rows) };
+  return { ...read, ...reconcile(read), readBy, unreadLines: findUnreadLines(lines, read.rows), bank: null };
 }

@@ -7969,6 +7969,45 @@ select {
   font-size: 1rem;
 }
 
+.import-banks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.import-banks small {
+  width: 100%;
+  color: var(--color-text-muted);
+}
+
+.import-bank {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.import-bank.ok {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  font-weight: 600;
+}
+
+.import-question-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.import-question-kind {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
 .import-unmatched-count {
   display: inline-block;
   min-width: 1.4rem;
