@@ -12,6 +12,7 @@ import { BillsTabs } from "../components/BillsTabs";
 import { initialOf } from "../utils/initial";
 import { SplitSummary } from "../components/SplitSummary";
 import { personColor } from "../utils/categoryColor";
+import { readCreditCardPreference, saveCreditCardPreference } from "../utils/creditCardPreference";
 
 interface MemberRow {
   id: string;
@@ -47,6 +48,7 @@ interface CardRow {
   limit: string | null;
   limitUsed: string | null;
   limitType: "normal" | "secured";
+  securedFromAccount: boolean;
   limitReleases: LimitRelease[];
 }
 
@@ -91,6 +93,10 @@ export function CardsPage() {
   const [limit, setLimit] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [limitType, setLimitType] = useState<"normal" | "secured">("normal");
+  // Cartão garantido: o dinheiro sai da conta hoje, ou já estava guardado
+  // fora do app (poupança/caixinha) e o limite é um valor a mais.
+  const [securedFromAccount, setSecuredFromAccount] = useState(false);
+  const [defaultCreditCardId, setDefaultCreditCardId] = useState(() => readCreditCardPreference(user?.id ?? ""));
   const [scope, setScope] = useState<"personal" | "joint">("joint");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -156,13 +162,22 @@ export function CardsPage() {
       await apiRequest("/cards", {
         method: "POST",
         token,
-        body: { name: name.trim(), closingDay: parsedClosing, dueDay: parsedDue, scope, limit: parsedLimit, limitType },
+        body: {
+          name: name.trim(),
+          closingDay: parsedClosing,
+          dueDay: parsedDue,
+          scope,
+          limit: parsedLimit,
+          limitType,
+          securedFromAccount: limitType === "secured" ? securedFromAccount : undefined,
+        },
       });
       setName("");
       setClosingDay("28");
       setDueDay("5");
       setLimit("");
       setLimitType("normal");
+      setSecuredFromAccount(false);
       setIsCreateOpen(false);
       showToast("Cartão criado");
       await loadCards();
@@ -296,6 +311,31 @@ export function CardsPage() {
     }
   }
 
+  function toggleDefaultCreditCard(cardId: string) {
+    const next = defaultCreditCardId === cardId ? null : cardId;
+    saveCreditCardPreference(user?.id ?? "", next);
+    setDefaultCreditCardId(next);
+    showToast(next ? "Compras no crédito vão pra esse cartão" : "Cartão padrão removido", next ? undefined : { variant: "info" });
+  }
+
+  async function handleSecuredSource(card: CardRow, fromAccount: boolean) {
+    const confirmed = await confirm({
+      title: fromAccount ? "Esse dinheiro saiu da sua conta?" : "Esse dinheiro já estava guardado?",
+      body: fromAccount
+        ? `A gente tira ${formatCurrency(Number(card.limit ?? 0))} da sua conta hoje, como guardado no cartão.`
+        : "Os lançamentos de guardar e resgatar somem do extrato e o saldo da conta volta ao que era. O limite continua igual.",
+      confirmLabel: fromAccount ? "Tirar da conta" : "Não mexer na conta",
+    });
+    if (!confirmed) return;
+    try {
+      await apiRequest(`/cards/${card.id}/secured-source`, { method: "PATCH", token, body: { fromAccount } });
+      showToast(fromAccount ? "Tirado da conta" : "Conta corrigida");
+      await loadCards();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível atualizar o cartão");
+    }
+  }
+
   function openLimitAdjust(cardId: string, direction: "deposit" | "withdraw") {
     const isSameForm = limitAdjust?.cardId === cardId && limitAdjust.direction === direction;
     setLimitAdjust(isSameForm ? null : { cardId, direction });
@@ -355,6 +395,7 @@ export function CardsPage() {
         <div className="section-header">
           <p className="card-title">
             {card.name}
+            {defaultCreditCardId === card.id && <span className="card-default-badge">Padrão no crédito</span>}
           </p>
           <div className="transaction-row-actions">
             <button type="button" className="btn-icon" title="Remover cartão" onClick={() => handleDeleteCard(card.id)}>
@@ -383,8 +424,17 @@ export function CardsPage() {
 
             {isSecured && (
               <p className="field-hint">
-                Esse dinheiro continua seu, só fica parado como garantia. A fatura você paga com o dinheiro da conta, e
-                pagar devolve o limite.
+                {card.securedFromAccount
+                  ? "Saiu da sua conta e continua seu, só fica parado como garantia."
+                  : "Já estava guardado fora do app, então é limite a mais: não mexe no saldo da conta."}{" "}
+                A fatura você paga com o dinheiro da conta, e pagar devolve o limite.{" "}
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => handleSecuredSource(card, !card.securedFromAccount)}
+                >
+                  {card.securedFromAccount ? "Não saiu da conta?" : "Saiu da conta?"}
+                </button>
               </p>
             )}
 
@@ -416,8 +466,10 @@ export function CardsPage() {
                   />
                   <p className="field-hint">
                     {limitAdjust.direction === "deposit"
-                      ? "Sai da sua conta hoje e vira limite na hora."
-                      : `Volta pra sua conta. Você pode resgatar até ${formatCurrency(available)}: o que está em compras fica preso até a fatura ser paga.`}
+                      ? card.securedFromAccount
+                        ? "Sai da sua conta hoje e vira limite na hora."
+                        : "Vira limite na hora, sem mexer no saldo da conta."
+                      : `${card.securedFromAccount ? "Volta pra sua conta." : "Sai do limite."} Você pode resgatar até ${formatCurrency(available)}: o que está em compras fica preso até a fatura ser paga.`}
                   </p>
                 </div>
                 {limitAdjustError && (
@@ -463,7 +515,10 @@ export function CardsPage() {
         )}
 
         <p className="card-subtitle card-closing-note">
-          Fecha dia {card.closingDay}. Compras a partir daí caem na fatura seguinte.
+          Fecha dia {card.closingDay}. Compras a partir daí caem na fatura seguinte.{" "}
+          <button type="button" className="link-button" onClick={() => toggleDefaultCreditCard(card.id)}>
+            {defaultCreditCardId === card.id ? "Deixar de ser o padrão no crédito" : "Usar nas compras no crédito"}
+          </button>
         </p>
 
         {s.byPerson.length > 1 && (
@@ -779,6 +834,28 @@ export function CardsPage() {
               </button>
             </div>
 
+            {limitType === "secured" && (
+              <div className="field">
+                <label>De onde veio esse dinheiro?</label>
+                <div className="segmented">
+                  <button
+                    type="button"
+                    className={`segmented-option${!securedFromAccount ? " active" : ""}`}
+                    onClick={() => setSecuredFromAccount(false)}
+                  >
+                    Já estava guardado
+                  </button>
+                  <button
+                    type="button"
+                    className={`segmented-option${securedFromAccount ? " active" : ""}`}
+                    onClick={() => setSecuredFromAccount(true)}
+                  >
+                    Sai da conta agora
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="field">
               <label htmlFor="card-limit">
                 {limitType === "secured" ? "Quanto você guardou no cartão (R$)" : "Limite (opcional)"}
@@ -792,7 +869,9 @@ export function CardsPage() {
               />
               <p className="field-hint">
                 {limitType === "secured"
-                  ? "Esse valor sai da sua conta hoje e vira o limite do cartão. Continua sendo seu: dá pra guardar mais ou resgatar depois."
+                  ? securedFromAccount
+                    ? "Esse valor sai da sua conta hoje e vira o limite do cartão. Continua sendo seu: dá pra guardar mais ou resgatar depois."
+                    : "Vira o limite do cartão sem mexer no saldo da conta: é um valor a mais. O que você comprar entra na fatura do mês seguinte."
                   : "Se preencher, a gente acompanha quanto do limite já está comprometido."}
               </p>
             </div>
