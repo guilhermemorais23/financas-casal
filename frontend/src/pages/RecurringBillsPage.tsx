@@ -9,7 +9,6 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
-import { initialOf } from "../utils/initial";
 
 interface AccountRow {
   id: string;
@@ -52,6 +51,8 @@ export function RecurringBillsPage() {
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [listScope, setListScope] = useState<"joint" | "personal">("joint");
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [bills, setBills] = useState<RecurringBillRow[] | null>(() => readCache(cacheKey));
 
@@ -215,87 +216,135 @@ export function RecurringBillsPage() {
     const isBusy = busyId === bill.id;
 
     return (
-      <div key={bill.id} className={`card debt-card${bill.isActive ? "" : " paused-bill"}`}>
-        <div className="section-header">
-          <p className="card-title">
-            <span
-              className="transaction-icon"
-              style={{ marginRight: "0.5rem" }}
-            >
-              {initialOf(category?.name ?? bill.description)}
+      <li key={bill.id} className={`bill-row${bill.isActive ? "" : " paused-bill"}`}>
+        <span className="bill-day" aria-label={`Todo dia ${bill.dayOfMonth}`}>
+          <small>dia</small>
+          <strong>{bill.dayOfMonth}</strong>
+        </span>
+        <div className="bill-info">
+          <span className="bill-name text-truncate">{bill.description}</span>
+          {isEditing ? (
+            <div className="field-row bill-edit">
+              <div className="field">
+                <label htmlFor={`edit-amount-${bill.id}`}>Valor (R$)</label>
+                <input
+                  id={`edit-amount-${bill.id}`}
+                  inputMode="decimal"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor={`edit-day-${bill.id}`}>Todo dia</label>
+                <input
+                  id={`edit-day-${bill.id}`}
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={editDay}
+                  onChange={(e) => setEditDay(e.target.value)}
+                />
+              </div>
+              <div className="transaction-row-actions" style={{ alignSelf: "flex-end", paddingBottom: "0.15rem" }}>
+                <button type="button" className="btn-icon" title="Salvar" disabled={isBusy} onClick={() => saveEdit(bill.id)}>
+                  ✓
+                </button>
+                <button type="button" className="btn-icon" title="Cancelar" onClick={() => setEditingId(null)}>
+                  ×
+                </button>
+              </div>
+            </div>
+          ) : (
+            <span className="bill-meta text-truncate">
+              {category?.name ?? "Sem categoria"}
+              {bill.splitType === "equal" && ", dividida igualmente"}
+              {!bill.isActive && ", pausada"}
             </span>
-            {bill.description}
-          </p>
-          <div className="transaction-row-actions">
-            <button
-              type="button"
-              className="btn-icon"
-              title={bill.isActive ? "Pausar" : "Retomar"}
-              disabled={isBusy}
-              onClick={() => toggleActive(bill)}
-            >
-              {bill.isActive ? "⏸" : "▶"}
-            </button>
-            <button type="button" className="btn-icon" title="Editar" onClick={() => startEdit(bill)}>
-              <Icon name="pencil" />
-            </button>
-            <button type="button" className="btn-icon" title="Excluir" disabled={isBusy} onClick={() => handleDelete(bill.id)}>
-              <Icon name="trash" />
-            </button>
-          </div>
+          )}
         </div>
-
-        {isEditing ? (
-          <div className="field-row">
-            <div className="field">
-              <label htmlFor={`edit-amount-${bill.id}`}>Valor (R$)</label>
-              <input
-                id={`edit-amount-${bill.id}`}
-                inputMode="decimal"
-                value={editAmount}
-                onChange={(e) => setEditAmount(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor={`edit-day-${bill.id}`}>Todo dia</label>
-              <input
-                id={`edit-day-${bill.id}`}
-                type="number"
-                min={1}
-                max={31}
-                value={editDay}
-                onChange={(e) => setEditDay(e.target.value)}
-              />
-            </div>
-            <div className="transaction-row-actions" style={{ alignSelf: "flex-end", paddingBottom: "0.15rem" }}>
-              <button type="button" className="btn-icon" title="Salvar" disabled={isBusy} onClick={() => saveEdit(bill.id)}>
-                ✓
-              </button>
-              <button type="button" className="btn-icon" title="Cancelar" onClick={() => setEditingId(null)}>
-                ×
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p className="card-subtitle" style={{ marginBottom: 0 }}>
-            {formatCurrency(Number(bill.amount))} · todo dia {bill.dayOfMonth}
-            {!bill.isActive && " · pausada"}
-            {bill.lastGeneratedMonth && ` · último lançamento em ${bill.lastGeneratedMonth}`}
-          </p>
-        )}
-      </div>
+        {!isEditing && <strong className="bill-amount">{formatCurrency(Number(bill.amount))}</strong>}
+        <div className="transaction-row-actions">
+          <button
+            type="button"
+            className="btn-icon"
+            title={bill.isActive ? "Pausar" : "Retomar"}
+            disabled={isBusy}
+            onClick={() => toggleActive(bill)}
+          >
+            {bill.isActive ? "⏸" : "▶"}
+          </button>
+          <button type="button" className="btn-icon" title="Editar" onClick={() => startEdit(bill)}>
+            <Icon name="pencil" />
+          </button>
+          <button type="button" className="btn-icon" title="Excluir" disabled={isBusy} onClick={() => handleDelete(bill.id)}>
+            <Icon name="trash" />
+          </button>
+        </div>
+      </li>
     );
   }
 
-  const jointBills = useMemo(() => bills?.filter((b) => b.accountType === "joint") ?? [], [bills]);
-  const personalBills = useMemo(() => bills?.filter((b) => b.accountType === "personal") ?? [], [bills]);
+  const listedBills = useMemo(
+    () => (bills ?? []).filter((b) => b.accountType === listScope).sort((a, b) => a.dayOfMonth - b.dayOfMonth),
+    [bills, listScope]
+  );
+  const monthlyTotal = listedBills
+    .filter((b) => b.isActive && b.transactionType === "expense")
+    .reduce((sum, b) => sum + Number(b.amount), 0);
+  // Sem nenhuma conta ainda, o formulário já aparece aberto.
+  const isFormOpen = showForm || (bills !== null && bills.length === 0);
 
   return (
     <AppLayout>
       <div className="page-stack">
         <BillsTabs />
-        <div className="card form-card">
+        <div className="page-title-row">
           <h1>Contas fixas</h1>
+          <button
+            type="button"
+            className="btn btn-primary btn-compact"
+            aria-expanded={isFormOpen}
+            onClick={() => setShowForm((open) => !open)}
+          >
+            {isFormOpen ? "Fechar" : "Nova conta fixa"}
+          </button>
+        </div>
+
+        <div className="segmented">
+          <button
+            type="button"
+            className={`segmented-option${listScope === "joint" ? " active" : ""}`}
+            onClick={() => setListScope("joint")}
+          >
+            Do grupo
+          </button>
+          <button
+            type="button"
+            className={`segmented-option${listScope === "personal" ? " active" : ""}`}
+            onClick={() => setListScope("personal")}
+          >
+            Pessoais
+          </button>
+        </div>
+
+        {listedBills.length > 0 && (
+          <div className="stat-card">
+            <p className="label">{listScope === "joint" ? "Todo mês, o grupo paga" : "Todo mês, você paga"}</p>
+            <p className="value">{formatCurrency(monthlyTotal)}</p>
+          </div>
+        )}
+
+        {bills === null ? null : listedBills.length === 0 ? (
+          <EmptyState>
+            {listScope === "joint" ? "Nenhuma conta fixa do grupo ainda." : "Nenhuma conta fixa pessoal ainda."}
+          </EmptyState>
+        ) : (
+          <ul className="card bill-list">{listedBills.map(renderBillCard)}</ul>
+        )}
+
+        {isFormOpen && (
+        <div className="card form-card">
+          <p className="card-title">Nova conta fixa</p>
           <p className="card-subtitle">
             Aluguel, assinaturas, mensalidades -- cadastre uma vez e ela mesma gera o lançamento todo mês, no dia
             certo, até você pausar ou excluir.
@@ -407,28 +456,7 @@ export function RecurringBillsPage() {
             </button>
           </form>
         </div>
-
-        <div>
-          <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            Contas fixas do grupo
-          </p>
-          {bills === null ? null : jointBills.length === 0 ? (
-            <EmptyState>Nenhuma conta fixa do casal ainda.</EmptyState>
-          ) : (
-            <div className="page-stack">{jointBills.map(renderBillCard)}</div>
-          )}
-        </div>
-
-        <div>
-          <p className="card-title" style={{ marginBottom: "0.75rem" }}>
-            Suas contas fixas
-          </p>
-          {bills === null ? null : personalBills.length === 0 ? (
-            <EmptyState>Nenhuma conta fixa pessoal ainda.</EmptyState>
-          ) : (
-            <div className="page-stack">{personalBills.map(renderBillCard)}</div>
-          )}
-        </div>
+        )}
       </div>
     </AppLayout>
   );

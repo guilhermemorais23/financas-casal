@@ -6601,3 +6601,581 @@ select {
     box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--color-primary) 70%, transparent);
   }
 }
+
+/* Painel, estrutura da proposta ------------------------------------------ */
+
+.section-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.hero-line {
+  margin: 0.6rem 0 0;
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+}
+
+.hero-line strong {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.split-summary,
+.upcoming-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.split-summary .section-header,
+.upcoming-section .section-header {
+  margin-bottom: 0;
+  align-items: baseline;
+}
+
+.split-summary-total {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.split-bar {
+  display: flex;
+  gap: 3px;
+  height: 14px;
+}
+
+.split-bar span {
+  min-width: 6px;
+}
+
+.split-bar span:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.split-bar span:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.split-bar span:only-child {
+  border-radius: var(--radius-sm);
+}
+
+.split-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  font-size: 0.9rem;
+}
+
+.split-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.split-legend strong {
+  font-weight: 700;
+}
+
+.split-settle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.2rem;
+  padding: 0.35rem 0.9rem;
+  min-height: 52px;
+  border-radius: var(--radius);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  font-size: 0.95rem;
+}
+
+.split-settle .link {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dashboard-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.dashboard-actions .btn {
+  min-height: 50px;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+@media (min-width: 721px) {
+  .dashboard-actions {
+    max-width: 420px;
+  }
+}
+
+.dashboard-actions .btn + .btn {
+  margin-top: 0;
+}
+
+.dashboard-actions .btn-outline {
+  color: var(--color-text);
+  background: var(--color-card);
+  border: 1.5px solid var(--baseline);
+  text-decoration: none;
+}
+
+.dashboard-actions .btn-primary {
+  text-decoration: none;
+}
+
+/* Botões da proposta: canto de bloco (12px), não pílula. */
+.btn {
+  border-radius: var(--radius);
+}
+
+/* Menu Mais da proposta: atalhos em círculos sem quadro, lista sem fundo. */
+@media (max-width: 720px) {
+  .more-sheet {
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+
+  .more-sheet-tiles {
+    gap: 0.25rem;
+    padding-bottom: 1rem;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .more-sheet-tile,
+  .more-sheet-tile.active {
+    background: none;
+    padding: 0.5rem 0.25rem;
+    font-weight: 600;
+  }
+
+  .more-sheet-tile.active {
+    color: var(--color-primary);
+  }
+
+  .more-sheet-tile-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-pill);
+    background: var(--glyph-bg);
+  }
+
+  .more-sheet-tile.active .more-sheet-tile-icon {
+    background: var(--color-primary-soft);
+  }
+
+  .more-sheet-tile-icon .icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .more-sheet-list {
+    background: none;
+    border-radius: 0;
+  }
+
+  .more-sheet-row {
+    min-height: 52px;
+    padding: 0 0.25rem;
+    border-bottom: 0;
+    font-weight: 500;
+  }
+
+  .more-sheet-row.danger {
+    font-weight: 600;
+  }
+}
+
+/* Par: título com os avatares do grupo, acertos com o valor em destaque. */
+.par-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.par-title-row h1 {
+  margin: 0;
+}
+
+.par-avatars {
+  display: flex;
+}
+
+.par-avatars .identity-avatar {
+  border: 3px solid var(--color-bg-soft);
+}
+
+.par-avatars .identity-avatar + .identity-avatar {
+  margin-left: -12px;
+}
+
+.settle-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settle-row:last-child {
+  border-bottom: 0;
+}
+
+.settle-amount {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.settle-text {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+/* Cartões: valor da fatura em destaque, limite com legenda embaixo. */
+.card-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.25rem 0 0.9rem;
+}
+
+.card-hero-label {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.card-hero-amount {
+  font-size: 2.4rem;
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.card-limit-track {
+  height: 10px;
+}
+
+.card-limit-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.card-closing-note {
+  margin: 0.75rem 0;
+}
+
+/* Contas fixas: título com o botão de nova conta, lista em linhas. */
+.page-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-title-row h1 {
+  margin: 0;
+}
+
+.btn.btn-compact {
+  width: auto;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+}
+
+.bill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 1rem;
+}
+
+.bill-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bill-row:last-child {
+  border-bottom: 0;
+}
+
+.bill-day {
+  width: 40px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.bill-day small {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.bill-day strong {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.bill-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.bill-name {
+  font-weight: 600;
+}
+
+.bill-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.bill-amount {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bill-row .transaction-row-actions {
+  flex-shrink: 0;
+}
+
+/* Metas: valor guardado em destaque, prazo ao lado do nome. */
+.goal-card .section-header {
+  align-items: baseline;
+}
+
+.goal-card-side {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.goal-deadline {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.goal-achieved-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--success-text);
+}
+
+.goal-achieved-label .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.goal-amount {
+  margin: 0.25rem 0 0.6rem;
+  font-size: 2rem;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.goal-amount span {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+
+.goal-track {
+  height: 12px;
+}
+
+.goal-card.is-achieved {
+  background: none;
+  border-style: dashed;
+  border-width: 1.5px;
+}
+
+.goal-card.is-achieved .goal-amount {
+  font-size: 1.15rem;
+  margin-bottom: 0;
+}
+
+/* Relatórios: saldo do ano em destaque e uma coluna por mês. */
+.yearly-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.yearly-headline span {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.yearly-headline strong {
+  font-size: 2.1rem;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.yearly-columns {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.yearly-column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.yearly-column-track {
+  height: 110px;
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1.5px solid var(--baseline);
+}
+
+.yearly-column-bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--color-primary) 35%, var(--color-card));
+}
+
+.yearly-column.is-current .yearly-column-bar {
+  background: var(--color-primary);
+}
+
+.yearly-column.is-negative .yearly-column-bar {
+  background: color-mix(in srgb, var(--status-critical) 45%, var(--color-card));
+}
+
+.yearly-column-label {
+  font-size: 0.72rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.yearly-column.is-current .yearly-column-label {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+/* Entrar: a marca grande com a barra do casal, formulário sem quadro no celular. */
+.auth-page {
+  align-items: stretch;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.auth-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.auth-wordmark {
+  font-family: var(--font-brand);
+  font-weight: 900;
+  font-size: clamp(4rem, 22vw, 5.5rem);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  color: var(--color-primary);
+}
+
+.auth-wordmark .brand-dot {
+  color: var(--color-text);
+}
+
+.auth-split {
+  display: flex;
+  gap: 3px;
+  width: 150px;
+  height: 10px;
+}
+
+.auth-split span:first-child {
+  width: 58%;
+  background: var(--person-1);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.auth-split span:last-child {
+  flex: 1;
+  background: var(--person-2);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.auth-tagline {
+  margin: 0.25rem 0 0;
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.auth-card h1 {
+  font-size: 1.35rem;
+}
+
+@media (max-width: 720px) {
+  .auth-card {
+    background: none;
+    border: 0;
+    padding: 0;
+  }
+}
+
+.goal-card .section-header {
+  flex-wrap: nowrap;
+}
+
+.goal-card .section-title {
+  min-width: 0;
+}
+
+.goal-track .progress-fill,
+.card-limit-track .progress-fill:not(.warning):not(.over) {
+  background: var(--color-primary);
+}
+
+.page-stack > .segmented {
+  background: var(--tan-track);
+}

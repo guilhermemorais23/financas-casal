@@ -18,6 +18,7 @@ import { MonthCloseCard } from "../components/MonthCloseCard";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { repeatHref } from "../utils/quickEntry";
 import { SplitStatusPill } from "../components/SplitStatusPill";
+import { SplitSummary } from "../components/SplitSummary";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor } from "../utils/categoryColor";
 import {
@@ -653,6 +654,13 @@ export function DashboardPage() {
     Number(jointSummary?.byPayer.find((row) => row.payerId === memberId)?.total ?? 0);
   const memberName = (memberId: string) =>
     memberId === user?.id ? "Você" : (group?.members.find((member) => member.id === memberId)?.displayName ?? "Alguém do grupo");
+  // "Quem pagou o quê": quanto cada um pagou da conta conjunta no mês.
+  const payers = orderedMembers.map((member, index) => ({
+    ...member,
+    total: jointSpentByUser(member.id),
+    color: personColor(index),
+  }));
+  const lastDayOfMonth = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
 
   if (error && !group) {
     return (
@@ -700,30 +708,20 @@ export function DashboardPage() {
               não lança todo gasto veria o saldo crescer mês a mês sem ter
               esse dinheiro de verdade. O saldo das contas fica no card
               "Onde está seu dinheiro". */}
-          <p className="label">{dailyAllowance !== null ? "Você tem este mês" : `Sobrou em ${monthLabel}`}</p>
+          <p className="label">
+            {dailyAllowance !== null ? `Sobra em ${monthLongName(month)}` : `Sobrou em ${monthLabel}`}
+          </p>
           <p className={`value${monthLeft < 0 ? " negative" : ""}`}>
             <AnimatedNumber value={monthLeft} />
           </p>
-          <div className="hero-numbers">
-            {dailyAllowance !== null && (
-              <div className="hero-number">
-                <span>Por dia até o fim do mês</span>
-                <strong className={dailyAllowance < 0 ? "negative" : ""}>
-                  {formatCurrency(Math.max(0, dailyAllowance))}
-                </strong>
-              </div>
-            )}
-            <div className="hero-number">
-              <span>Vence em 7 dias</span>
-              <strong>{formatCurrency(upcomingToPay)}</strong>
-            </div>
-            {loansOutstanding > 0 && (
-              <div className="hero-number">
-                <span>Vão te pagar</span>
-                <strong>{formatCurrency(loansOutstanding)}</strong>
-              </div>
-            )}
-          </div>
+          {dailyAllowance !== null && dailyAllowance > 0 && (
+            <p className="hero-line">
+              Dá <strong>{formatCurrency(dailyAllowance)} por dia</strong> até o dia {lastDayOfMonth}.
+            </p>
+          )}
+          {loansOutstanding > 0 && (
+            <p className="hero-note">{formatCurrency(loansOutstanding)} emprestados ainda vão voltar pra você.</p>
+          )}
           {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
             <p className="hero-note">Você já gastou mais do que entrou este mês.</p>
           )}
@@ -743,31 +741,36 @@ export function DashboardPage() {
           )}
         </div>
 
-        <nav className="quick-actions" aria-label="Atalhos">
-          <Link to="/transactions/new" className="quick-action">
-            <span className="quick-action-icon expense"><Icon name="download" /></span>
-            Despesa
-          </Link>
-          <Link to="/transactions/new?tipo=receita" className="quick-action">
-            <span className="quick-action-icon income"><Icon name="upload" /></span>
-            Receita
-          </Link>
-          <Link to="/loans?novo=1" className="quick-action">
-            <span className="quick-action-icon loan"><Icon name="coin" /></span>
-            Emprestei
-          </Link>
-          <Link to="/cards" className="quick-action">
-            <span className="quick-action-icon bills"><Icon name="receipt" /></span>
-            Contas
-          </Link>
-        </nav>
+        {jointAccount && orderedMembers.length > 1 && (
+          <SplitSummary
+            payers={payers}
+            accountName={jointAccount.name}
+            currentUserId={user?.id}
+            memberName={memberName}
+            settlements={balance?.balances}
+            settleHref="/par"
+          />
+        )}
 
-        <div className="card upcoming-card">
+        <div className="dashboard-actions">
+          <Link to="/transactions/new" className="btn btn-primary">
+            Nova despesa
+          </Link>
+          <Link to="/transactions/new?tipo=receita" className="btn btn-outline">
+            Nova receita
+          </Link>
+        </div>
+
+        <section className="upcoming-section" aria-label="Vence em 7 dias">
           <div className="section-header">
-            <p className="card-title">Vence logo</p>
-            <Link to="/cards" className="link">
-              Ver contas
-            </Link>
+            <h2 className="section-title">Vence em 7 dias</h2>
+            {upcomingToPay > 0 ? (
+              <span className="split-summary-total">{formatCurrency(upcomingToPay)}</span>
+            ) : (
+              <Link to="/cards" className="link">
+                Ver contas
+              </Link>
+            )}
           </div>
           {upcoming.length === 0 ? (
             <p className="empty-state">Nada pra pagar ou receber nos próximos 7 dias.</p>
@@ -795,7 +798,7 @@ export function DashboardPage() {
               ))}
             </ul>
           )}
-        </div>
+        </section>
 
         <div className="stat-row wrap">
           <div className="stat-box tone-good">
@@ -936,52 +939,6 @@ export function DashboardPage() {
                     </Link>
                   )}
                 </div>
-              </div>
-            )}
-
-            {jointAccount && orderedMembers.length > 1 && (
-              <div className="card">
-                <div className="section-header">
-                  <p className="card-title">Par</p>
-                  <Link to="/par" className="link">
-                    Ver Par
-                  </Link>
-                </div>
-                <p className="card-subtitle">O que vocês gastaram juntos esse mês, e quem pagou quanto.</p>
-                <p className="value-sm" style={{ marginBottom: "0.75rem" }}>
-                  {formatCurrency(jointAccount.balance)} <span className="card-subtitle">na {jointAccount.name}</span>
-                </p>
-                <div className="stat-row wrap">
-                  {orderedMembers.map((member, index) => (
-                    <div
-                      className="stat-box"
-                      key={member.id}
-                      style={{
-                        ["--stat-box-accent" as string]: personColor(index),
-                      }}
-                    >
-                      <div className="stat-box-header">
-                        <span className="identity-dot" style={{ background: personColor(index) }} />
-                        <p className="label">{member.id === user?.id ? "Você" : member.displayName}</p>
-                      </div>
-                      <p className="value-sm">{formatCurrency(jointSpentByUser(member.id))}</p>
-                    </div>
-                  ))}
-                </div>
-                {balance && balance.balances.length > 0 && (
-                  <p className="card-subtitle" style={{ marginTop: "0.75rem" }}>
-                    Divisões em aberto:{" "}
-                    {balance.balances
-                      .map((row) =>
-                        row.fromUserId === user?.id
-                          ? `${formatCurrency(row.amount)} a pagar pra ${memberName(row.toUserId)}`
-                          : row.toUserId === user?.id
-                            ? `${formatCurrency(row.amount)} a receber de ${memberName(row.fromUserId)}`
-                            : `${formatCurrency(row.amount)} entre ${memberName(row.fromUserId)} e ${memberName(row.toUserId)}`
-                      )
-                      .join(" · ")}
-                  </p>
-                )}
               </div>
             )}
 

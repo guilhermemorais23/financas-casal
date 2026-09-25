@@ -10,6 +10,8 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
 import { initialOf } from "../utils/initial";
+import { SplitSummary } from "../components/SplitSummary";
+import { personColor } from "../utils/categoryColor";
 
 interface MemberRow {
   id: string;
@@ -360,27 +362,23 @@ export function CardsPage() {
             </button>
           </div>
         </div>
-        <p className="card-subtitle" style={{ marginBottom: "0.75rem" }}>
-          Fecha dia {card.closingDay} · vence dia {card.dueDay}
-        </p>
-
-        <div className="goal-amounts">
-          <span className="debt-mini-value">{formatCurrency(Number(s.total))} nesta fatura</span>
-          <span className="debt-mini-remaining">
-            {s.isPaid ? "✓ paga" : `vence ${monthYearLabel(s.month)}`}
+        <div className="card-hero">
+          <span className="card-hero-label">
+            {s.isPaid ? `Fatura de ${monthYearLabel(s.month)}, paga` : `Fatura de ${monthYearLabel(s.month)}, vence dia ${card.dueDay}`}
           </span>
+          <span className="card-hero-amount">{formatCurrency(Number(s.total))}</span>
         </div>
 
         {limitCents !== null && limitUsedCents !== null && (
           <>
-            <div className="goal-amounts" style={{ marginTop: "0.6rem" }}>
-              <span className="debt-mini-value">
-                {isSecured ? "Guardado" : "Limite"} {formatCurrency(limitCents)}
-              </span>
-              <span className="debt-mini-remaining">disponível agora {formatCurrency(available)}</span>
-            </div>
-            <div className="progress-track thin">
+            <div className="progress-track card-limit-track">
               <div className={`progress-fill ${limitTone}`} style={{ width: `${limitPercent}%` }} />
+            </div>
+            <div className="card-limit-legend">
+              <span>{isSecured ? "Guardado usado" : "Limite usado"}</span>
+              <span>
+                {formatCurrency(available)} livres de {formatCurrency(limitCents)}
+              </span>
             </div>
 
             {isSecured && (
@@ -464,17 +462,26 @@ export function CardsPage() {
           </>
         )}
 
-        {s.byPerson.length > 0 && (
-          <div className="stat-row wrap" style={{ marginTop: "0.75rem" }}>
-            {s.byPerson.map((person) => (
-              <div className="stat" key={person.userId} style={{ flex: "1 1 100px" }}>
-                <p className="stat-label">{memberName(person.userId)}</p>
-                <p className="stat-value" style={{ fontSize: "1rem" }}>
-                  {formatCurrency(Number(person.total))}
-                </p>
-              </div>
-            ))}
-          </div>
+        <p className="card-subtitle card-closing-note">
+          Fecha dia {card.closingDay}. Compras a partir daí caem na fatura seguinte.
+        </p>
+
+        {s.byPerson.length > 1 && (
+          <SplitSummary
+            title="Quem comprou o quê"
+            totalSuffix="na fatura"
+            payers={[...s.byPerson]
+              .sort((a, b) => (a.userId === user?.id ? -1 : b.userId === user?.id ? 1 : a.userId.localeCompare(b.userId)))
+              .map((person, index) => ({
+                id: person.userId,
+                displayName: memberName(person.userId),
+                total: Number(person.total),
+                color: personColor(index),
+              }))}
+            accountName="fatura"
+            currentUserId={user?.id}
+            memberName={memberName}
+          />
         )}
 
         <button
