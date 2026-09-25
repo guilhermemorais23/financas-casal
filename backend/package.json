@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "seed": "tsx scripts/seed-emulator.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
     "test": "vitest run"
   },
   "dependencies": {
