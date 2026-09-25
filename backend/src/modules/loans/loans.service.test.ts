@@ -4,6 +4,7 @@ import { getGroupForUser } from "../groups/groups.service";
 import { deleteTransactionForUser, SecuredCardTransferError } from "../transactions/transactions.service";
 import {
   InvalidLoanAccountError,
+  LoanNotFoundError,
   RepaymentTooLargeError,
   addRepayment,
   createLoan,
@@ -82,6 +83,19 @@ describe("loans", () => {
     ).rejects.toBeInstanceOf(InvalidLoanAccountError);
   });
 
+  it("a loan out of Nossa Conta shows up for both, read-only for the partner", async () => {
+    const { userAId, userBId, jointAccountId } = await createTestGroup();
+    const loan = await createLoan(userAId, { personName: "Cunhado", amount: 400, lentAt: todayISO(), dueDate: null, note: null, accountId: jointAccountId });
+    const partnerView = await listLoans(userBId);
+    expect(partnerView.loans.map((l) => l.id)).toEqual([loan.id]);
+    expect(partnerView.loans[0].isMine).toBe(false);
+    expect(partnerView.summary.outstanding).toBe("400.00");
+    expect((await listLoans(userAId)).loans[0].isMine).toBe(true);
+    await expect(
+      addRepayment(userBId, loan.id, { amount: 400, receivedAt: todayISO(), accountId: jointAccountId })
+    ).rejects.toBeInstanceOf(LoanNotFoundError);
+  });
+
   it("forgiving leaves it out of what's still to receive", async () => {
     const { userAId } = await createTestGroup();
     const loan = await createLoan(userAId, { personName: "Primo", amount: 90, lentAt: todayISO(), dueDate: null, note: null, accountId: null });
@@ -112,11 +126,23 @@ describe("interest", () => {
     const months = fullMonthsBetween("2026-01-10", todayISO());
     expect(loan.interest).toBe((1000 * 0.02 * months).toFixed(2));
     expect(loan.remaining).toBe((1000 + 1000 * 0.02 * months).toFixed(2));
+    expect(loan.remainingAtDue).toBeNull();
+  });
+
+  it("tells how much it'll be on the due date, with the interest still to come", async () => {
+    const { userAId } = await createTestGroup();
+    const lentAt = todayISO();
+    const [y, m, d] = lentAt.split("-").map(Number);
+    const due = new Date(Date.UTC(y, m - 1 + 3, Math.min(d, 28))).toISOString().slice(0, 10);
+    const loan = await createLoan(userAId, { personName: "Sócio", amount: 1000, lentAt, dueDate: due, note: null, accountId: null, interestRateMonthly: 2 });
+    const months = fullMonthsBetween(lentAt, due);
+    expect(loan.remaining).toBe("1000.00");
+    expect(loan.remainingAtDue).toBe((1000 + 1000 * 0.02 * months).toFixed(2));
   });
 });
 
 describe("summarize", () => {
-  const base = { groupId: "g", ownerUserId: "u", lentAt: "2026-01-01", note: null, accountId: null, transactionId: null, repayments: [], received: "0.00", interest: "0.00", totalOwed: "0.00", interestRateMonthly: null, status: "open" as const };
+  const base = { groupId: "g", ownerUserId: "u", lentAt: "2026-01-01", note: null, accountId: null, transactionId: null, repayments: [], received: "0.00", interest: "0.00", totalOwed: "0.00", interestRateMonthly: null, status: "open" as const, remainingAtDue: null, isMine: true };
   it("splits what's owed into overdue, due soon and no deadline", () => {
     const summary = summarize(
       [

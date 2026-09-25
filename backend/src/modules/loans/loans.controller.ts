@@ -7,11 +7,11 @@ import {
   RepaymentTooLargeError,
   addRepayment,
   createLoan,
-  listLoans,
   removeLoan,
   removeRepayment,
   updateLoanForUser,
 } from "./loans.service";
+import { getLoansOverview } from "./loansOverview.service";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -64,7 +64,7 @@ function handleKnownErrors(err: unknown, res: Response): boolean {
 
 export async function listLoansHandler(req: Request, res: Response) {
   try {
-    res.json(await listLoans(req.user!.id));
+    res.json(await getLoansOverview(req.user!.id));
   } catch (err) {
     if (!handleKnownErrors(err, res)) throw err;
   }

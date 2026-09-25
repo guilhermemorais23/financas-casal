@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { CategoryPieChart } from "../components/CategoryPieChart";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { SplitStatusPill } from "../components/SplitStatusPill";
+import { SplitSummary } from "../components/SplitSummary";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, parseLocalDate } from "../utils/format";
@@ -251,7 +252,25 @@ export function ParPage() {
       <div className="page-stack">
         {isLoading && <p className="refresh-note">Atualizando...</p>}
         <div>
-          <h1>Par</h1>
+          <div className="par-title-row">
+            <h1>Par</h1>
+            <div className="par-avatars">
+              {orderedMembers.map((member, index) => (
+                <span
+                  key={member.id}
+                  className="identity-avatar"
+                  title={member.displayName}
+                  aria-label={member.displayName}
+                  style={{
+                    ["--identity-avatar-color" as string]: personColor(index),
+                    ["--identity-avatar-bg" as string]: personTint(personColor(index)),
+                  }}
+                >
+                  {memberInitial(member.id)}
+                </span>
+              ))}
+            </div>
+          </div>
           <p className="card-subtitle">
             O que é do grupo: conta conjunta e tudo que vocês lançam nela. Lançamentos em
             contas pessoais continuam só seus até decidirem mover pra cá.
@@ -263,23 +282,18 @@ export function ParPage() {
           <p className="value">{formatCurrency(jointAccount?.balance ?? 0)}</p>
         </div>
 
-        <div className="stat-row wrap">
-          {orderedMembers.map((member, index) => (
-            <div
-              className="stat-box"
-              key={member.id}
-              style={{
-                ["--stat-box-accent" as string]: personColor(index),
-              }}
-            >
-              <div className="stat-box-header">
-                <span className="identity-dot" style={{ background: personColor(index) }} />
-                <p className="label">{member.id === user?.id ? "Você" : member.displayName}</p>
-              </div>
-              <p className="value-sm">{formatCurrency(Number(spentByUser(member.id)))}</p>
-            </div>
-          ))}
-        </div>
+        {orderedMembers.length > 1 && (
+          <SplitSummary
+            payers={orderedMembers.map((member, index) => ({
+              ...member,
+              total: Number(spentByUser(member.id)),
+              color: personColor(index),
+            }))}
+            accountName={jointAccount?.name ?? "conta conjunta"}
+            currentUserId={user?.id}
+            memberName={memberName}
+          />
+        )}
 
         {orderedMembers.length > 1 && (
           <div className="card">
@@ -291,14 +305,17 @@ export function ParPage() {
             {!balance || balance.balances.length === 0 ? (
               <p className="empty-state">Tudo em dia -- nenhuma divisão em aberto no momento.</p>
             ) : (
-              <ul className="member-list">
+              <ul className="settle-list">
                 {balance.balances.map((row) => (
-                  <li key={`${row.fromUserId}_${row.toUserId}`} className="member-row">
-                    {row.fromUserId === user?.id
-                      ? `${formatCurrency(row.amount)} a pagar pra ${memberName(row.toUserId)}`
-                      : row.toUserId === user?.id
-                        ? `${formatCurrency(row.amount)} a receber de ${memberName(row.fromUserId)}`
-                        : `${formatCurrency(row.amount)} entre ${memberName(row.fromUserId)} e ${memberName(row.toUserId)}`}
+                  <li key={`${row.fromUserId}_${row.toUserId}`} className="settle-row">
+                    <span className="settle-amount">{formatCurrency(row.amount)}</span>
+                    <span className="settle-text">
+                      {row.fromUserId === user?.id
+                        ? `Você deve pra ${memberName(row.toUserId)}`
+                        : row.toUserId === user?.id
+                          ? `${memberName(row.fromUserId)} te deve`
+                          : `${memberName(row.fromUserId)} deve pra ${memberName(row.toUserId)}`}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -334,26 +351,6 @@ export function ParPage() {
               )}
             </>
           )}
-        </div>
-
-        <div className="card">
-          <p className="card-title">Quem faz parte</p>
-          <ul className="member-list">
-            {orderedMembers.map((member, index) => (
-              <li key={member.id} className="member-row">
-                <span
-                  className="identity-avatar"
-                  style={{
-                    ["--identity-avatar-color" as string]: personColor(index),
-                    ["--identity-avatar-bg" as string]: personTint(personColor(index)),
-                  }}
-                >
-                  {memberInitial(member.id)}
-                </span>
-                {member.displayName}
-              </li>
-            ))}
-          </ul>
         </div>
 
         {orderedMembers.length > 1 && pieSlices.length > 0 && (

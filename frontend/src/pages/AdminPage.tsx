@@ -33,6 +33,14 @@ interface AdminOverview {
   firestoreUnavailable?: boolean;
 }
 
+const ADMIN_SECTIONS = [
+  { section: "overview", label: "Geral" },
+  { section: "feedback", label: "Feedback" },
+  { section: "announcements", label: "Novidades" },
+  { section: "diagnostics", label: "Diagnóstico" },
+  { section: "logs", label: "Logs" },
+] as const;
+
 function relativeTime(timestamp: number): string {
   const diffMs = Date.now() - timestamp;
   const minutes = Math.round(diffMs / 60_000);
@@ -48,9 +56,9 @@ export function AdminPage() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchParams] = useSearchParams();
-  // Only one section is ever on screen at a time -- driven entirely by the
-  // sidebar's "Admin > Visão geral"/"Logs" sub-links (?section=...).
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Only one section is ever on screen at a time -- driven by ?section=...
+  // (the sidebar's "Admin" sub-links on desktop, the tabs below on mobile).
   const requested = searchParams.get("section");
   const section =
     requested === "logs" || requested === "feedback" || requested === "diagnostics" || requested === "announcements"
@@ -105,6 +113,21 @@ export function AdminPage() {
     <AppLayout wide>
       <div className="page-stack">
         <h1>Admin · {sectionTitle}</h1>
+        {/* No celular não tem barra lateral com os sub-links do Admin. */}
+        <div className="segmented admin-section-tabs" role="tablist" aria-label="Seções do admin">
+          {ADMIN_SECTIONS.map((item) => (
+            <button
+              key={item.section}
+              type="button"
+              role="tab"
+              aria-selected={section === item.section}
+              className={`segmented-option${section === item.section ? " active" : ""}`}
+              onClick={() => setSearchParams({ section: item.section }, { replace: true })}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         {overview.firestoreUnavailable && (
           <p className="alert" role="alert">
             O banco de dados (Firestore) não está respondendo, provavelmente porque a cota diária do plano grátis
@@ -215,7 +238,7 @@ export function AdminPage() {
                   {overview.recentErrors.map((entry) => (
                     <li key={entry.id} className="transaction-row">
                       <div className="transaction-info">
-                        <span className="transaction-desc">{entry.message}</span>
+                        <span className="transaction-desc admin-log-message">{entry.message}</span>
                         <span className="transaction-meta">
                           {entry.source}
                           {entry.method && entry.path ? ` · ${entry.method} ${entry.path}` : ""} ·{" "}

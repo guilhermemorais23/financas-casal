@@ -258,6 +258,25 @@ async function recordSecuredTransfer(
   });
 }
 
+// Dinheiro parado em cartões com limite garantido -- saiu das contas
+// (guardar é uma transferência) mas continua sendo da pessoa.
+export function savedInSecuredCardsCents(cards: CardWithSummary[]): number {
+  return cards
+    .filter((card) => card.limitType === "secured")
+    .reduce((sum, card) => sum + Math.round(Number(card.limit ?? 0) * 100), 0);
+}
+
+// O que ainda vai sair das contas pra pagar os cartões: tudo que está em
+// aberto quando o cartão tem limite (inclusive parcelas de meses futuros),
+// senão só a fatura atual se ainda não foi paga.
+export function owedOnCardsCents(cards: CardWithSummary[]): number {
+  return cards.reduce((sum, card) => {
+    if (card.limitUsed !== null) return sum + Math.round(Number(card.limitUsed) * 100);
+    const statement = card.currentStatement;
+    return statement.isPaid ? sum : sum + Math.round(Number(statement.total) * 100);
+  }, 0);
+}
+
 export async function listCards(userId: string): Promise<CardWithSummary[]> {
   const groupId = await requireGroupId(userId);
   const cards = await findCardsVisibleTo(groupId, userId);

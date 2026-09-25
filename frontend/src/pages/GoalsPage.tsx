@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { NewGoalModal } from "../components/NewGoalModal";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
+import { Icon } from "../components/Icon";
 import { formatCurrency, parseLocalDate } from "../utils/format";
 import { minimumMonthlySaving } from "../utils/goals";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -102,12 +103,12 @@ export function GoalsPage() {
   return (
     <AppLayout>
       <div className="page-stack">
-        <h1>Metas</h1>
-
-        <button type="button" className="dashed-add-card" onClick={() => setIsCreating(true)}>
-          <span className="dashed-add-card-icon">+</span>
-          Nova meta
-        </button>
+        <div className="page-title-row">
+          <h1>Metas</h1>
+          <button type="button" className="btn btn-primary btn-compact" onClick={() => setIsCreating(true)}>
+            Nova meta
+          </button>
+        </div>
 
         {error && (
           <p className="alert" role="alert">
@@ -128,26 +129,37 @@ export function GoalsPage() {
           // once its deadline is behind us.
           const isOverdue = !goal.achievedAt && goal.deadline !== null && monthly === null && current < target;
           return (
-            <div key={goal.id} className="card goal-card">
+            <div key={goal.id} className={`card goal-card${goal.achievedAt ? " is-achieved" : ""}`}>
               {goal.photoDataUrl && <img src={goal.photoDataUrl} alt="" className="goal-card-cover" />}
               <div className="section-header">
-                <p className="card-title">
-                  {goal.name}
-                  {goal.achievedAt && <span className="badge goal-achieved">Concluída!</span>}
-                </p>
-                <button type="button" className="btn-icon" onClick={() => handleDelete(goal)} title="Remover meta">
-                  ✕
-                </button>
+                <h2 className="section-title">{goal.name}</h2>
+                <div className="goal-card-side">
+                  {goal.achievedAt ? (
+                    <span className="goal-achieved-label">
+                      <Icon name="check" />
+                      Concluída
+                    </span>
+                  ) : (
+                    goal.deadline && (
+                      <span className="goal-deadline">
+                        até{" "}
+                        {parseLocalDate(goal.deadline).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                      </span>
+                    )
+                  )}
+                  <button type="button" className="btn-icon" onClick={() => handleDelete(goal)} title="Remover meta">
+                    ✕
+                  </button>
+                </div>
               </div>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${percent}%` }} />
-              </div>
-              <div className="budget-amounts goal-amounts">
-                <span>
-                  {formatCurrency(current)} / {formatCurrency(target)}
-                </span>
-                {goal.deadline && <span>até {parseLocalDate(goal.deadline).toLocaleDateString("pt-BR")}</span>}
-              </div>
+              <p className="goal-amount">
+                {formatCurrency(current)} <span>de {formatCurrency(target)}</span>
+              </p>
+              {!goal.achievedAt && (
+                <div className="progress-track goal-track">
+                  <div className="progress-fill" style={{ width: `${percent}%` }} />
+                </div>
+              )}
               {monthly && (
                 <p className="goal-monthly">
                   Guarde no mínimo <strong>{formatCurrency(monthly.perMonth)}/mês</strong>{" "}
@@ -164,6 +176,7 @@ export function GoalsPage() {
               {!goal.achievedAt && (
                 <div className="invite-link-row">
                   <input
+                    aria-label={`Valor pra guardar em ${goal.name}`}
                     placeholder="Adicionar valor"
                     inputMode="decimal"
                     value={contributions[goal.id] ?? ""}
@@ -176,7 +189,7 @@ export function GoalsPage() {
                     className="btn btn-outline"
                     onClick={() => handleContribute(goal.id)}
                   >
-                    Adicionar
+                    Guardar
                   </button>
                 </div>
               )}

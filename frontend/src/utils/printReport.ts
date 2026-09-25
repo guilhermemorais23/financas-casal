@@ -51,12 +51,13 @@ export function printMonthReport(report: PrintableReport): boolean {
 
   win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>PAR. · ${escapeHtml(report.title)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box}
-  body{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1d1b30;margin:0;padding:32px;font-size:13px}
+  body{font-family:"Bricolage Grotesque",-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1d1b30;margin:0;padding:32px;font-size:13px}
   h1{font-size:24px;margin:0 0 4px}
   .sub{color:#5e5c77;margin:0 0 24px}
-  .brand{font-weight:900;font-size:18px;margin-bottom:18px}.brand span{color:#6d54ec}
+  .brand{font-weight:800;font-size:18px;margin-bottom:18px}.brand span{color:#6d54ec}
   .kpis{display:flex;gap:16px;margin-bottom:28px}
   .kpi{flex:1;border:1px solid #e4e0d8;border-radius:12px;padding:12px 14px}
   .kpi small{display:block;text-transform:uppercase;letter-spacing:.06em;color:#8b89a3;font-size:10px;font-weight:700}

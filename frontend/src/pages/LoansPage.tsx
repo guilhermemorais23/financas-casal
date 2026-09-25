@@ -32,7 +32,10 @@ interface Loan {
   totalOwed: string;
   interestRateMonthly: number | null;
   remaining: string;
+  remainingAtDue: string | null;
   isOverdue: boolean;
+  ownerUserId: string;
+  isMine: boolean;
 }
 
 interface LoansSummary {
@@ -47,6 +50,10 @@ interface LoansSummary {
 interface LoansResponse {
   loans: Loan[];
   summary: LoansSummary;
+  // Contas + guardado em cartões garantidos, igual ao Painel.
+  moneyToday?: number;
+  // Faturas, parcelas e contas fixas até o último prazo em aberto.
+  paymentsAhead?: { dueDate: string; amount: number }[];
 }
 
 interface AccountRow {
@@ -97,6 +104,7 @@ export function LoansPage() {
   const cacheKey = `loans:${user?.id}`;
   const [data, setData] = useState<LoansResponse | null>(() => readCache<LoansResponse>(cacheKey));
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [members, setMembers] = useState<{ id: string; displayName: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   // O atalho "Emprestei" do Painel abre isso com ?novo=1.
   const [isCreateOpen, setIsCreateOpen] = useState(() => new URLSearchParams(window.location.search).get("novo") === "1");
@@ -109,10 +117,11 @@ export function LoansPage() {
     try {
       const [loans, group] = await Promise.all([
         apiRequest<LoansResponse>("/loans", { token }),
-        apiRequest<{ accounts: AccountRow[] }>("/groups/me", { token }),
+        apiRequest<{ accounts: AccountRow[]; members: { id: string; displayName: string }[] }>("/groups/me", { token }),
       ]);
       setData(loans);
       setAccounts(group.accounts);
+      setMembers(group.members);
       writeCache(cacheKey, loans);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar os empréstimos");
@@ -124,7 +133,7 @@ export function LoansPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const inAccounts = accounts.reduce((sum, account) => sum + account.balance, 0);
+  const inAccounts = data?.moneyToday ?? accounts.reduce((sum, account) => sum + account.balance, 0);
   const outstanding = Number(data?.summary.outstanding ?? 0);
   const openLoans = useMemo(() => (data?.loans ?? []).filter((loan) => loan.status === "open"), [data]);
   const finishedLoans = useMemo(() => (data?.loans ?? []).filter((loan) => loan.status !== "open"), [data]);
@@ -132,16 +141,28 @@ export function LoansPage() {
 
   // "Quando pagar, você fica com R$ X": o saldo subindo empréstimo por
   // empréstimo na ordem em que devem voltar (a lista já vem nessa ordem:
-  // atrasados primeiro, depois por prazo, sem prazo por último).
+  // atrasados primeiro, depois por prazo, sem prazo por último), já tirando
+  // as faturas, parcelas e contas fixas que vencem até cada prazo. Com juros,
+  // soma o que vai estar devendo no dia do prazo.
   const balanceAfter = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { value: number; paidBefore: number }>();
+    const payments = data?.paymentsAhead ?? [];
     let running = inAccounts;
+    let next = 0;
+    let paidBefore = 0;
     for (const loan of openLoans) {
-      running += Number(loan.remaining);
-      map.set(loan.id, running);
+      if (loan.dueDate) {
+        while (next < payments.length && payments[next].dueDate <= loan.dueDate) {
+          running -= payments[next].amount;
+          paidBefore += payments[next].amount;
+          next += 1;
+        }
+      }
+      running += Number(loan.remainingAtDue ?? loan.remaining);
+      map.set(loan.id, { value: running, paidBefore });
     }
     return map;
-  }, [openLoans, inAccounts]);
+  }, [openLoans, inAccounts, data]);
 
   function replaceLoan(updated: Loan) {
     void load();
@@ -215,8 +236,12 @@ export function LoansPage() {
     const interest = Number(loan.interest ?? 0);
     const percent = total > 0 ? Math.min(100, (received / total) * 100) : 0;
     const isExpanded = expandedId === loan.id;
+    const after = balanceAfter.get(loan.id);
+    const atDue = loan.remainingAtDue ? Number(loan.remainingAtDue) : null;
+    const ownerName = members.find((m) => m.id === loan.ownerUserId)?.displayName?.split(" ")[0] ?? "a outra pessoa";
     return (
       <li key={loan.id} className={`loan-row${loan.isOverdue ? " is-overdue" : ""}${loan.status !== "open" ? " is-done" : ""}`}>
+        <div className="loan-row-head">
         <button
           type="button"
           className="loan-row-main"
@@ -239,19 +264,35 @@ export function LoansPage() {
             )}
           </span>
         </button>
+        {loan.status === "open" && loan.isMine && (
+          <button type="button" className="btn btn-primary btn-sm loan-receive" onClick={() => setReceiving(loan)}>
+            Recebi
+          </button>
+        )}
+        </div>
         {loan.status === "open" && received > 0 && (
           <div className="progress-track thin loan-progress">
             <div className="progress-fill" style={{ width: `${percent}%` }} />
           </div>
         )}
-        {loan.status === "open" && balanceAfter.has(loan.id) && accounts.length > 0 && (
+        {loan.status === "open" && after && accounts.length > 0 && (
           <p className="loan-projection">
             <Icon name="trend" />
-            <span className="text-truncate">
-              Quando {loan.dueDate ? "pagar" : "receber"}, você fica com{" "}
-              <strong>{formatCurrency(balanceAfter.get(loan.id)!)}</strong>
+            <span>
+              Quando {loan.dueDate ? "pagar" : "receber"}, você fica com <strong>{formatCurrency(after.value)}</strong>
+              {after.paidBefore > 0 && (
+                <span className="loan-projection-note"> já tirando {formatCurrency(after.paidBefore)} de contas até lá</span>
+              )}
             </span>
           </p>
+        )}
+        {loan.status === "open" && atDue !== null && loan.dueDate && (
+          <p className="loan-projection loan-projection-note">
+            No prazo ({shortDate(loan.dueDate)}), com juros: <strong>{formatCurrency(atDue)}</strong>
+          </p>
+        )}
+        {!loan.isMine && (
+          <p className="loan-projection loan-projection-note">Registrado por {ownerName}. Saiu da Nossa Conta.</p>
         )}
 
         {isExpanded && (
@@ -279,6 +320,7 @@ export function LoansPage() {
                 ))}
               </ul>
             )}
+            {loan.isMine && (
             <div className="loan-actions">
               {loan.status === "open" ? (
                 <>
@@ -303,6 +345,7 @@ export function LoansPage() {
                 <Icon name="trash" />
               </button>
             </div>
+            )}
           </div>
         )}
       </li>
@@ -327,7 +370,7 @@ export function LoansPage() {
 
         <div className="card loans-hero">
           <div className="loans-hero-row">
-            <span className="loans-hero-label">Na conta hoje</span>
+            <span className="loans-hero-label">Seu dinheiro hoje</span>
             <span className="loans-hero-value">{formatCurrency(inAccounts)}</span>
           </div>
           <div className="loans-hero-row">
@@ -599,7 +642,9 @@ function ReceiveModal({
   const { token } = useAuth();
   const { showToast } = useToast();
   const remaining = Number(loan.remaining);
-  const [amount, setAmount] = useState(remaining.toFixed(2).replace(".", ","));
+  // "Recebeu tudo" é o caso comum; "Só uma parte" abre o campo de valor.
+  const [isPartial, setIsPartial] = useState(false);
+  const [amount, setAmount] = useState("");
   const [receivedAt, setReceivedAt] = useState(todayISO());
   const [accountId, setAccountId] = useState(defaultAccountId);
   const [error, setError] = useState<string | null>(null);
@@ -607,8 +652,9 @@ function ReceiveModal({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const parsed = parseAmount(amount);
+    const parsed = isPartial ? parseAmount(amount) : remaining;
     if (!(parsed > 0)) return setError("Informe um valor válido.");
+    if (parsed > remaining) return setError(`Falta só ${formatCurrency(remaining)}.`);
     setError(null);
     setIsSubmitting(true);
     try {
@@ -630,13 +676,23 @@ function ReceiveModal({
   return (
     <Sheet onClose={onClose}>
       <h1>Recebi de {loan.personName}</h1>
-      <p className="card-subtitle">Falta {formatCurrency(remaining)}. Pode ser só uma parte.</p>
+      <p className="card-subtitle">Falta {formatCurrency(remaining)}.</p>
       <form onSubmit={handleSubmit}>
+        <div className="segmented" role="radiogroup" aria-label="Quanto recebeu">
+          <button type="button" role="radio" aria-checked={!isPartial} className={`segmented-option${!isPartial ? " active" : ""}`} onClick={() => setIsPartial(false)}>
+            Recebeu tudo
+          </button>
+          <button type="button" role="radio" aria-checked={isPartial} className={`segmented-option${isPartial ? " active" : ""}`} onClick={() => setIsPartial(true)}>
+            Só uma parte
+          </button>
+        </div>
         <div className="field-row">
-          <div className="field">
-            <label htmlFor="repay-amount">Valor (R$)</label>
-            <input id="repay-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
-          </div>
+          {isPartial && (
+            <div className="field">
+              <label htmlFor="repay-amount">Valor (R$)</label>
+              <input id="repay-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" autoFocus />
+            </div>
+          )}
           <div className="field">
             <label htmlFor="repay-date">Quando</label>
             <input id="repay-date" type="date" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
@@ -658,7 +714,7 @@ function ReceiveModal({
             Cancelar
           </button>
           <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
-            {isSubmitting ? "Salvando..." : "Salvar"}
+            {isSubmitting ? "Salvando..." : isPartial ? "Salvar" : `Recebi ${formatCurrency(remaining)}`}
           </button>
         </div>
       </form>

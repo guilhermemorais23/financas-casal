@@ -120,11 +120,19 @@ export function LoginPage() {
   }
 
   return (
-    <div className="page-center">
-      <Brand animated />
-      <div className="card">
+    <div className="page-center auth-page">
+      <div className="auth-hero">
+        <span className="auth-wordmark">
+          PAR<span className="brand-dot">.</span>
+        </span>
+        <span className="auth-split" aria-hidden="true">
+          <span />
+          <span />
+        </span>
+        <p className="auth-tagline">Finanças em grupo, sem atrito.</p>
+      </div>
+      <div className="card auth-card">
         <h1>Entrar</h1>
-        <p className="card-subtitle">Finanças em grupo, sem atrito.</p>
 
         <SocialLoginButtons onSuccess={goAfterAuth} onError={setError} />
         <div className="divider">ou</div>

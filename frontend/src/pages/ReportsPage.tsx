@@ -156,7 +156,7 @@ export function ReportsPage() {
   // Per-group open/closed the user toggled by hand; anything not in here
   // falls back to the default in isGroupOpen below.
   const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
-  const [showYearly, setShowYearly] = useState(false);
+  const [showYearly, setShowYearly] = useState(true);
   const [isImportOpen, setIsImportOpen] = useState(false);
   // Previous month's total spending, only to write the one-line insight
   // under the numbers ("gastou X% menos que em agosto").
@@ -605,25 +605,24 @@ export function ReportsPage() {
           </div>
         </div>
 
+        <div className="stat-card">
+          <p className="label">Saldo de {monthLongName(month)}</p>
+          <p className={`value${monthBalance < 0 ? " negative" : ""}`}>{formatCurrency(monthBalance)}</p>
+          <p className="hero-line">
+            Conta pessoal + conjunta
+            {savedInCards > 0 && `, ${formatCurrency(savedInCards)} guardados no cartão`}
+            {lentOut > 0 && `, ${formatCurrency(lentOut)} emprestados`}.
+          </p>
+        </div>
+
         <div className="stat-row wrap">
-          <div className="stat-box tone-good">
+          <div className="stat-box">
             <p className="label">Entrada</p>
             <p className="value-sm income-text">{formatCurrency(incomeTotal)}</p>
           </div>
-          <div className="stat-box tone-warm">
+          <div className="stat-box">
             <p className="label">Saída</p>
             <p className="value-sm">{formatCurrency(expenseTotal)}</p>
-          </div>
-          <div className="stat-box">
-            <p className="label">Saldo do mês</p>
-            <p className={`value-sm${monthBalance >= 0 ? " income-text" : ""}`}>
-              {formatCurrency(monthBalance)}
-            </p>
-            <p className="stat-delta neutral">
-              conta pessoal + conjunta
-              {savedInCards > 0 && ` · ${formatCurrency(savedInCards)} guardados no cartão`}
-              {lentOut > 0 && ` · ${formatCurrency(lentOut)} emprestados`}
-            </p>
           </div>
         </div>
 
@@ -830,42 +829,46 @@ export function ReportsPage() {
               </div>
             )}
           </div>
-          {showYearly && yearSummary && (
-            <>
-              <p className="card-subtitle">
-                Total do ano: <strong className="income-text">{formatCurrency(Number(yearSummary.totalIncome))}</strong>{" "}
-                de entrada · <strong>{formatCurrency(Number(yearSummary.totalExpense))}</strong> de saída
-              </p>
-              <ul className="yearly-summary-list">
-                {yearSummary.months.map((point) => {
-                  const maxValue = Math.max(
-                    ...yearSummary.months.flatMap((m) => [Number(m.income), Number(m.expense)]),
-                    1
-                  );
-                  return (
-                    <li key={point.month} className="yearly-summary-row">
-                      <span className="yearly-summary-month">{monthLongName(point.month).slice(0, 3)}</span>
-                      <div className="yearly-summary-bars">
-                        <div
-                          className="yearly-summary-bar income"
-                          style={{ width: `${(Number(point.income) / maxValue) * 100}%` }}
+          {showYearly && yearSummary && (() => {
+            const saldos = yearSummary.months.map((point) => ({
+              month: point.month,
+              value: Number(point.income) - Number(point.expense),
+            }));
+            const yearTotal = Number(yearSummary.totalIncome) - Number(yearSummary.totalExpense);
+            const maxAbs = Math.max(...saldos.map((row) => Math.abs(row.value)), 1);
+            return (
+              <>
+                <p className="yearly-headline">
+                  <span>Sobrou no ano</span>
+                  <strong className={yearTotal < 0 ? "danger-text" : ""}>{formatCurrency(yearTotal)}</strong>
+                </p>
+                <p className="card-subtitle">
+                  {formatCurrency(Number(yearSummary.totalIncome))} de entrada,{" "}
+                  {formatCurrency(Number(yearSummary.totalExpense))} de saída.
+                </p>
+                <ul className="yearly-columns" aria-label={`Saldo de cada mês de ${selectedYear}`}>
+                  {saldos.map((row) => (
+                    <li
+                      key={row.month}
+                      className={`yearly-column${row.month === month ? " is-current" : ""}${row.value < 0 ? " is-negative" : ""}`}
+                    >
+                      <span className="yearly-column-track">
+                        <span
+                          className="yearly-column-bar"
+                          style={{ height: `${Math.max(2, (Math.abs(row.value) / maxAbs) * 100)}%` }}
+                          title={`${monthLongName(row.month)}: ${formatCurrency(row.value)}`}
                         />
-                        <div
-                          className="yearly-summary-bar expense"
-                          style={{ width: `${(Number(point.expense) / maxValue) * 100}%` }}
-                        />
-                      </div>
-                      <span className="yearly-summary-values">
-                        <span className="income-text">{formatCurrency(Number(point.income))}</span>
-                        {" / "}
-                        {formatCurrency(Number(point.expense))}
+                      </span>
+                      <span className="yearly-column-label">
+                        {monthLongName(row.month).slice(0, 3)}
+                        <span className="visually-hidden"> {formatCurrency(row.value)}</span>
                       </span>
                     </li>
-                  );
-                })}
-              </ul>
-            </>
-          )}
+                  ))}
+                </ul>
+              </>
+            );
+          })()}
         </div>
       </div>
 

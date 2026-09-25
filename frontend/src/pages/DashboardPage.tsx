@@ -18,6 +18,7 @@ import { MonthCloseCard } from "../components/MonthCloseCard";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { repeatHref } from "../utils/quickEntry";
 import { SplitStatusPill } from "../components/SplitStatusPill";
+import { SplitSummary } from "../components/SplitSummary";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor } from "../utils/categoryColor";
 import {
@@ -173,6 +174,7 @@ interface DashboardResponse {
   nextInvoice: NextInvoice | null;
   // Opcional: respostas em cache de uma versão antiga não têm.
   savedInSecuredCards?: number;
+  owedOnCards?: number;
   loansSummary?: { outstanding: string; overdue: string; overdueCount: number };
   // Opcional: respostas em cache de uma versão antiga não têm.
   upcoming?: UpcomingItem[];
@@ -281,6 +283,7 @@ export function DashboardPage() {
   const [savedInSecuredCards, setSavedInSecuredCards] = useState<number>(
     () => readCache(staticKey("savedInSecuredCards")) ?? 0
   );
+  const [owedOnCards, setOwedOnCards] = useState<number>(() => readCache(staticKey("owedOnCards")) ?? 0);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>(() => readCache(staticKey("upcoming")) ?? []);
   const [loansOutstanding, setLoansOutstanding] = useState<number>(
     () => readCache(staticKey("loansOutstanding")) ?? 0
@@ -317,6 +320,7 @@ export function DashboardPage() {
       setGoalHighlight(data.goalHighlight);
       setNextInvoice(data.nextInvoice);
       setSavedInSecuredCards(data.savedInSecuredCards ?? 0);
+      setOwedOnCards(data.owedOnCards ?? 0);
       setLoansOutstanding(Number(data.loansSummary?.outstanding ?? 0));
       setUpcoming(data.upcoming ?? []);
       // ?? []: a response cached by an older build has no `alerts` at all.
@@ -329,6 +333,7 @@ export function DashboardPage() {
     writeCache(sKey("goalHighlight"), data.goalHighlight);
     writeCache(sKey("nextInvoice"), data.nextInvoice);
     writeCache(sKey("savedInSecuredCards"), data.savedInSecuredCards ?? 0);
+    writeCache(sKey("owedOnCards"), data.owedOnCards ?? 0);
     writeCache(sKey("loansOutstanding"), Number(data.loansSummary?.outstanding ?? 0));
     writeCache(sKey("upcoming"), data.upcoming ?? []);
     writeCache(mKey("personalMonthTotals"), data.personalMonthTotals);
@@ -619,6 +624,13 @@ export function DashboardPage() {
     Number(jointSummary?.byPayer.find((row) => row.payerId === memberId)?.total ?? 0);
   const memberName = (memberId: string) =>
     memberId === user?.id ? "Você" : (group?.members.find((member) => member.id === memberId)?.displayName ?? "Alguém do grupo");
+  // "Quem pagou o quê": quanto cada um pagou da conta conjunta no mês.
+  const payers = orderedMembers.map((member, index) => ({
+    ...member,
+    total: jointSpentByUser(member.id),
+    color: personColor(index),
+  }));
+  const lastDayOfMonth = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
 
   if (error && !group) {
     return (
@@ -661,35 +673,25 @@ export function DashboardPage() {
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
         {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
         <div className="stat-card wide">
-          {/* O número grande é o que sobra no mês (entrou - saiu), não o
+          {/* O número grande é o saldo do mês (entrou - saiu), não o
               saldo acumulado das contas: quem lança só o salário todo mês e
               não lança todo gasto veria o saldo crescer mês a mês sem ter
               esse dinheiro de verdade. O saldo das contas fica no card
               "Onde está seu dinheiro". */}
-          <p className="label">{dailyAllowance !== null ? "Você tem este mês" : `Sobrou em ${monthLabel}`}</p>
+          <p className="label">
+            {dailyAllowance !== null ? `Saldo de ${monthLongName(month)}` : `Saldo de ${monthLabel}`}
+          </p>
           <p className={`value${monthLeft < 0 ? " negative" : ""}`}>
             <AnimatedNumber value={monthLeft} />
           </p>
-          <div className="hero-numbers">
-            {dailyAllowance !== null && (
-              <div className="hero-number">
-                <span>Por dia até o fim do mês</span>
-                <strong className={dailyAllowance < 0 ? "negative" : ""}>
-                  {formatCurrency(Math.max(0, dailyAllowance))}
-                </strong>
-              </div>
-            )}
-            <div className="hero-number">
-              <span>Vence em 7 dias</span>
-              <strong>{formatCurrency(upcomingToPay)}</strong>
-            </div>
-            {loansOutstanding > 0 && (
-              <div className="hero-number">
-                <span>Vão te pagar</span>
-                <strong>{formatCurrency(loansOutstanding)}</strong>
-              </div>
-            )}
-          </div>
+          {dailyAllowance !== null && dailyAllowance > 0 && (
+            <p className="hero-line">
+              Dá <strong>{formatCurrency(dailyAllowance)} por dia</strong> até o dia {lastDayOfMonth}.
+            </p>
+          )}
+          {loansOutstanding > 0 && (
+            <p className="hero-note">{formatCurrency(loansOutstanding)} emprestados ainda vão voltar pra você.</p>
+          )}
           {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
             <p className="hero-note">Você já gastou mais do que entrou este mês.</p>
           )}
@@ -709,31 +711,59 @@ export function DashboardPage() {
           )}
         </div>
 
-        <nav className="quick-actions" aria-label="Atalhos">
-          <Link to="/transactions/new" className="quick-action">
-            <span className="quick-action-icon expense"><Icon name="download" /></span>
-            Despesa
-          </Link>
-          <Link to="/transactions/new?tipo=receita" className="quick-action">
-            <span className="quick-action-icon income"><Icon name="upload" /></span>
-            Receita
-          </Link>
-          <Link to="/loans?novo=1" className="quick-action">
-            <span className="quick-action-icon loan"><Icon name="coin" /></span>
-            Emprestei
-          </Link>
-          <Link to="/cards" className="quick-action">
-            <span className="quick-action-icon bills"><Icon name="receipt" /></span>
-            Contas
-          </Link>
-        </nav>
+        <div className="stat-row wrap">
+          <div className="stat-box tone-good">
+            <p className="label">Entrou no mês</p>
+            <p className="value-sm income-text">{formatCurrency(income)}</p>
+            {incomeDelta !== null && (
+              <p className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
+                {incomeDelta >= 0 ? "+" : ""}
+                {Math.round(incomeDelta)}% vs {prevMonthName}
+              </p>
+            )}
+          </div>
+          <div className="stat-box tone-warm">
+            <p className="label">Saiu no mês</p>
+            <p className="value-sm">{formatCurrency(expense)}</p>
+            {expenseDelta !== null && (
+              <p className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
+                {expenseDelta >= 0 ? "+" : ""}
+                {Math.round(expenseDelta)}% vs {prevMonthName}
+              </p>
+            )}
+          </div>
+        </div>
 
-        <div className="card upcoming-card">
+        {jointAccount && orderedMembers.length > 1 && (
+          <SplitSummary
+            payers={payers}
+            accountName={jointAccount.name}
+            currentUserId={user?.id}
+            memberName={memberName}
+            settlements={balance?.balances}
+            settleHref="/par"
+          />
+        )}
+
+        <div className="dashboard-actions">
+          <Link to="/transactions/new" className="btn btn-primary">
+            Nova despesa
+          </Link>
+          <Link to="/transactions/new?tipo=receita" className="btn btn-outline">
+            Nova receita
+          </Link>
+        </div>
+
+        <section className="upcoming-section" aria-label="Vence em 7 dias">
           <div className="section-header">
-            <p className="card-title">Vence logo</p>
-            <Link to="/cards" className="link">
-              Ver contas
-            </Link>
+            <h2 className="section-title">Vence em 7 dias</h2>
+            {upcomingToPay > 0 ? (
+              <span className="split-summary-total">{formatCurrency(upcomingToPay)}</span>
+            ) : (
+              <Link to="/cards" className="link">
+                Ver contas
+              </Link>
+            )}
           </div>
           {upcoming.length === 0 ? (
             <p className="empty-state">Nada pra pagar ou receber nos próximos 7 dias.</p>
@@ -761,30 +791,7 @@ export function DashboardPage() {
               ))}
             </ul>
           )}
-        </div>
-
-        <div className="stat-row wrap">
-          <div className="stat-box tone-good">
-            <p className="label">Entrou no mês</p>
-            <p className="value-sm income-text">{formatCurrency(income)}</p>
-            {incomeDelta !== null && (
-              <p className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
-                {incomeDelta >= 0 ? "+" : ""}
-                {Math.round(incomeDelta)}% vs {prevMonthName}
-              </p>
-            )}
-          </div>
-          <div className="stat-box tone-warm">
-            <p className="label">Saiu no mês</p>
-            <p className="value-sm">{formatCurrency(expense)}</p>
-            {expenseDelta !== null && (
-              <p className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
-                {expenseDelta >= 0 ? "+" : ""}
-                {Math.round(expenseDelta)}% vs {prevMonthName}
-              </p>
-            )}
-          </div>
-        </div>
+        </section>
 
         {(cap !== null || totalDebtRemaining > 0) && (
           <div className="stat-row wrap">
@@ -902,52 +909,6 @@ export function DashboardPage() {
                     </Link>
                   )}
                 </div>
-              </div>
-            )}
-
-            {jointAccount && orderedMembers.length > 1 && (
-              <div className="card">
-                <div className="section-header">
-                  <p className="card-title">Par</p>
-                  <Link to="/par" className="link">
-                    Ver Par
-                  </Link>
-                </div>
-                <p className="card-subtitle">O que vocês gastaram juntos esse mês, e quem pagou quanto.</p>
-                <p className="value-sm" style={{ marginBottom: "0.75rem" }}>
-                  {formatCurrency(jointAccount.balance)} <span className="card-subtitle">na {jointAccount.name}</span>
-                </p>
-                <div className="stat-row wrap">
-                  {orderedMembers.map((member, index) => (
-                    <div
-                      className="stat-box"
-                      key={member.id}
-                      style={{
-                        ["--stat-box-accent" as string]: personColor(index),
-                      }}
-                    >
-                      <div className="stat-box-header">
-                        <span className="identity-dot" style={{ background: personColor(index) }} />
-                        <p className="label">{member.id === user?.id ? "Você" : member.displayName}</p>
-                      </div>
-                      <p className="value-sm">{formatCurrency(jointSpentByUser(member.id))}</p>
-                    </div>
-                  ))}
-                </div>
-                {balance && balance.balances.length > 0 && (
-                  <p className="card-subtitle" style={{ marginTop: "0.75rem" }}>
-                    Divisões em aberto:{" "}
-                    {balance.balances
-                      .map((row) =>
-                        row.fromUserId === user?.id
-                          ? `${formatCurrency(row.amount)} a pagar pra ${memberName(row.toUserId)}`
-                          : row.toUserId === user?.id
-                            ? `${formatCurrency(row.amount)} a receber de ${memberName(row.fromUserId)}`
-                            : `${formatCurrency(row.amount)} entre ${memberName(row.fromUserId)} e ${memberName(row.toUserId)}`
-                      )
-                      .join(" · ")}
-                  </p>
-                )}
               </div>
             )}
 
@@ -1098,6 +1059,19 @@ export function DashboardPage() {
               {loansOutstanding > 0 && (
                 <p className="money-card-future">
                   Quando receber tudo: <strong>{formatCurrency(moneyTotal + loansOutstanding)}</strong>
+                </p>
+              )}
+              {/* O outro lado: tira dívidas e faturas/parcelas de cartão em
+                  aberto, pra o número não mostrar só o que vai entrar. */}
+              {totalDebtRemaining + owedOnCards > 0 && (
+                <p className="money-card-future money-card-owed">
+                  Depois de pagar o que deve:{" "}
+                  <strong className={moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards < 0 ? "danger-text" : ""}>
+                    {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards)}
+                  </strong>
+                  <span className="money-card-future-note">
+                    Tira {formatCurrency(totalDebtRemaining + owedOnCards)} de dívidas e cartões
+                  </span>
                 </p>
               )}
               <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>

@@ -104,11 +104,6 @@ export async function findLoanById(id: string): Promise<LoanRow | null> {
   return doc.exists ? toLoanRow(doc) : null;
 }
 
-export async function findLoansByOwner(groupId: string, ownerUserId: string): Promise<LoanRow[]> {
-  const snapshot = await loansCol.where("groupId", "==", groupId).where("ownerUserId", "==", ownerUserId).get();
-  return snapshot.docs.map(toLoanRow);
-}
-
 export async function findLoansByGroupId(groupId: string): Promise<LoanRow[]> {
   const snapshot = await loansCol.where("groupId", "==", groupId).get();
   return snapshot.docs.map(toLoanRow);
