@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmojiPicker } from "../components/EmojiPicker";
+import { Icon } from "../components/Icon";
+import { useSwipeDownToClose } from "../hooks/useSwipeDownToClose";
 import { useToast } from "../components/ToastProvider";
 import { saveTransactionInBackground } from "../utils/optimisticTransactions";
 import { AppLayout } from "../layouts/AppLayout";
@@ -31,7 +33,25 @@ interface CategoryRow {
 export function NewTransactionPage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
+
+  // Fechar sem salvar: volta pra tela de onde veio (ou pro Painel, se abriu
+  // direto pelo link). Funciona pelo X, pelo Esc no PC e arrastando o card
+  // pra baixo no celular.
+  const close = useCallback(() => {
+    if (location.key !== "default") navigate(-1);
+    else navigate("/dashboard");
+  }, [location.key, navigate]);
+  const cardRef = useRef<HTMLDivElement>(null);
+  useSwipeDownToClose(cardRef, close);
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") close();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [close]);
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -183,8 +203,14 @@ export function NewTransactionPage() {
 
   return (
     <AppLayout>
-      <div className="card form-card">
-        <h1>{isIncome ? "Nova entrada" : "Nova despesa"}</h1>
+      <div className="card form-card sheet-card" ref={cardRef}>
+        <span className="sheet-handle" data-swipe-handle aria-hidden="true" />
+        <div className="sheet-head" data-swipe-handle>
+          <h1>{isIncome ? "Nova entrada" : "Nova despesa"}</h1>
+          <button type="button" className="sheet-close" onClick={close} aria-label="Fechar" title="Fechar (Esc)">
+            <Icon name="x" />
+          </button>
+        </div>
         <p className="card-subtitle">
           {isIncome ? "Registre um valor recebido pelo grupo ou pessoal." : "Registre um gasto do grupo ou pessoal."}
         </p>
