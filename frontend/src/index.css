@@ -7211,3 +7211,21 @@ select {
   font-size: 0.78rem;
   color: var(--color-text-muted);
 }
+
+/* Abas das seções do Admin: só no celular, onde não há os sub-links da
+   barra lateral. */
+.admin-section-tabs {
+  margin-bottom: 0;
+}
+
+@media (min-width: 721px) {
+  .admin-section-tabs {
+    display: none;
+  }
+}
+
+/* Mensagem de erro inteira, quebrando linha, em vez de cortada com "...". */
+.admin-log-message {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
