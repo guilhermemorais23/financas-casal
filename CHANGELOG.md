@@ -1,5 +1,7 @@
 # Histórico de versões do PAR.
 
+## [1.34.0](https://github.com/guilhermemorais23/financas-casal/compare/v1.33.0...v1.34.0) (2026-09-25)
+
 ## [1.33.0](https://github.com/guilhermemorais23/financas-casal/compare/v1.32.0...v1.33.0) (2026-09-25)
 
 ## [1.32.0](https://github.com/guilhermemorais23/financas-casal/compare/v1.31.0...v1.32.0) (2026-09-25)
