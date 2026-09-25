@@ -33,24 +33,30 @@ const SLIDES: Slide[] = [
     ],
   },
   {
+    icon: "home",
+    tag: "Novidade",
+    title: "Painel que avisa",
+    text: "Logo no topo: quanto você tem hoje, quanto dá pra gastar por dia e o que vence nos próximos 7 dias.",
+    bullets: ["Faturas, parcelas e contas fixas da semana", "Atalhos pra lançar em um toque", "Aviso por email antes de vencer"],
+  },
+  {
     icon: "coin",
     tag: "Novidade",
     title: "Quem te deve, num lugar só",
-    text: "Emprestou pra família ou amigos? Anote em Contas > A receber e veja quanto vai ter quando receber tudo.",
-    bullets: ["Com ou sem prazo pra devolver", "Recebe em partes, o PAR. soma", "Não conta como gasto"],
+    text: "Em Contas > A receber: quanto te devem e quanto você vai ter quando cada pessoa pagar.",
+    bullets: ["Com ou sem prazo pra devolver", "Juros por mês, se quiser", "Não conta como gasto"],
   },
   {
-    icon: "home",
+    icon: "chat",
     tag: "Novidade",
-    title: "Menu de app no celular",
-    text: "Tudo a no máximo dois toques, com o + sempre no meio.",
-    bullets: ["Contas junta cartões, dívidas, fixas e a receber", "Mais abre metas, relatórios e sua conta", "Sem menu escondido do lado"],
+    title: "Fale com a gente",
+    text: "Em Mais > Fale com a gente você manda ideia, problema ou elogio e recebe a resposta ali mesmo, como num chat.",
   },
   {
     icon: "spark",
     tag: "Novidade",
-    title: "Fala com a gente",
-    text: "Achou um problema ou teve uma ideia? Toque em Mais > Enviar feedback. Chega direto pra quem faz o app.",
+    title: "Assistente do mês",
+    text: "Pergunte \"como está meu mês?\" ou \"o que vence essa semana?\". Também dá pra lançar escrevendo \"gastei 50 no mercado\".",
   },
 ];
 

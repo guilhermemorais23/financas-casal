@@ -2,9 +2,14 @@ import { findCardsByGroupId, findStatement } from "../cards/cards.repository";
 import { currentStatementMonth, dueDateFor } from "../cards/cards.service";
 import { findGroupBudget, getMonthlyExpenseTotal } from "../budgets/budgets.repository";
 import { findDebtsByGroupId, findInstallmentsByDebtIds } from "../debts/debts.repository";
-import { sendReminderEmail } from "../../email/mailer";
-import { daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
+import { escapeHtml, sendReminderEmail } from "../../email/mailer";
+import { findLoansByGroup, todayInBrazil } from "../loans/loans.service";
+import { findRecurringBillsByGroupId } from "../recurringBills/recurringBills.repository";
+import { addMonths, daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
+import { generateDueRecurringBills } from "../recurringBills/recurringBills.service";
+import { logError } from "../../utils/errorLog";
 import {
+  claimDailyRun,
   findAllGroupIds,
   findMembersWithEmailByGroupId,
   markReminderSent,
@@ -15,7 +20,7 @@ import {
 // A card's due-date reminder fires the first time the cron notices its
 // current statement is unpaid and within this many days of (or already
 // past) the due date -- one email per statement, not one per day in range.
-const CARD_REMINDER_WINDOW_DAYS = 3;
+const CARD_REMINDER_WINDOW_DAYS = 7;
 
 function formatBRDate(isoDate: string): string {
   const [year, month, day] = isoDate.split("-");
@@ -26,15 +31,25 @@ function formatBRL(amount: number): string {
   return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Counts only emails that actually went out -- a reminder is marked as sent
+// (and never retried) only when someone really got it.
 async function sendToMembers(members: MemberWithEmail[], subject: string, bodyHtml: string): Promise<number> {
   const withEmail = members.filter((member) => member.email);
-  await Promise.all(withEmail.map((member) => sendReminderEmail(member.email!, subject, bodyHtml)));
-  return withEmail.length;
+  const results = await Promise.all(withEmail.map((member) => sendReminderEmail(member.email!, subject, bodyHtml)));
+  return results.filter((result) => result.ok).length;
+}
+
+function dueLabelFor(daysUntilDue: number): string {
+  return daysUntilDue === 0
+    ? "vence hoje"
+    : daysUntilDue > 0
+      ? `vence em ${daysUntilDue} dia${daysUntilDue === 1 ? "" : "s"}`
+      : `venceu há ${-daysUntilDue} dia${-daysUntilDue === 1 ? "" : "s"}`;
 }
 
 async function runCardReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
   const membersById = new Map(members.map((member) => [member.id, member]));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInBrazil();
   const cards = await findCardsByGroupId(groupId);
   let emailsSent = 0;
 
@@ -58,12 +73,7 @@ async function runCardReminders(groupId: string, members: MemberWithEmail[]): Pr
         : []
       : members;
 
-    const dueLabel =
-      daysUntilDue === 0
-        ? "vence hoje"
-        : daysUntilDue > 0
-          ? `vence em ${daysUntilDue} dia${daysUntilDue === 1 ? "" : "s"}`
-          : `venceu há ${-daysUntilDue} dia${-daysUntilDue === 1 ? "" : "s"}`;
+    const dueLabel = dueLabelFor(daysUntilDue);
 
     const sent = await sendToMembers(
       recipients,
@@ -85,11 +95,11 @@ async function runCardReminders(groupId: string, members: MemberWithEmail[]): Pr
 
 // Same reasoning as CARD_REMINDER_WINDOW_DAYS -- one email per installment,
 // the first time it's noticed to be due soon (or already overdue).
-const DEBT_REMINDER_WINDOW_DAYS = 3;
+const DEBT_REMINDER_WINDOW_DAYS = 7;
 
 async function runDebtReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
   const membersById = new Map(members.map((member) => [member.id, member]));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInBrazil();
   const debts = await findDebtsByGroupId(groupId);
   const debtsWithDueDay = debts.filter((debt) => debt.dueDay !== null);
   if (debtsWithDueDay.length === 0) return 0;
@@ -124,12 +134,7 @@ async function runDebtReminders(groupId: string, members: MemberWithEmail[]): Pr
         : []
       : members;
 
-    const dueLabel =
-      daysUntilDue === 0
-        ? "vence hoje"
-        : daysUntilDue > 0
-          ? `vence em ${daysUntilDue} dia${daysUntilDue === 1 ? "" : "s"}`
-          : `venceu há ${-daysUntilDue} dia${-daysUntilDue === 1 ? "" : "s"}`;
+    const dueLabel = dueLabelFor(daysUntilDue);
 
     const sent = await sendToMembers(
       recipients,
@@ -183,6 +188,88 @@ async function runBudgetReminder(groupId: string, members: MemberWithEmail[]): P
   return sent;
 }
 
+// Contas fixas generate their own transaction on the day, but a heads-up a
+// few days before still helps make sure the money is there. One email per
+// bill per month.
+const RECURRING_REMINDER_WINDOW_DAYS = 3;
+
+async function runRecurringBillReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const today = todayInBrazil();
+  const thisMonth = today.slice(0, 7);
+  const bills = (await findRecurringBillsByGroupId(groupId)).filter(
+    (bill) => bill.isActive && bill.transactionType === "expense"
+  );
+  let emailsSent = 0;
+
+  for (const bill of bills) {
+    const month = bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
+    const dueDate = dateForDayInMonth(month, bill.dayOfMonth);
+    const daysUntilDue = daysBetween(today, dueDate);
+    if (daysUntilDue < 0 || daysUntilDue > RECURRING_REMINDER_WINDOW_DAYS) continue;
+
+    const key = `recurring:${bill.id}:${month}`;
+    if (await wasReminderSent(key)) continue;
+
+    const recipients = bill.accountOwnerId
+      ? membersById.has(bill.accountOwnerId)
+        ? [membersById.get(bill.accountOwnerId)!]
+        : []
+      : members;
+    const sent = await sendToMembers(
+      recipients,
+      `Conta fixa "${bill.description}" ${dueLabelFor(daysUntilDue)}`,
+      `
+        <h1 style="font-size: 20px;">🔁 Conta fixa chegando</h1>
+        <p><strong>${escapeHtml(bill.description)}</strong> (${formatBRL(Number(bill.amount))}) ${dueLabelFor(daysUntilDue)} (${formatBRDate(dueDate)}).</p>
+        <p>O PAR. lança sozinho no dia. Só confira se tem saldo.</p>
+      `
+    );
+    if (sent > 0) {
+      emailsSent += sent;
+      await markReminderSent(key, { groupId, kind: "recurring", billId: bill.id, month, dueDate });
+    }
+  }
+  return emailsSent;
+}
+
+// A receber: on the deadline day (or the first run after it), tell whoever
+// lent that it's time to get the money back. Once per loan per deadline --
+// moving the deadline gives a new reminder.
+async function runLoanReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const today = todayInBrazil();
+  const loans = await findLoansByGroup(groupId);
+  let emailsSent = 0;
+
+  for (const loan of loans) {
+    if (loan.status !== "open" || !loan.dueDate || loan.dueDate > today) continue;
+    const remaining = Number(loan.remaining);
+    if (remaining <= 0) continue;
+    const key = `loan:${loan.id}:${loan.dueDate}`;
+    if (await wasReminderSent(key)) continue;
+    const lender = membersById.get(loan.ownerUserId);
+    if (!lender) continue;
+
+    const days = daysBetween(loan.dueDate, today);
+    const when = days === 0 ? "hoje" : `há ${days} dia${days === 1 ? "" : "s"}`;
+    const sent = await sendToMembers(
+      [lender],
+      `${loan.personName} tinha que devolver ${formatBRL(remaining)} ${when === "hoje" ? "hoje" : ""}`.trim(),
+      `
+        <h1 style="font-size: 20px;">🤝 Prazo de empréstimo</h1>
+        <p>O prazo de <strong>${escapeHtml(loan.personName)}</strong> devolver <strong>${formatBRL(remaining)}</strong> foi ${when} (${formatBRDate(loan.dueDate)}).</p>
+        <p>Recebeu? Toque em "Recebi" em Contas &gt; A receber, no PAR.</p>
+      `
+    );
+    if (sent > 0) {
+      emailsSent += sent;
+      await markReminderSent(key, { groupId, kind: "loan", loanId: loan.id, dueDate: loan.dueDate });
+    }
+  }
+  return emailsSent;
+}
+
 // Entry point for the daily cron (POST /api/reminders/run). Generates the
 // whole batch of due reminders across every group in one pass -- there's no
 // per-user request context here, unlike everything else in the app.
@@ -196,7 +283,37 @@ export async function runDueReminders(): Promise<{ groupsChecked: number; emails
     emailsSent += await runCardReminders(group.id, members);
     emailsSent += await runDebtReminders(group.id, members);
     emailsSent += await runBudgetReminder(group.id, members);
+    emailsSent += await runRecurringBillReminders(group.id, members);
+    emailsSent += await runLoanReminders(group.id, members);
   }
 
   return { groupsChecked: groups.length, emailsSent };
+}
+
+// Safety net for the daily cron: the first health ping or Painel load after
+// 8h (Brasília) each day claims that day's run in Firestore -- create() fails
+// if another instance already claimed it -- and does the same work as POST
+// /api/reminders/run. Everything inside is deduped on its own
+// (reminderLogs, lastGeneratedMonth), so the cron also firing is harmless.
+let lastClaimedDay: string | null = null;
+
+export async function maybeRunDailyJobs(now = new Date()): Promise<void> {
+  const today = todayInBrazil(now);
+  if (lastClaimedDay === today) return;
+  const hourInBrazil = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }).format(now)
+  );
+  if (hourInBrazil < 8) return;
+  lastClaimedDay = today;
+  try {
+    await claimDailyRun(today);
+  } catch {
+    return; // already claimed today (here or on another instance)
+  }
+  try {
+    const [reminders, recurringBills] = await Promise.all([runDueReminders(), generateDueRecurringBills()]);
+    console.log("[daily jobs]", today, JSON.stringify({ reminders, recurringBills }));
+  } catch (err) {
+    logError("daily-jobs", err);
+  }
 }

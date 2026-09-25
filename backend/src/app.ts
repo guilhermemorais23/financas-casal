@@ -16,6 +16,7 @@ import { groupsRouter } from "./modules/groups/groups.routes";
 import { quotesRouter } from "./modules/quotes/quotes.routes";
 import { recurringBillsRouter } from "./modules/recurringBills/recurringBills.routes";
 import { remindersRouter } from "./modules/reminders/reminders.routes";
+import { maybeRunDailyJobs } from "./modules/reminders/reminders.service";
 import { publicSharesRouter, sharesRouter } from "./modules/shares/shares.routes";
 import { statementsRouter } from "./modules/statements/statements.routes";
 import { shoppingRouter } from "./modules/shopping/shopping.routes";
@@ -69,7 +70,10 @@ export function createApp() {
   // /api/me always answers 401 when hit without a token, which cron-job.org
   // (and similar services) count as a failed execution; enough of those in
   // a row auto-disables the cronjob even though the ping was doing its job.
-  app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
+  app.get("/api/health", (_req, res) => {
+    void maybeRunDailyJobs();
+    res.status(200).json({ status: "ok" });
+  });
 
   app.get("/api/me", requireAuth, asyncHandler(meHandler));
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));

@@ -6,6 +6,7 @@ import { fromCents, toCents } from "../../utils/money";
 import {
   deleteLoan,
   findLoanById,
+  findLoansByGroupId,
   findLoansByOwner,
   insertLoan,
   newLoanId,
@@ -26,6 +27,9 @@ export class RepaymentNotFoundError extends Error {}
 
 export interface LoanWithTotals extends LoanRow {
   received: string;
+  // Interest accrued so far (0.00 when there's no rate) and principal + it.
+  interest: string;
+  totalOwed: string;
   remaining: string;
   isOverdue: boolean;
 }
@@ -57,15 +61,39 @@ function receivedCents(loan: LoanRow): number {
   return loan.repayments.reduce((sum, r) => sum + toCents(Number(r.amount)), 0);
 }
 
-function remainingCents(loan: LoanRow): number {
-  return Math.max(0, toCents(Number(loan.amount)) - receivedCents(loan));
+// Whole months from `from` to `to` (a month counts once its day comes).
+export function fullMonthsBetween(from: string, to: string): number {
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const [ty, tm, td] = to.split("-").map(Number);
+  const months = (ty - fy) * 12 + (tm - fm) - (td < fd ? 1 : 0);
+  return Math.max(0, months);
+}
+
+// Simple interest on the amount lent, per full month. It stops counting on
+// the day the loan was fully paid back.
+export function interestCents(loan: LoanRow, today: string): number {
+  if (!loan.interestRateMonthly) return 0;
+  const lastRepayment = loan.repayments.map((r) => r.receivedAt).sort().at(-1);
+  const until = loan.status === "paid" && lastRepayment ? lastRepayment : today;
+  const months = fullMonthsBetween(loan.lentAt, until);
+  return Math.round(toCents(Number(loan.amount)) * (loan.interestRateMonthly / 100) * months);
+}
+
+function totalOwedCents(loan: LoanRow, today: string): number {
+  return toCents(Number(loan.amount)) + interestCents(loan, today);
+}
+
+function remainingCents(loan: LoanRow, today = todayInBrazil()): number {
+  return Math.max(0, totalOwedCents(loan, today) - receivedCents(loan));
 }
 
 function withTotals(loan: LoanRow, today: string): LoanWithTotals {
-  const remaining = remainingCents(loan);
+  const remaining = remainingCents(loan, today);
   return {
     ...loan,
     received: fromCents(receivedCents(loan)),
+    interest: fromCents(interestCents(loan, today)),
+    totalOwed: fromCents(totalOwedCents(loan, today)),
     remaining: fromCents(remaining),
     isOverdue: loan.status === "open" && remaining > 0 && loan.dueDate !== null && loan.dueDate < today,
   };
@@ -120,6 +148,13 @@ export async function listLoans(userId: string): Promise<{ loans: LoanWithTotals
   const today = todayInBrazil();
   const loans = (await findLoansByOwner(groupId, userId)).map((loan) => withTotals(loan, today)).sort(compareLoans);
   return { loans, summary: summarize(loans, today) };
+}
+
+// Every loan in a group, with totals -- for the daily reminders job, which
+// has no signed-in user.
+export async function findLoansByGroup(groupId: string): Promise<LoanWithTotals[]> {
+  const today = todayInBrazil();
+  return (await findLoansByGroupId(groupId)).map((loan) => withTotals(loan, today));
 }
 
 // Personal account of the lender or Nossa Conta -- never someone else's.
@@ -178,6 +213,7 @@ export interface CreateLoanInput {
   dueDate: string | null;
   note: string | null;
   accountId: string | null;
+  interestRateMonthly?: number | null;
 }
 
 export async function createLoan(userId: string, input: CreateLoanInput): Promise<LoanWithTotals> {
@@ -197,6 +233,7 @@ export async function createLoan(userId: string, input: CreateLoanInput): Promis
     note: input.note,
     accountId: account?.id ?? null,
     transactionId,
+    interestRateMonthly: input.interestRateMonthly ?? null,
   });
   return withTotals(loan, todayInBrazil());
 }
@@ -250,6 +287,7 @@ export interface UpdateLoanInput {
   note?: string | null;
   // "forgiven" = gave up on receiving the rest; "open" reopens it.
   status?: "open" | "forgiven";
+  interestRateMonthly?: number | null;
 }
 
 export async function updateLoanForUser(userId: string, loanId: string, input: UpdateLoanInput): Promise<LoanWithTotals> {
@@ -261,6 +299,7 @@ export async function updateLoanForUser(userId: string, loanId: string, input: U
     ...(input.personName !== undefined ? { personName: input.personName } : {}),
     ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
     ...(input.note !== undefined ? { note: input.note } : {}),
+    ...(input.interestRateMonthly !== undefined ? { interestRateMonthly: input.interestRateMonthly } : {}),
     ...(status ? { status } : {}),
   });
   return withTotals(updated, todayInBrazil());

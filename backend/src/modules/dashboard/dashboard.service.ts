@@ -13,6 +13,7 @@ import {
 } from "../transactions/transactions.service";
 import { parseMonthRange } from "../../utils/month";
 import { listLoans } from "../loans/loans.service";
+import { getUpcomingForUser } from "../upcoming/upcoming.service";
 
 export interface GoalHighlight {
   id: string;
@@ -86,7 +87,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   // fetched at all when `month` is the real current month.
   const isCurrentMonth = month === new Date().toISOString().slice(0, 7);
 
-  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts, loans] =
+  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts, loans, upcoming] =
     await Promise.all([
       listTransactions(userId, 8, month),
       listDebts(userId),
@@ -112,8 +113,9 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
       // hero card below no longer needs its own two 100-row fetches just to
       // sum two numbers each.
       getMonthlyTrendForUser(userId, month),
-      isCurrentMonth ? getAlertsForUser(userId) : Promise.resolve<AlertItem[]>([]),
+      isCurrentMonth ? getAlertsForUser(userId, { includeDue: false }) : Promise.resolve<AlertItem[]>([]),
       listLoans(userId),
+      getUpcomingForUser(userId),
     ]);
 
   // trend6m's window always includes both of these (monthsBack defaults to
@@ -135,6 +137,8 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     // Empréstimos: what's still to come back -- "Seu dinheiro" shows it as
     // "quando receber tudo" on top of what's in the accounts.
     loansSummary: loans.summary,
+    // "Vence logo": pagar e receber nos próximos 7 dias (e atrasados).
+    upcoming,
     recent,
     debts,
     summary,

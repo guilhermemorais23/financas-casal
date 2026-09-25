@@ -30,6 +30,9 @@ export interface LoanRow {
   transactionId: string | null;
   repayments: RepaymentRow[];
   status: LoanStatus;
+  // Optional simple interest, % per full month since lentAt (2 = 2% a.m.).
+  // null = no interest, the usual case between family.
+  interestRateMonthly: number | null;
 }
 
 const loansCol = db.collection("loans");
@@ -64,6 +67,7 @@ function toLoanRow(doc: FirebaseFirestore.DocumentSnapshot): LoanRow {
     transactionId: data.transactionId ?? null,
     repayments,
     status: data.status ?? "open",
+    interestRateMonthly: typeof data.interestRateMonthly === "number" ? data.interestRateMonthly : null,
   };
 }
 
@@ -86,6 +90,7 @@ export async function insertLoan(
     note: input.note,
     accountId: input.accountId,
     transactionId: input.transactionId,
+    interestRateMonthly: input.interestRateMonthly,
     repayments: [],
     status: "open",
     createdAt: FieldValue.serverTimestamp(),
@@ -104,6 +109,11 @@ export async function findLoansByOwner(groupId: string, ownerUserId: string): Pr
   return snapshot.docs.map(toLoanRow);
 }
 
+export async function findLoansByGroupId(groupId: string): Promise<LoanRow[]> {
+  const snapshot = await loansCol.where("groupId", "==", groupId).get();
+  return snapshot.docs.map(toLoanRow);
+}
+
 export async function updateLoan(
   id: string,
   patch: Partial<{
@@ -112,6 +122,7 @@ export async function updateLoan(
     note: string | null;
     status: LoanStatus;
     repayments: RepaymentRow[];
+    interestRateMonthly: number | null;
   }>
 ): Promise<LoanRow> {
   const { repayments, ...rest } = patch;

@@ -1,60 +1,101 @@
 import type { Request, Response } from "express";
-import { db } from "../../db/firestore";
-import { escapeHtml, sendOwnerEmail } from "../../email/mailer";
+import { NotAdminError, requireAdminEmail } from "../admin/admin.service";
 import { findUserById } from "../users/users.repository";
-
-export const FEEDBACK_KINDS = { idea: "💡 Ideia", problem: "🐞 Problema", praise: "💜 Elogio" } as const;
-type FeedbackKind = keyof typeof FEEDBACK_KINDS;
-
-const MAX_MESSAGE_LENGTH = 2000;
+import type { FeedbackKind } from "./feedback.repository";
+import {
+  MAX_MESSAGE_LENGTH,
+  ThreadNotFoundError,
+  getMyConversation,
+  getMyUnread,
+  getThreadForTeam,
+  listThreadsForTeam,
+  replyAsTeam,
+  sendUserMessage,
+} from "./feedback.service";
 
 function isFeedbackKind(value: unknown): value is FeedbackKind {
-  return typeof value === "string" && value in FEEDBACK_KINDS;
+  return value === "idea" || value === "problem" || value === "praise";
 }
 
-// "Enviar feedback" from the app's Mais menu: stored in Firestore (so
-// nothing is lost if email isn't configured) and emailed to the owner, with
-// Reply-To set to the person who sent it so answering is one click.
-export async function createFeedbackHandler(req: Request, res: Response) {
-  const { kind, message, page } = req.body ?? {};
-  const text = typeof message === "string" ? message.trim() : "";
-  if (text.length < 3) {
-    res.status(400).json({ error: "Escreva pelo menos algumas palavras." });
-    return;
+function readText(value: unknown, res: Response): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (text.length < 2) {
+    res.status(400).json({ error: "Escreva sua mensagem." });
+    return null;
   }
   if (text.length > MAX_MESSAGE_LENGTH) {
     res.status(400).json({ error: `Máximo de ${MAX_MESSAGE_LENGTH} caracteres.` });
-    return;
+    return null;
   }
-  const safeKind: FeedbackKind = isFeedbackKind(kind) ? kind : "idea";
-  const safePage = typeof page === "string" ? page.slice(0, 200) : null;
+  return text;
+}
 
-  const user = await findUserById(req.user!.id);
-  const email = user?.email ?? req.user!.email;
-  const displayName = user?.displayName ?? email;
+function isAdmin(req: Request, res: Response): boolean {
+  try {
+    requireAdminEmail(req.user!.email);
+    return true;
+  } catch (err) {
+    if (err instanceof NotAdminError) {
+      res.status(403).json({ error: "not an admin" });
+      return false;
+    }
+    throw err;
+  }
+}
 
-  await db.collection("feedback").add({
-    userId: req.user!.id,
-    email,
-    displayName,
-    kind: safeKind,
-    message: text,
-    page: safePage,
-    createdAt: new Date(),
+export async function getMyConversationHandler(req: Request, res: Response) {
+  res.json(await getMyConversation(req.user!.id));
+}
+
+export async function getMyUnreadHandler(req: Request, res: Response) {
+  res.json({ unread: await getMyUnread(req.user!.id) });
+}
+
+// "Fale com a gente": the person's message goes into their conversation,
+// an automatic thank-you answers right away, and the owner gets an email.
+export async function createFeedbackHandler(req: Request, res: Response) {
+  const { kind, message, page } = req.body ?? {};
+  const text = readText(message, res);
+  if (text === null) return;
+  const conversation = await sendUserMessage(req.user!.id, req.user!.email, {
+    kind: isFeedbackKind(kind) ? kind : "idea",
+    text,
+    page: typeof page === "string" ? page.slice(0, 200) : null,
   });
+  res.status(201).json(conversation);
+}
 
-  void sendOwnerEmail(
-    `${FEEDBACK_KINDS[safeKind]} de ${displayName} no PAR.`,
-    `
-      <h1 style="font-size: 20px;">${FEEDBACK_KINDS[safeKind]}</h1>
-      <p style="white-space: pre-wrap; font-size: 15px; line-height: 1.5; background: #f4f2fb; padding: 14px 16px; border-radius: 12px;">${escapeHtml(text)}</p>
-      <p><strong>De:</strong> ${escapeHtml(displayName)} (${escapeHtml(email)})<br />
-      ${safePage ? `<strong>Tela:</strong> ${escapeHtml(safePage)}<br />` : ""}
-      <strong>Quando:</strong> ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>
-      <p style="font-size: 13px; color: #666;">Responder este email responde direto pra pessoa.</p>
-    `,
-    email
-  );
+export async function listThreadsHandler(req: Request, res: Response) {
+  if (!isAdmin(req, res)) return;
+  res.json({ threads: await listThreadsForTeam() });
+}
 
-  res.status(201).json({ ok: true });
+export async function getThreadHandler(req: Request, res: Response) {
+  if (!isAdmin(req, res)) return;
+  try {
+    res.json(await getThreadForTeam(String(req.params.threadId)));
+  } catch (err) {
+    if (err instanceof ThreadNotFoundError) {
+      res.status(404).json({ error: "Conversa não encontrada." });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function replyHandler(req: Request, res: Response) {
+  if (!isAdmin(req, res)) return;
+  const text = readText(req.body?.message, res);
+  if (text === null) return;
+  try {
+    const me = await findUserById(req.user!.id);
+    const authorName = me?.displayName?.split(" ")[0] || "PAR.";
+    res.status(201).json(await replyAsTeam(String(req.params.threadId), authorName, text));
+  } catch (err) {
+    if (err instanceof ThreadNotFoundError) {
+      res.status(404).json({ error: "Conversa não encontrada." });
+      return;
+    }
+    throw err;
+  }
 }

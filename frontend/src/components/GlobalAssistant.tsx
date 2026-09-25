@@ -7,6 +7,9 @@ interface ChatMessage {
   text: string;
 }
 
+// One tap to the questions a monthly check-in is made of.
+const SUGGESTIONS = ["Como está meu mês?", "O que vence essa semana?", "Quanto posso gastar por dia?", "Quem me deve?"];
+
 // Trigger button lives in AppLayout's sidebar footer (next to the theme
 // toggle) -- this component only renders the panel itself, so there's a
 // single floating button on screen (the "+" FAB) instead of two competing
@@ -39,7 +42,10 @@ export function GlobalAssistant({ isOpen, onClose }: { isOpen: boolean; onClose:
 
   async function handleSend(event: FormEvent) {
     event.preventDefault();
-    const text = input.trim();
+    await send(input.trim());
+  }
+
+  async function send(text: string) {
     if (!text || isSending) return;
 
     setMessages((prev) => [...prev, { role: "user", text }]);
@@ -71,7 +77,7 @@ export function GlobalAssistant({ isOpen, onClose }: { isOpen: boolean; onClose:
   return (
     <div className="assistant-panel">
       <div className="assistant-panel-header">
-        <p>Assistente PAR.</p>
+        <p>Assistente do mês</p>
         <button type="button" className="btn-icon" onClick={onClose} aria-label="Fechar">
           ×
         </button>
@@ -80,7 +86,7 @@ export function GlobalAssistant({ isOpen, onClose }: { isOpen: boolean; onClose:
       <div className="assistant-messages" ref={listRef}>
         {messages.length === 0 && !isGreeting && (
           <p className="assistant-empty-state">
-            Pergunte sobre seus gastos, conte qual é o objetivo financeiro de vocês, ou peça dicas de onde economizar.
+            Pergunte sobre o mês, o que vence ou quem te deve. Também dá pra lançar: "gastei 50 no mercado".
           </p>
         )}
         {messages.map((message, index) => (
@@ -89,6 +95,15 @@ export function GlobalAssistant({ isOpen, onClose }: { isOpen: boolean; onClose:
           </p>
         ))}
         {(isSending || isGreeting) && <p className="assistant-message assistant assistant-typing">Digitando...</p>}
+        {!isSending && !isGreeting && messages.filter((m) => m.role === "user").length === 0 && (
+          <div className="assistant-suggestions">
+            {SUGGESTIONS.map((suggestion) => (
+              <button key={suggestion} type="button" className="chat-kind-pick" onClick={() => send(suggestion)}>
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (
