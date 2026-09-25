@@ -18,6 +18,7 @@ const GROUP_COLLECTIONS = [
   "shoppingItems",
   "invites",
   "categories",
+  "loans",
 ] as const;
 
 async function deleteDocs(query: FirebaseFirestore.Query): Promise<void> {
@@ -45,6 +46,7 @@ async function deletePersonalData(groupId: string, userId: string): Promise<void
     deleteDocs(db.collection("accounts").where("groupId", "==", groupId).where("ownerUserId", "==", userId)),
     deleteDocs(db.collection("cards").where("groupId", "==", groupId).where("ownerUserId", "==", userId)),
     deleteDocs(db.collection("debts").where("groupId", "==", groupId).where("ownerUserId", "==", userId)),
+    deleteDocs(db.collection("loans").where("groupId", "==", groupId).where("ownerUserId", "==", userId)),
   ]);
 }
 

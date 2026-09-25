@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
@@ -8,6 +8,8 @@ import { GlobalAssistant } from "../components/GlobalAssistant";
 import { Icon, type IconName } from "../components/Icon";
 import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
 import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
+import { BILLS_TABS } from "../components/BillsTabs";
+import { FeedbackModal } from "../components/FeedbackModal";
 import { useTheme } from "../hooks/useTheme";
 import { currentMonthParam, formatCurrency, monthLongName } from "../utils/format";
 
@@ -16,18 +18,39 @@ interface BudgetSummary {
   spent: number;
 }
 
-const NAV_ITEMS: { to: string; label: string; icon: IconName }[] = [
-  { to: "/dashboard", label: "Painel", icon: "home" },
-  { to: "/par", label: "Par", icon: "heart" },
-  { to: "/transactions/new", label: "Nova despesa", icon: "plus" },
-  { to: "/debts", label: "Dívidas", icon: "card" },
-  { to: "/recurring-bills", label: "Contas fixas", icon: "repeat" },
-  { to: "/cards", label: "Cartões", icon: "receipt" },
-  { to: "/shopping", label: "Lista de compras", icon: "cart" },
-  { to: "/goals", label: "Metas", icon: "target" },
-  { to: "/reports", label: "Relatórios", icon: "chart" },
-  { to: "/investments", label: "Investimentos", icon: "trend" },
-  { to: "/account", label: "Conta", icon: "sliders" },
+interface NavItem {
+  to: string;
+  label: string;
+  icon: IconName;
+}
+
+// Desktop sidebar, grouped so 10 links read as 4 short lists. "Nova
+// despesa" isn't here -- the floating + already does it on every screen.
+const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
+  {
+    label: null,
+    items: [
+      { to: "/dashboard", label: "Painel", icon: "home" },
+      { to: "/par", label: "Par", icon: "heart" },
+      { to: "/reports", label: "Relatórios", icon: "chart" },
+    ],
+  },
+  {
+    label: "Contas",
+    items: BILLS_TABS,
+  },
+  {
+    label: "Planejar",
+    items: [
+      { to: "/goals", label: "Metas", icon: "target" },
+      { to: "/investments", label: "Investimentos", icon: "trend" },
+      { to: "/shopping", label: "Lista de compras", icon: "cart" },
+    ],
+  },
+  {
+    label: "Você",
+    items: [{ to: "/account", label: "Conta e grupo", icon: "sliders" }],
+  },
 ];
 
 // Admin isn't a plain link -- it expands into a submenu (handled separately
@@ -37,18 +60,24 @@ const ADMIN_SUBLINKS = [
   { section: "logs", label: "Logs" },
 ];
 
-const BOTTOM_NAV_ITEMS: { to: string; label: string; icon: IconName }[] = [
-  { to: "/dashboard", label: "Painel", icon: "home" },
-  { to: "/par", label: "Par", icon: "heart" },
-  { to: "/debts", label: "Dívidas", icon: "card" },
-  { to: "/goals", label: "Metas", icon: "target" },
+// Phone: Painel · Par · [+] · Contas · Mais. Everything else lives in the
+// "Mais" sheet, so every screen is at most two taps away.
+const MORE_TILES: NavItem[] = [
   { to: "/reports", label: "Relatórios", icon: "chart" },
+  { to: "/goals", label: "Metas", icon: "target" },
+  { to: "/investments", label: "Investir", icon: "trend" },
+  { to: "/shopping", label: "Compras", icon: "cart" },
 ];
+
+const BILLS_PATHS = BILLS_TABS.map((tab) => tab.to);
+const MORE_PATHS = [...MORE_TILES.map((tile) => tile.to), "/account", "/admin"];
 
 export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const { user, token, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const [isNavOpen, setIsNavOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const navigate = useNavigate();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isAdminNavOpen, setIsAdminNavOpen] = useState(false);
@@ -92,53 +121,68 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   }, [isUserMenuOpen]);
 
   useEffect(() => {
-    document.body.style.overflow = isNavOpen ? "hidden" : "";
+    document.body.style.overflow = isMoreOpen ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isNavOpen]);
+  }, [isMoreOpen]);
 
   useEffect(() => {
-    if (!isNavOpen) return;
+    if (!isMoreOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setIsNavOpen(false);
+      if (event.key === "Escape") setIsMoreOpen(false);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isNavOpen]);
+  }, [isMoreOpen]);
+
+  // Any navigation (a tile, the back button) closes the sheet.
+  useEffect(() => {
+    setIsMoreOpen(false);
+  }, [location.pathname]);
+
+  const isOnBills = BILLS_PATHS.includes(location.pathname);
+  const isOnMore = MORE_PATHS.includes(location.pathname);
+
+  function fromSheet(action: () => void) {
+    setIsMoreOpen(false);
+    action();
+  }
 
   return (
     <div className="app-shell-nav">
       <header className="app-mobile-topbar">
+        <Brand />
         <button
           type="button"
-          className="hamburger-btn"
-          onClick={() => setIsNavOpen(true)}
-          aria-label="Abrir menu"
+          className="topbar-avatar"
+          onClick={() => setIsMoreOpen(true)}
+          aria-label="Abrir menu da conta"
         >
-          ☰
+          <Avatar photoDataUrl={user?.photoDataUrl} name={user?.displayName} />
         </button>
-        <Brand />
       </header>
 
-      {isNavOpen && <div className="app-nav-overlay" onClick={() => setIsNavOpen(false)} />}
-
-      <aside className={`app-sidebar${isNavOpen ? " is-open" : ""}`}>
+      <aside className="app-sidebar">
         <div className="app-sidebar-brand">
           <Brand />
         </div>
         <div className="app-sidebar-scroll">
         <nav className="app-nav">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => `app-nav-link${isActive ? " active" : ""}`}
-              onClick={() => setIsNavOpen(false)}
-            >
-              <span className="app-nav-icon"><Icon name={item.icon} /></span>
-              {item.label}
-            </NavLink>
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label ?? "main"} className="app-nav-group">
+              {group.label && <p className="app-nav-group-label">{group.label}</p>}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => `app-nav-link${isActive ? " active" : ""}`}
+                >
+                  <span className="app-nav-icon"><Icon name={item.icon} /></span>
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
 
           {user?.isAdmin && (
@@ -165,7 +209,6 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
                           ? " active"
                           : ""
                       }`}
-                      onClick={() => setIsNavOpen(false)}
                     >
                       {sublink.label}
                     </Link>
@@ -190,13 +233,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
 
         <div className="app-sidebar-footer">
           <div className="app-sidebar-footer-row">
-            {user?.photoDataUrl ? (
-              <img src={user.photoDataUrl} alt="" className="app-sidebar-avatar" />
-            ) : (
-              <span className="app-sidebar-avatar app-sidebar-avatar-fallback">
-                {user?.displayName?.charAt(0).toUpperCase() ?? "?"}
-              </span>
-            )}
+            <Avatar photoDataUrl={user?.photoDataUrl} name={user?.displayName} />
             <span className="app-sidebar-user">{user?.displayName}</span>
             <div className="user-menu-wrap" ref={userMenuRef}>
               <button
@@ -230,11 +267,22 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
                     onClick={() => {
                       setIsUserMenuOpen(false);
                       setIsAssistantOpen((open) => !open);
-                      setIsNavOpen(false);
                     }}
                   >
                     <Icon name="chat" />
                     Assistente PAR.
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="user-menu-item"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsFeedbackOpen(true);
+                    }}
+                  >
+                    <Icon name="spark" />
+                    Enviar feedback
                   </button>
                   <button
                     type="button"
@@ -263,18 +311,105 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       {isProfileOpen && <ProfileSettingsModal onClose={() => setIsProfileOpen(false)} />}
       <main className={`app-main${wide ? " app-main-wide" : ""}`}>{children}</main>
 
-      <nav className="app-bottom-nav">
-        {BOTTOM_NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}
-          >
-            <span className="app-bottom-nav-icon"><Icon name={item.icon} /></span>
-            {item.label}
-          </NavLink>
-        ))}
+      <nav className="app-bottom-nav" aria-label="Menu principal">
+        <NavLink to="/dashboard" className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>
+          <span className="app-bottom-nav-icon"><Icon name="home" /></span>
+          Painel
+        </NavLink>
+        <NavLink to="/par" className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>
+          <span className="app-bottom-nav-icon"><Icon name="heart" /></span>
+          Par
+        </NavLink>
+        <Link
+          to="/transactions/new"
+          className={`app-bottom-nav-add${isOnNewTransaction ? " active" : ""}`}
+          aria-label="Nova despesa"
+        >
+          <Icon name="plus" />
+        </Link>
+        <Link to="/cards" className={`app-bottom-nav-link${isOnBills ? " active" : ""}`}>
+          <span className="app-bottom-nav-icon"><Icon name="receipt" /></span>
+          Contas
+        </Link>
+        <button
+          type="button"
+          className={`app-bottom-nav-link${isOnMore || isMoreOpen ? " active" : ""}`}
+          onClick={() => setIsMoreOpen((open) => !open)}
+          aria-expanded={isMoreOpen}
+        >
+          <span className="app-bottom-nav-icon"><Icon name="more" /></span>
+          Mais
+        </button>
       </nav>
+
+      {isMoreOpen && (
+        <div className="more-sheet-backdrop" onClick={() => setIsMoreOpen(false)}>
+          <div
+            className="more-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mais opções"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="more-sheet-handle" aria-hidden="true" />
+            <div className="more-sheet-user">
+              <Avatar photoDataUrl={user?.photoDataUrl} name={user?.displayName} />
+              <div className="more-sheet-user-text">
+                <strong className="text-truncate">{user?.displayName}</strong>
+                <span className="text-truncate">{user?.email}</span>
+              </div>
+            </div>
+
+            <div className="more-sheet-tiles">
+              {MORE_TILES.map((tile) => (
+                <Link
+                  key={tile.to}
+                  to={tile.to}
+                  className={`more-sheet-tile${location.pathname === tile.to ? " active" : ""}`}
+                >
+                  <span className="more-sheet-tile-icon"><Icon name={tile.icon} /></span>
+                  {tile.label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="more-sheet-list">
+              <Link to="/account" className="more-sheet-row">
+                <Icon name="sliders" />
+                <span>Conta e grupo</span>
+              </Link>
+              <button type="button" className="more-sheet-row" onClick={() => fromSheet(() => setIsProfileOpen(true))}>
+                <Icon name="user" />
+                <span>Editar perfil</span>
+              </button>
+              <button type="button" className="more-sheet-row" onClick={() => fromSheet(() => setIsAssistantOpen(true))}>
+                <Icon name="chat" />
+                <span>Assistente PAR.</span>
+              </button>
+              <button type="button" className="more-sheet-row" onClick={() => fromSheet(() => setIsFeedbackOpen(true))}>
+                <Icon name="spark" />
+                <span>Enviar feedback</span>
+              </button>
+              <button type="button" className="more-sheet-row" onClick={toggle}>
+                <Icon name={theme === "dark" ? "sun" : "moon"} />
+                <span>{theme === "dark" ? "Tema claro" : "Tema escuro"}</span>
+              </button>
+              {user?.isAdmin && (
+                <button type="button" className="more-sheet-row" onClick={() => fromSheet(() => navigate("/admin"))}>
+                  <Icon name="wrench" />
+                  <span>Admin</span>
+                </button>
+              )}
+              <button type="button" className="more-sheet-row danger" onClick={() => fromSheet(() => void logout())}>
+                <Icon name="logout" />
+                <span>Sair</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isFeedbackOpen && <FeedbackModal onClose={() => setIsFeedbackOpen(false)} />}
 
       {!isOnNewTransaction && (
         <Link to="/transactions/new" className="global-fab" aria-label="Nova despesa" title="Nova despesa">
@@ -284,6 +419,13 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
 
       <GlobalAssistant isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
     </div>
+  );
+}
+
+function Avatar({ photoDataUrl, name }: { photoDataUrl?: string | null; name?: string | null }) {
+  if (photoDataUrl) return <img src={photoDataUrl} alt="" className="app-sidebar-avatar" />;
+  return (
+    <span className="app-sidebar-avatar app-sidebar-avatar-fallback">{name?.charAt(0).toUpperCase() ?? "?"}</span>
   );
 }
 

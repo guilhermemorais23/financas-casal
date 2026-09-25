@@ -63,6 +63,7 @@ interface TransactionListRow {
   // Guardar/resgatar de um cartão com limite garantido -- managed from the
   // card itself, so the extrato shows it without edit/delete.
   securedCardId?: string | null;
+  loanId?: string | null;
   accountId: string;
   accountType: "personal" | "joint";
   paymentMethod: PaymentMethod | null;
@@ -457,19 +458,21 @@ export function ReportsPage() {
   // Guardar/resgatar no cartão garantido isn't income or spending, but it
   // did move money out of (or back into) the account -- kept apart so
   // Entrada/Saída match the categories and the Saldo still adds up.
-  const { incomeTotal, expenseTotal, savedInCards } = useMemo(() => {
+  const { incomeTotal, expenseTotal, savedInCards, lentOut } = useMemo(() => {
     let income = 0;
     let expense = 0;
     let saved = 0;
+    let lent = 0;
     for (const tx of transactions ?? []) {
       const amount = Number(tx.amount);
       if (tx.securedCardId) saved += tx.transactionType === "expense" ? amount : -amount;
+      else if (tx.loanId) lent += tx.transactionType === "expense" ? amount : -amount;
       else if (tx.transactionType === "income") income += amount;
       else expense += amount;
     }
-    return { incomeTotal: income, expenseTotal: expense, savedInCards: saved };
+    return { incomeTotal: income, expenseTotal: expense, savedInCards: saved, lentOut: lent };
   }, [transactions]);
-  const monthBalance = incomeTotal - expenseTotal - savedInCards;
+  const monthBalance = incomeTotal - expenseTotal - savedInCards - lentOut;
   const pieSlices = useMemo(
     () =>
       (summary?.byCategory ?? []).map((row) => ({
@@ -535,7 +538,7 @@ export function ReportsPage() {
             {tx.transactionType === "income" ? "+" : "-"}
             {formatCurrency(Number(tx.amount))}
           </span>
-          {!tx.securedCardId && (
+          {!tx.securedCardId && !tx.loanId && (
             <div className="transaction-row-actions">
               <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                 <Icon name="pencil" />
@@ -611,6 +614,7 @@ export function ReportsPage() {
             <p className="stat-delta neutral">
               conta pessoal + conjunta
               {savedInCards > 0 && ` · ${formatCurrency(savedInCards)} guardados no cartão`}
+              {lentOut > 0 && ` · ${formatCurrency(lentOut)} emprestados`}
             </p>
           </div>
         </div>

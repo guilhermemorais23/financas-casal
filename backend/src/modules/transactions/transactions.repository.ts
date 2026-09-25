@@ -55,6 +55,16 @@ export interface TransactionRow {
   // money in the card as a gasto. Owned by the card: deleting the card
   // deletes these too, and they can't be edited/deleted on their own.
   securedCardId: string | null;
+  // Set only on money lent out / received back through Empréstimos -- a
+  // transfer like securedCardId above: moves the balance, never counts as
+  // gasto/receita. Owned by the loan (edited/deleted only through it).
+  loanId: string | null;
+}
+
+// Transfers move money between the account and somewhere else (a secured
+// card, someone who owes you) without being income or spending.
+export function isTransferData(data: FirebaseFirestore.DocumentData): boolean {
+  return Boolean(data.securedCardId || data.loanId);
 }
 
 export interface TransactionListRow extends TransactionRow {
@@ -88,6 +98,7 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
     isSettled: data.isSettled ?? false,
     settlementTransactionId: data.settlementTransactionId ?? null,
     securedCardId: data.securedCardId ?? null,
+    loanId: data.loanId ?? null,
   };
 }
 
@@ -112,6 +123,7 @@ export interface NewTransactionInput {
   splitType: SplitType;
   paymentMethod?: PaymentMethod | null;
   securedCardId?: string | null;
+  loanId?: string | null;
 }
 
 export async function insertTransaction(input: NewTransactionInput): Promise<TransactionRow> {
@@ -157,6 +169,7 @@ export async function insertTransactionSeries(
       isSettled: false,
       settlementTransactionId: null,
       securedCardId: base.securedCardId ?? null,
+      loanId: base.loanId ?? null,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -446,7 +459,7 @@ export async function getMonthlySummary(
 
   for (const doc of docs) {
     const data = doc.data();
-    if (data.securedCardId) continue;
+    if (isTransferData(data)) continue;
     totalCents += data.amountCents;
     byPayerMap.set(data.payerId, (byPayerMap.get(data.payerId) ?? 0) + data.amountCents);
 
@@ -540,6 +553,7 @@ export interface OwnRangeDoc {
   amountCents: number;
   transactionType: TransactionType;
   isSecuredCardTransfer: boolean;
+  isLoanTransfer: boolean;
 }
 
 // One query across the whole range, personal account only (accountOwnerId,
@@ -570,7 +584,7 @@ async function loadOwnDocsForRange(
     .where("accountOwnerId", "==", userId)
     .where("occurredAt", ">=", rangeStart)
     .where("occurredAt", "<", rangeEnd)
-    .select("occurredAt", "amountCents", "transactionType", "securedCardId")
+    .select("occurredAt", "amountCents", "transactionType", "securedCardId", "loanId")
     .get();
   return snapshot.docs.map((doc) => {
     const data = doc.data();
@@ -579,6 +593,7 @@ async function loadOwnDocsForRange(
       amountCents: data.amountCents as number,
       transactionType: data.transactionType as TransactionType,
       isSecuredCardTransfer: Boolean(data.securedCardId),
+      isLoanTransfer: Boolean(data.loanId),
     };
   });
 }
@@ -606,7 +621,7 @@ export async function getDailySeries(
   for (const doc of docs) {
     const data = doc.data();
     if (!(data.isPrivate === false || data.createdBy === requestingUserId)) continue;
-    if (data.securedCardId) continue;
+    if (isTransferData(data)) continue;
     const entry = byDay.get(data.occurredAt) ?? { income: 0, expense: 0 };
     if (data.transactionType === "income") {
       entry.income += data.amountCents;
@@ -668,7 +683,7 @@ export async function getYearlySummary(
   for (const doc of docs) {
     const data = doc.data();
     if (!(data.isPrivate === false || data.createdBy === requestingUserId)) continue;
-    if (data.securedCardId) continue;
+    if (isTransferData(data)) continue;
     const monthKey = (data.occurredAt as string).slice(0, 7);
     const entry = byMonth.get(monthKey) ?? { income: 0, expense: 0 };
     if (data.transactionType === "income") {
