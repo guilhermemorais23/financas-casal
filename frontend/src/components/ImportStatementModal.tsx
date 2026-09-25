@@ -35,6 +35,7 @@ interface PdfCheck {
   openingBalance: string | null;
   closingBalance: string | null;
   readBy: "ai" | "text";
+  unreadLines?: string[];
 }
 
 interface PreviewResponse {
@@ -283,6 +284,8 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     let incoming = 0;
     let outgoing = 0;
     let skippedNotExpense = 0;
+    // Não conciliado: linhas que vão entrar sem categoria nenhuma.
+    const unmatched: { index: number; group: PreviewGroup | null; description: string }[] = [];
     const answeredByRow = new Map<number, { group: PreviewGroup; answer: Answer }>();
     for (const group of preview.groups) {
       const answer = answers[groupKey(group)];
@@ -302,6 +305,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       const amount = Number(row.amount);
       if (row.transactionType === "income") incoming += amount;
       else outgoing += amount;
+      if (!categoryId) unmatched.push({ index, group: entry?.group ?? null, description: custom || row.description });
       items.push({
         description: custom || row.description,
         amount,
@@ -314,11 +318,12 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       .map((group) => ({ group, answer: answers[groupKey(group)] }))
       .filter(({ answer }) => answer?.status === "answered" && !answer.fromRule && (answer.notExpense || answer.categoryId))
       .map(({ group, answer }) => ({ key: group.key, label: group.name, categoryId: answer.categoryId, notExpense: answer.notExpense }));
-    const withoutCategory = items.filter((item) => !item.categoryId).length;
-    return { items, rules, incoming, outgoing, skippedNotExpense, withoutCategory };
+    const withoutCategory = unmatched.length;
+    return { items, rules, incoming, outgoing, skippedNotExpense, withoutCategory, unmatched };
   }, [preview, answers, includeDuplicates]);
 
   const duplicateCount = preview?.rows.filter((row) => row.isDuplicate).length ?? 0;
+  const unreadLines = preview?.pdf?.unreadLines ?? [];
 
   async function handleSave() {
     if (!plan || !accountId || (plan.items.length === 0 && plan.rules.length === 0)) return;
@@ -653,6 +658,47 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               {duplicateCount} {duplicateCount === 1 ? "parece" : "parecem"} já estar no app (mesmo dia, valor e sentido). Importar
               mesmo assim
             </label>
+          )}
+          {(plan.unmatched.length > 0 || unreadLines.length > 0) && (
+            <>
+              <h2 className="import-rules-title">
+                Não conciliado <span className="import-unmatched-count">{plan.unmatched.length + unreadLines.length}</span>
+              </h2>
+              <p className="card-subtitle">
+                {plan.unmatched.length > 0 && "Esses entram sem categoria. Toque pra dizer o que é."}
+                {plan.unmatched.length > 0 && unreadLines.length > 0 && " "}
+                {unreadLines.length > 0 && "As linhas marcadas “não li” estão no PDF mas não viraram lançamento: confira no app do banco."}
+              </p>
+              <ul className="import-rules import-unmatched">
+                {plan.unmatched.map(({ index, group, description }) => {
+                  const row = preview.rows[index];
+                  return (
+                    <li key={`row-${index}`}>
+                      <button type="button" onClick={() => group && editFromSummary(group)} disabled={!group}>
+                        <span className="import-rules-name">
+                          {description}
+                          <small>
+                            {parseLocalDate(row.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ·{" "}
+                            {row.transactionType === "income" ? "entrou" : "saiu"}
+                          </small>
+                        </span>
+                        <span className={`import-rules-answer transaction-amount ${row.transactionType}`}>
+                          {formatCurrency(Number(row.amount))}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+                {unreadLines.map((line, i) => (
+                  <li key={`unread-${i}`} className="import-unread">
+                    <span className="import-rules-name">
+                      {line}
+                      <small>não li</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           <h2 className="import-rules-title">Guardado pra próxima vez</h2>
           <p className="card-subtitle">Toque num nome pra mudar a resposta. Na próxima importação o PAR. só pergunta nomes novos.</p>

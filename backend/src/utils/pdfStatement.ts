@@ -90,7 +90,12 @@ export interface PdfStatement {
   // Quanto falta ou sobra quando não bate (saldo final esperado - lido).
   differenceCents: number;
   readBy: "ai" | "text";
+  // Linhas do PDF com data e valor que não viraram lançamento: a "listinha
+  // do que não conciliou" mostrada antes de importar.
+  unreadLines: string[];
 }
+
+type PdfRead = Omit<PdfStatement, "reconciled" | "differenceCents" | "readBy" | "unreadLines">;
 
 // ---- leitura sem IA: "dd/mm[/aaaa] descrição ... -1.234,56" -------------
 
@@ -128,25 +133,87 @@ function balanceFrom(lines: string[], words: RegExp): number | null {
   return null;
 }
 
-export function readLinesWithoutAi(lines: string[]): Omit<PdfStatement, "reconciled" | "differenceCents" | "readBy"> {
+const UNDATED_RE = new RegExp(String.raw`^(.+?)\s+(${AMOUNT})(?:\s+(${AMOUNT}))?$`);
+const LEADING_DATE_TIME = /^\d{2}\/\d{2}(?:\/\d{2,4})?\s*(?:\d{2}:\d{2}(?::\d{2})?)?\s*/;
+// Cabeçalho, rodapé e totais: nunca são lançamento nem pedaço de nome.
+const NOT_A_ROW = /saldo|total|limite|p[aá]gina|extrato|per[ií]odo|cliente|ouvidoria|sac\b|central de|^data\b|lan[cç]amentos? futuros/i;
+
+// Lê "data nome valor". O nome de quem recebeu muitas vezes vem na linha de
+// baixo (Bradesco, BB, Caixa: "PIX ENVIADO 123456 -50,00" + "MARIA SILVA"):
+// essas linhas sem valor são juntadas ao lançamento de cima. Linha com valor
+// e sem data é do mesmo dia da anterior.
+export function readLinesWithoutAi(lines: string[]): PdfRead {
   const year = guessYear(lines);
   const rows: ParsedStatementRow[] = [];
+  let lastDate: string | null = null;
+  let last: ParsedStatementRow | null = null;
+  let appended = 0;
   for (const line of lines) {
-    if (/saldo/i.test(line)) continue;
-    const m = line.match(LINE_RE);
-    if (!m) continue;
-    const [, rawDate, description, rawAmount] = m;
-    const withYear = rawDate.length === 5 ? `${rawDate}/${year}` : rawDate;
-    const date = parseDate(withYear);
-    const cents = amountWithSuffix(rawAmount);
-    if (!date || cents === null || cents === 0) continue;
-    rows.push({ date, description: description.trim(), amountCents: cents, externalId: null });
+    if (/saldo/i.test(line)) {
+      last = null;
+      continue;
+    }
+    const dated = line.match(LINE_RE);
+    const undated = !dated && lastDate && !NOT_A_ROW.test(line) && !LEADING_DATE_TIME.test(line) ? line.match(UNDATED_RE) : null;
+    if (dated || undated) {
+      let date: string | null = lastDate;
+      let description: string;
+      let rawAmount: string;
+      if (dated) {
+        const [, rawDate, desc, amount] = dated;
+        date = parseDate(rawDate.length === 5 ? `${rawDate}/${year}` : rawDate);
+        description = desc;
+        rawAmount = amount;
+      } else {
+        [, description, rawAmount] = undated!;
+        if (!/\p{L}/u.test(description)) continue;
+      }
+      const cents = amountWithSuffix(rawAmount);
+      if (!date || cents === null || cents === 0) continue;
+      lastDate = date;
+      last = { date, description: description.trim(), amountCents: cents, externalId: null };
+      rows.push(last);
+      appended = 0;
+      continue;
+    }
+    if (NOT_A_ROW.test(line)) {
+      last = null;
+      continue;
+    }
+    // Continuação do nome: tem letra, não tem valor, e no máximo duas linhas.
+    const rest = line.replace(LEADING_DATE_TIME, "").trim();
+    if (last && appended < 2 && /\p{L}/u.test(rest) && !new RegExp(AMOUNT).test(rest) && rest.length <= 80) {
+      last.description = `${last.description} ${rest}`;
+      appended++;
+    }
   }
   return {
     rows,
     openingBalanceCents: balanceFrom(lines, /saldo (anterior|inicial)/),
     closingBalanceCents: balanceFrom(lines, /saldo (final|atual|do dia)/),
   };
+}
+
+// Linhas que têm data e valor mas não viraram lançamento (nem são saldo):
+// o que pode ter ficado de fora quando a soma não bate.
+export function findUnreadLines(lines: string[], rows: ParsedStatementRow[]): string[] {
+  const left = new Map<number, number>();
+  for (const row of rows) left.set(Math.abs(row.amountCents), (left.get(Math.abs(row.amountCents)) ?? 0) + 1);
+  const unread: string[] = [];
+  const amountRe = new RegExp(AMOUNT, "g");
+  for (const line of lines) {
+    if (/saldo|total/i.test(line) || !/^\d{2}\/\d{2}/.test(line)) continue;
+    const amounts = line.match(amountRe);
+    if (!amounts) continue;
+    // O primeiro valor da linha é o lançamento; o segundo, quando tem, é o saldo.
+    const cents = amountWithSuffix(amounts[0]);
+    if (cents === null || cents === 0) continue;
+    const key = Math.abs(cents);
+    const count = left.get(key) ?? 0;
+    if (count > 0) left.set(key, count - 1);
+    else unread.push(line);
+  }
+  return unread.slice(0, 30);
 }
 
 // ---- leitura com IA (só copiar, nunca classificar) ----------------------
@@ -157,7 +224,7 @@ interface AiReply {
   rows?: { date?: string; description?: string; amount?: number }[];
 }
 
-async function readLinesWithAi(lines: string[], apiKey: string): Promise<Omit<PdfStatement, "reconciled" | "differenceCents" | "readBy">> {
+async function readLinesWithAi(lines: string[], apiKey: string): Promise<PdfRead> {
   const text = lines.join("\n").slice(0, MAX_TEXT_FOR_AI);
   const prompt = `Você recebe o texto de um extrato bancário brasileiro. Sua única tarefa é COPIAR os lançamentos, sem interpretar nem classificar.
 
@@ -166,7 +233,9 @@ Responda só com JSON neste formato:
 
 Regras:
 - amount negativo = dinheiro que saiu da conta; positivo = entrou.
-- Copie a descrição como está (ex.: "PAO DE ACUCAR 1204", "PIX ENVIADO MARIA"). Não traduza, não resuma, não invente categoria.
+- description = o que aconteceu + o NOME de quem recebeu ou pagou (loja, pessoa, empresa), com as palavras do extrato (ex.: "PAO DE ACUCAR", "PIX ENVIADO MARIA SILVA", "TED RECEBIDA ACME LTDA"). Não traduza, não resuma, não invente categoria.
+- Muitos bancos põem o nome na linha de baixo do lançamento: junte as duas.
+- Nunca use só número como descrição: tire número de documento, CPF/CNPJ, agência, conta, horário e código de autenticação.
 - Não inclua linhas de saldo (saldo anterior, saldo do dia, saldo final) em rows.
 - openingBalance = saldo no começo do período; closingBalance = saldo no fim. null se o extrato não mostrar.
 - Se a data não tiver ano, use o ano do período do extrato.
@@ -195,7 +264,7 @@ ${text}`;
   return { rows, openingBalanceCents: toCents(reply.openingBalance), closingBalanceCents: toCents(reply.closingBalance) };
 }
 
-export function reconcile(read: Omit<PdfStatement, "reconciled" | "differenceCents" | "readBy">) {
+export function reconcile(read: PdfRead) {
   if (read.openingBalanceCents === null || read.closingBalanceCents === null) return { reconciled: null, differenceCents: 0 };
   const sum = read.rows.reduce((total, row) => total + row.amountCents, 0);
   const difference = read.closingBalanceCents - (read.openingBalanceCents + sum);
@@ -222,5 +291,5 @@ export async function parsePdfStatement(data: Uint8Array, password?: string): Pr
   if (read.rows.length === 0) {
     throw new StatementParseError("Não encontrei lançamentos nesse PDF. Se o banco tiver, use a opção OFX ou CSV.");
   }
-  return { ...read, ...reconcile(read), readBy };
+  return { ...read, ...reconcile(read), readBy, unreadLines: findUnreadLines(lines, read.rows) };
 }

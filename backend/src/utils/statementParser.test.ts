@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   StatementParseError,
+  cleanStatementDescription,
   parseAmountToCents,
   parseDate,
   parseStatement,
@@ -96,11 +97,42 @@ describe("parseStatement: CSV", () => {
     expect(rows).toEqual([{ date: "2026-09-15", description: "Netflix", amountCents: 5590, externalId: null }]);
   });
 
+  it("não usa 'Data Lançamento' como descrição e prefere o nome ao histórico", () => {
+    const csv = [
+      "Data Lançamento;Histórico;Descrição;Valor;Saldo",
+      "02/09/2026;Pix enviado;MARIA SILVA;-50,00;950,00",
+      "03/09/2026;Pix enviado;JOAO PEREIRA;-30,00;920,00",
+      "04/09/2026;Tarifa;;-5,00;915,00",
+    ].join("\n");
+    const { rows } = parseStatement(csv);
+    expect(rows.map((r) => r.description)).toEqual(["MARIA SILVA", "JOAO PEREIRA", "Tarifa"]);
+  });
+
+  it("pula a coluna de número do documento", () => {
+    const csv = ["Data;Documento;Descrição;Valor", "02/09/2026;000123;;-50,00"].join("\n");
+    expect(parseStatement(csv).rows[0].description).toBe("Lançamento importado");
+    const named = ["Data;Descrição;Favorecido;Valor", "02/09/2026;123456;PADARIA SOL;-8,00"].join("\n");
+    expect(parseStatement(named).rows[0].description).toBe("PADARIA SOL");
+  });
+
   it("explains itself when the columns are not recognized", () => {
     expect(() => parseStatement("a,b,c\n1,2,3")).toThrow(StatementParseError);
   });
 
   it("splits quoted fields with doubled quotes", () => {
     expect(splitCsvLine('a,"b ""x"", c",d', ",")).toEqual(["a", 'b "x", c', "d"]);
+  });
+});
+
+describe("cleanStatementDescription", () => {
+  it("tira documento, CPF, agência/conta, data e hora do nome", () => {
+    expect(cleanStatementDescription("PIX ENVIADO 1234567 DES: MARIA SILVA 02/09")).toBe("PIX ENVIADO DES: MARIA SILVA");
+    expect(
+      cleanStatementDescription("Transferência enviada pelo Pix - MARIA SILVA - •••.123.456-•• - NU PAGAMENTOS - IP (0260) Agência: 1 Conta: 1234-5")
+    ).toBe("Transferência enviada pelo Pix - MARIA SILVA - NU PAGAMENTOS - IP");
+    expect(cleanStatementDescription("PAO DE ACUCAR 1204")).toBe("PAO DE ACUCAR");
+    expect(cleanStatementDescription("UBER *TRIP")).toBe("UBER *TRIP");
+    expect(cleanStatementDescription("99 FOOD")).toBe("99 FOOD");
+    expect(cleanStatementDescription("000123")).toBe("000123");
   });
 });

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PdfPasswordError, parsePdfStatement, readLinesWithoutAi, reconcile } from "./pdfStatement";
+import { PdfPasswordError, findUnreadLines, parsePdfStatement, readLinesWithoutAi, reconcile } from "./pdfStatement";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, "__fixtures__", name)));
 
@@ -49,5 +49,33 @@ describe("readLinesWithoutAi / reconcile", () => {
     expect(reconcile(read)).toEqual({ reconciled: true, differenceCents: 0 });
     expect(reconcile({ ...read, closingBalanceCents: 100_000 })).toEqual({ reconciled: false, differenceCents: -5000 });
     expect(reconcile({ ...read, openingBalanceCents: null })).toEqual({ reconciled: null, differenceCents: 0 });
+  });
+});
+
+describe("readLinesWithoutAi: nome na linha de baixo", () => {
+  it("junta o nome de quem recebeu e usa o dia anterior nas linhas sem data", () => {
+    const read = readLinesWithoutAi([
+      "Extrato de 01/09/2026 a 30/09/2026",
+      "Data Histórico Docto. Crédito Débito Saldo",
+      "01/09/2026 SALDO ANTERIOR 1.000,00",
+      "02/09/2026 PIX ENVIADO 1234567 -50,00 950,00",
+      "DES: MARIA SILVA 02/09",
+      "PIX ENVIADO 7654321 -30,00 920,00",
+      "02/09 14:31 JOAO PEREIRA",
+      "Total do dia -80,00",
+      "03/09/2026 COMPRA ELO 0001 PADARIA SOL -12,00 908,00",
+    ]);
+    expect(read.rows.map((row) => [row.date, row.description, row.amountCents])).toEqual([
+      ["2026-09-02", "PIX ENVIADO 1234567 DES: MARIA SILVA 02/09", -5000],
+      ["2026-09-02", "PIX ENVIADO 7654321 JOAO PEREIRA", -3000],
+      ["2026-09-03", "COMPRA ELO 0001 PADARIA SOL", -1200],
+    ]);
+  });
+
+  it("lista as linhas com data e valor que não viraram lançamento", () => {
+    const lines = ["02/09 MERCADO -10,00", "03/09 12345 67890 -20,00", "04/09 SALDO DO DIA 100,00"];
+    expect(findUnreadLines(lines, [{ date: "2026-09-02", description: "MERCADO", amountCents: -1000, externalId: null }])).toEqual([
+      "03/09 12345 67890 -20,00",
+    ]);
   });
 });

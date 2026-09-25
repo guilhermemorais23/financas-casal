@@ -1,6 +1,6 @@
 import { fromCents } from "../../utils/money";
 import { parsePdfStatement } from "../../utils/pdfStatement";
-import { StatementParseError, parseDate, parseStatement, type ParsedStatementRow } from "../../utils/statementParser";
+import { StatementParseError, cleanStatementDescription, parseDate, parseStatement, type ParsedStatementRow } from "../../utils/statementParser";
 import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { deleteRule, findRulesByGroup, normalizeStatementName, upsertRules } from "./importRules.repository";
 import { requireGroupId } from "../groups/groups.service";
@@ -47,6 +47,7 @@ export interface PdfCheck {
   openingBalance: string | null;
   closingBalance: string | null;
   readBy: "ai" | "text";
+  unreadLines: string[];
 }
 
 export interface StatementInput {
@@ -79,6 +80,7 @@ async function readInput(input: StatementInput): Promise<{ format: "ofx" | "csv"
         openingBalance: read.openingBalanceCents === null ? null : (read.openingBalanceCents / 100).toFixed(2),
         closingBalance: read.closingBalanceCents === null ? null : (read.closingBalanceCents / 100).toFixed(2),
         readBy: read.readBy,
+        unreadLines: read.unreadLines,
       },
     };
   }
@@ -125,14 +127,15 @@ export async function previewStatement(userId: string, input: StatementInput) {
   const preview: PreviewRow[] = rows.map((row) => {
     const transactionType = assumedAllExpenses || row.amountCents < 0 ? "expense" : "income";
     const cents = Math.abs(row.amountCents);
-    const groupKey = normalizeStatementName(row.description);
+    const description = cleanStatementDescription(row.description);
+    const groupKey = normalizeStatementName(description);
     const rule = rules.get(groupKey);
     return {
       date: row.date,
-      description: row.description,
+      description,
       amount: fromCents(cents),
       transactionType,
-      suggestedCategoryId: rule ? rule.categoryId : (categoryHints.get(normalizeDescription(row.description)) ?? null),
+      suggestedCategoryId: rule ? rule.categoryId : (categoryHints.get(normalizeDescription(description)) ?? null),
       isDuplicate: existingKeys.has(duplicateKey(row.date, cents, transactionType)),
       groupKey,
     };
