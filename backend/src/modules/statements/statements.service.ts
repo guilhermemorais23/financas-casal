@@ -25,6 +25,7 @@ export interface PreviewRow {
   isDuplicate: boolean;
   // "Pix enviado", "Compra no débito"... (null quando o extrato não separa).
   kind: string | null;
+  time: string | null;
   // Nome normalizado: os lançamentos com o mesmo nome viram uma pergunta só.
   groupKey: string;
 }
@@ -146,6 +147,7 @@ export async function previewStatement(userId: string, input: StatementInput) {
       date: row.date,
       description,
       kind: row.kind ?? null,
+      time: row.time ?? null,
       amount: fromCents(cents),
       transactionType,
       suggestedCategoryId: rule ? rule.categoryId : (categoryHints.get(normalizeDescription(description)) ?? null),

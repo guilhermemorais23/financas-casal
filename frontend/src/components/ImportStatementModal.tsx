@@ -17,6 +17,7 @@ interface PreviewRow {
   suggestedCategoryId: string | null;
   isDuplicate: boolean;
   kind: string | null;
+  time?: string | null;
   groupKey: string;
 }
 
@@ -148,6 +149,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const [questionIndex, setQuestionIndex] = useState(0);
   const [returnToSummary, setReturnToSummary] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
+  const [showRows, setShowRows] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -244,6 +246,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   function goNext() {
     setShowDescription(false);
+    setShowRows(false);
     setNewCategoryName(null);
     if (returnToSummary || questionIndex >= questions.length - 1) {
       setReturnToSummary(false);
@@ -255,6 +258,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   function goBack() {
     setNewCategoryName(null);
+    setShowRows(false);
     if (questionIndex === 0 || returnToSummary) {
       if (returnToSummary) {
         setReturnToSummary(false);
@@ -605,10 +609,44 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               {current.kind && <span className="import-question-kind">{current.kind}</span>}
             </span>
             <h2 className="import-question-name">{current.name}</h2>
-            <p className="import-question-meta">
-              {current.count} {current.count === 1 ? "vez" : "vezes"} com esse nome ·{" "}
-              <strong className={`transaction-amount ${current.transactionType}`}>{formatCurrency(Number(current.total))}</strong>
-            </p>
+            {current.count > 1 ? (
+              <button
+                type="button"
+                className="import-question-meta import-rows-toggle"
+                aria-expanded={showRows}
+                onClick={() => setShowRows((open) => !open)}
+              >
+                {current.count} vezes com esse nome ·{" "}
+                <strong className={`transaction-amount ${current.transactionType}`}>{formatCurrency(Number(current.total))}</strong>
+                <span className={`import-rows-chevron${showRows ? " open" : ""}`} aria-hidden="true">
+                  <Icon name="chevron" />
+                </span>
+                <span className="sr-only">{showRows ? "Esconder" : "Ver"} cada lançamento</span>
+              </button>
+            ) : (
+              <p className="import-question-meta">
+                {parseLocalDate(preview!.rows[current.rowIndexes[0]].date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                {preview!.rows[current.rowIndexes[0]].time && ` às ${preview!.rows[current.rowIndexes[0]].time}`} · 1 vez com esse nome ·{" "}
+                <strong className={`transaction-amount ${current.transactionType}`}>{formatCurrency(Number(current.total))}</strong>
+              </p>
+            )}
+            {showRows && current.count > 1 && (
+              <ul className="import-rows-detail">
+                {current.rowIndexes.map((index) => {
+                  const row = preview!.rows[index];
+                  return (
+                    <li key={index}>
+                      <span>
+                        {parseLocalDate(row.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                        {row.time && ` às ${row.time}`}
+                        {row.kind && <small> · {row.kind}</small>}
+                      </span>
+                      <strong className={`transaction-amount ${row.transactionType}`}>{formatCurrency(Number(row.amount))}</strong>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             <p className="import-question-ask">O que é isso?</p>
             <div className="chip-row import-chips">
               {orderedCategories(current.transactionType).map((category) => (

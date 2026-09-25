@@ -228,6 +228,7 @@ describe("readBancoDoBrasil (layout conferido com extrato real)", () => {
       ["2026-08-08", "TED Transf.Eletr.Disponiv", "CARLOS EXEMPLO SIL", -3000],
       ["2026-08-18", "Transferência recebida", "PREFEITURA MUNICIPAL", 5200],
     ]);
+    expect(read.rows.map((row) => row.time ?? null)).toEqual(["11:34", null, null, "08:35"]);
     expect(reconcile(read)).toEqual({ reconciled: true, differenceCents: 0 });
   });
 });

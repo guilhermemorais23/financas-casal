@@ -10,6 +10,9 @@ export interface ParsedStatementRow {
   // O tipo que o banco escreve ("Pix enviado", "Compra cartão"), quando o
   // extrato separa isso do nome. A descrição fica só com o nome.
   kind?: string | null;
+  // Horário (HH:MM), quando o extrato traz (Banco do Brasil traz; Bradesco e
+  // Nubank não).
+  time?: string | null;
 }
 
 export type StatementFormat = "ofx" | "csv";

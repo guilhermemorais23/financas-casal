@@ -513,6 +513,8 @@ export function readBancoDoBrasil(lines: string[]): SectionRead | null {
     }
     if (!last) continue;
     // Linha de baixo: "01/08 11:34 NOME" ou "010 0050 11122233344 NOME".
+    const time = line.match(/^\d{2}\/\d{2}\s+(\d{2}:\d{2})\s/);
+    if (time) last.time = time[1];
     const name = line.replace(/^\d{2}\/\d{2}\s+\d{2}:\d{2}\s+/, "").replace(/^(?:\d+\s+)+/, "").trim();
     if (name && /\p{L}/u.test(name) && !/^(tar\. agrupadas|cobran[cç]a referente|-{3,})/i.test(name)) {
       last.kind = last.description;
