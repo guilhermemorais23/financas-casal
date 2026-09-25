@@ -160,7 +160,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   return (
     <div className="app-shell-nav">
       <header className="app-mobile-topbar">
-        <Brand />
+        <Brand animated />
         <button
           type="button"
           className="topbar-avatar"
@@ -173,7 +173,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
 
       <aside className="app-sidebar">
         <div className="app-sidebar-brand">
-          <Brand />
+          <Brand animated />
         </div>
         <div className="app-sidebar-scroll">
         <nav className="app-nav">

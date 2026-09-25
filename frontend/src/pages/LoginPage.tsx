@@ -121,7 +121,7 @@ export function LoginPage() {
 
   return (
     <div className="page-center">
-      <Brand />
+      <Brand animated />
       <div className="card">
         <h1>Entrar</h1>
         <p className="card-subtitle">Finanças em grupo, sem atrito.</p>
