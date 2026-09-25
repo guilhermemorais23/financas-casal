@@ -34,6 +34,7 @@ import {
 import { asyncHandler } from "./middleware/asyncHandler";
 import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
+import { readCacheScope } from "./middleware/readCacheScope";
 
 // Render sits behind a reverse proxy, so req.ip is otherwise the proxy's own
 // address -- trust its X-Forwarded-For so rate limiting (and any future
@@ -67,6 +68,7 @@ export function createApp() {
   // (base64 blows up ~33% over the raw image bytes).
   app.use(express.json({ limit: "1mb" }));
   app.use("/api", apiLimiter);
+  app.use("/api", readCacheScope);
 
   // Unauthenticated on purpose -- this is what the keep-alive cron pings.
   // /api/me always answers 401 when hit without a token, which cron-job.org

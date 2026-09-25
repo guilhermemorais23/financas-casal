@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
+import { memoizeScoped } from "../../utils/readCache";
 
 export interface UserRow {
   id: string;
@@ -23,10 +24,12 @@ function toUserRow(id: string, data: FirebaseFirestore.DocumentData): UserRow {
   };
 }
 
-export async function findUserById(userId: string): Promise<UserRow | null> {
-  const doc = await usersCol.doc(userId).get();
-  if (!doc.exists) return null;
-  return toUserRow(doc.id, doc.data()!);
+export function findUserById(userId: string): Promise<UserRow | null> {
+  return memoizeScoped(`user:${userId}`, [`user:${userId}`], async () => {
+    const doc = await usersCol.doc(userId).get();
+    if (!doc.exists) return null;
+    return toUserRow(doc.id, doc.data()!);
+  });
 }
 
 // Idempotent: called on every sign-in, not just first-ever sign-up, so the

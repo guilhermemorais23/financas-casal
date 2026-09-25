@@ -8,6 +8,7 @@ import { findRecurringBillsByGroupId } from "../recurringBills/recurringBills.re
 import { addMonths, daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
 import { generateDueRecurringBills } from "../recurringBills/recurringBills.service";
 import { logError } from "../../utils/errorLog";
+import { invalidateAllReads } from "../../utils/readCache";
 import { getMonthCloseForUser, previousMonthInBrazil } from "../monthClose/monthClose.service";
 import {
   claimDailyRun,
@@ -379,6 +380,9 @@ export async function maybeRunDailyJobs(now = new Date()): Promise<void> {
   try {
     const [reminders, recurringBills] = await Promise.all([runDueReminders(), generateDueRecurringBills()]);
     console.log("[daily jobs]", today, JSON.stringify({ reminders, recurringBills }));
+    // Os jobs lançam contas fixas e marcam lembretes: o que estava em cache
+    // pode ter ficado velho.
+    invalidateAllReads();
   } catch (err) {
     logError("daily-jobs", err);
   }

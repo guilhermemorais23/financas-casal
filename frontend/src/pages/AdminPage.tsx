@@ -30,6 +30,7 @@ interface AdminOverview {
   whatsappLinked: number;
   recentErrors: ErrorLogEntry[];
   recentAccess: AccessLogEntry[];
+  firestoreUnavailable?: boolean;
 }
 
 function relativeTime(timestamp: number): string {
@@ -104,6 +105,12 @@ export function AdminPage() {
     <AppLayout wide>
       <div className="page-stack">
         <h1>Admin · {sectionTitle}</h1>
+        {overview.firestoreUnavailable && (
+          <p className="alert" role="alert">
+            O banco de dados (Firestore) não está respondendo, provavelmente porque a cota diária do plano grátis
+            acabou. Os números abaixo estão zerados e os erros vêm da memória do servidor. Volta sozinho por volta das 4h.
+          </p>
+        )}
         {section === "feedback" && <AdminFeedback />}
         {section === "announcements" && <AdminAnnouncements />}
         {section === "diagnostics" && <AdminDiagnostics />}

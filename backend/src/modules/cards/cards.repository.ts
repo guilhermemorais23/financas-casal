@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
+import { memoizeScoped } from "../../utils/readCache";
 import { fromCents, splitEvenly, toCents } from "../../utils/money";
 
 export interface CardRow {
@@ -119,7 +120,11 @@ export async function insertCard(input: {
   return toCardRow(doc);
 }
 
-export async function findCardsVisibleTo(groupId: string, userId: string): Promise<CardRow[]> {
+export function findCardsVisibleTo(groupId: string, userId: string): Promise<CardRow[]> {
+  return memoizeScoped(`cardsVisible:${groupId}:${userId}`, [`group:${groupId}`, "cards"], () => loadFindCardsVisibleTo(groupId, userId));
+}
+
+async function loadFindCardsVisibleTo(groupId: string, userId: string): Promise<CardRow[]> {
   const [jointSnap, ownSnap] = await Promise.all([
     cardsCol.where("groupId", "==", groupId).where("ownerUserId", "==", null).get(),
     cardsCol.where("groupId", "==", groupId).where("ownerUserId", "==", userId).get(),
@@ -132,7 +137,11 @@ export async function findCardsVisibleTo(groupId: string, userId: string): Promi
 // no new index). Used by the reminders job, which runs outside any one
 // user's request and decides per-card who to email based on ownerUserId
 // itself (null -> everyone in the group, set -> just that owner).
-export async function findCardsByGroupId(groupId: string): Promise<CardRow[]> {
+export function findCardsByGroupId(groupId: string): Promise<CardRow[]> {
+  return memoizeScoped(`cards:${groupId}`, [`group:${groupId}`, "cards"], () => loadFindCardsByGroupId(groupId));
+}
+
+async function loadFindCardsByGroupId(groupId: string): Promise<CardRow[]> {
   const snapshot = await cardsCol.where("groupId", "==", groupId).get();
   return snapshot.docs.map(toCardRow);
 }
@@ -240,7 +249,11 @@ export async function insertPurchaseSeries(
 // which can span several months into the future). Cheap: a card's whole
 // purchase history tops out in the hundreds of docs, not worth a
 // per-month-range query for this.
-export async function findAllPurchasesByCardId(cardId: string): Promise<PurchaseRow[]> {
+export function findAllPurchasesByCardId(cardId: string): Promise<PurchaseRow[]> {
+  return memoizeScoped(`purchases:${cardId}`, ["cards"], () => loadFindAllPurchasesByCardId(cardId));
+}
+
+async function loadFindAllPurchasesByCardId(cardId: string): Promise<PurchaseRow[]> {
   const snapshot = await cardsCol.doc(cardId).collection("purchases").get();
   return snapshot.docs.map((doc) => toPurchaseRow(cardId, doc));
 }
@@ -269,7 +282,11 @@ export async function deletePurchase(cardId: string, purchaseId: string): Promis
   await cardsCol.doc(cardId).collection("purchases").doc(purchaseId).delete();
 }
 
-export async function findStatement(cardId: string, statementMonth: string): Promise<StatementRow | null> {
+export function findStatement(cardId: string, statementMonth: string): Promise<StatementRow | null> {
+  return memoizeScoped(`statement:${cardId}:${statementMonth}`, ["cards"], () => loadFindStatement(cardId, statementMonth));
+}
+
+async function loadFindStatement(cardId: string, statementMonth: string): Promise<StatementRow | null> {
   const doc = await cardsCol.doc(cardId).collection("statements").doc(statementMonth).get();
   if (!doc.exists) return null;
   return toStatementRow(doc);

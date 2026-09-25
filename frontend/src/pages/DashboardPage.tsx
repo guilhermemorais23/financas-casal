@@ -25,7 +25,6 @@ import {
   formatCurrency,
   groupByDay,
   monthLongName,
-  nextMonthParam,
   parseLocalDate,
   percentChange,
   previousMonthParam,
@@ -295,10 +294,7 @@ export function DashboardPage() {
   // they're actually dropped from `recent`.
   const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
 
-  const idle = (cb: () => void) =>
-    typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(cb) : setTimeout(cb, 300);
-
-  // warmCacheOnly=true is what prefetchMonth uses for a month not on screen
+  // warmCacheOnly=true: a month not on screen (the user switched away mid-load)
   // -- writes the cache same as a real load, but never touches component
   // state (nothing should visibly change just because a background prefetch
   // finished).
@@ -401,21 +397,11 @@ export function DashboardPage() {
       const isStillActive = selectedMonth === activeMonthRef.current;
       applyDashboard(selectedMonth, data, !isStillActive);
 
-      // Warm the cache for the months someone is likely to check next (back
-      // and forth around whatever month they're on) so switching to one of
-      // them later reads from cache instantly instead of waiting on a fresh
-      // round trip. Runs after the visible month is done and on an idle
-      // tick so it never competes with what's actually on screen.
-      const prevMonth = previousMonthParam(selectedMonth);
-      const nextMonth = nextMonthParam(selectedMonth);
-      // Only the two adjacent months: each prefetch is a whole dashboard
-      // bundle (hundreds of Firestore reads), and the free plan's daily read
-      // quota was being exhausted (login itself started failing with
-      // "Internal server error") with four of them fired on every load.
-      const neighborMonths = [prevMonth, nextMonth];
-      idle(() => {
-        neighborMonths.forEach((neighborMonth) => prefetchMonth(neighborMonth));
-      });
+      // Sem pré-carregar os meses vizinhos: cada Painel custa centenas de
+      // leituras do Firestore e o plano grátis tem 50 mil por dia -- com os
+      // vizinhos, abrir o app lia 3 Painéis e o login começou a cair quando
+      // o app foi divulgado. Trocar de mês agora busca na hora (e fica no
+      // cache do navegador e do servidor depois disso).
     } catch (err) {
       // A month we already had cached still shows that cached data -- no
       // reason to blow it away with an error banner over a background
@@ -428,26 +414,6 @@ export function DashboardPage() {
       if (selectedMonth === activeMonthRef.current) {
         setIsLoading(false);
       }
-    }
-  }
-
-  // Best-effort background warm-up for a month not currently on screen --
-  // writes only to cache (no setState, no error surfaced). Skips months
-  // already cached so re-visiting the same couple of months doesn't refire
-  // this on every mount. Checks the same "full" key load() actually reads,
-  // not a different field -- otherwise the two checks can disagree and
-  // this silently stops ever refreshing "full" for a month once any one
-  // field of it happens to already be cached.
-  async function prefetchMonth(targetMonth: string) {
-    const mKey = (name: string) => `dashboard:${name}:${targetMonth}:${user?.id ?? "anon"}`;
-    if (readCache(mKey("full"))) return;
-
-    try {
-      const data = await apiRequest<DashboardResponse>(`/dashboard?month=${targetMonth}`, { token });
-      applyDashboard(targetMonth, data, true);
-    } catch {
-      // A failed prefetch just means that month loads from the network like
-      // normal, the same as before this existed -- never worth surfacing.
     }
   }
 

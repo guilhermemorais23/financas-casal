@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
+import { memoizeScoped } from "../../utils/readCache";
 
 export interface GroupRow {
   id: string;
@@ -39,7 +40,11 @@ export async function createGroup(): Promise<GroupRow> {
   return { id: ref.id, nickname: null, emoji: null, financialGoal: null, savingsAmount: null };
 }
 
-export async function findGroupById(groupId: string): Promise<GroupRow | null> {
+export function findGroupById(groupId: string): Promise<GroupRow | null> {
+  return memoizeScoped(`group:${groupId}`, [`group:${groupId}`, "groups"], () => loadFindGroupById(groupId));
+}
+
+async function loadFindGroupById(groupId: string): Promise<GroupRow | null> {
   const doc = await groupsCol.doc(groupId).get();
   if (!doc.exists) return null;
   const data = doc.data()!;
@@ -89,7 +94,11 @@ export async function createAccount(input: {
   };
 }
 
-export async function findAccountsByGroupId(groupId: string): Promise<AccountRow[]> {
+export function findAccountsByGroupId(groupId: string): Promise<AccountRow[]> {
+  return memoizeScoped(`accounts:${groupId}`, [`group:${groupId}`, "groups"], () => loadFindAccountsByGroupId(groupId));
+}
+
+async function loadFindAccountsByGroupId(groupId: string): Promise<AccountRow[]> {
   const snapshot = await accountsCol.where("groupId", "==", groupId).get();
   return snapshot.docs.map((doc) => {
     const data = doc.data();
@@ -104,7 +113,11 @@ export async function findAccountsByGroupId(groupId: string): Promise<AccountRow
   });
 }
 
-export async function findMembersByGroupId(groupId: string): Promise<MemberRow[]> {
+export function findMembersByGroupId(groupId: string): Promise<MemberRow[]> {
+  return memoizeScoped(`members:${groupId}`, [`group:${groupId}`, "groups"], () => loadFindMembersByGroupId(groupId));
+}
+
+async function loadFindMembersByGroupId(groupId: string): Promise<MemberRow[]> {
   const snapshot = await usersCol.where("groupId", "==", groupId).get();
   return snapshot.docs.map((doc) => ({ id: doc.id, displayName: doc.data().displayName }));
 }
