@@ -47,7 +47,7 @@ npm run seed
 
 Dados do emulador ficam salvos em `emulator-data/` entre execuções (import/export automático, configurado em `package.json`).
 
-Pra entrar direto num Painel já preenchido (duas pessoas, conta conjunta com gastos divididos, conta fixa, cartão, meta e orçamento), rode também:
+Pra entrar direto num Painel já preenchido (duas pessoas, conta conjunta com gastos divididos, conta fixa, cartão, dívida, meta, orçamento e empréstimos a receber), rode também:
 ```
 npm run seed:demo
 ```

@@ -109,3 +109,58 @@ export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_W
 
   return items.sort((a, b) => (a.dueDate === b.dueDate ? a.title.localeCompare(b.title) : a.dueDate < b.dueDate ? -1 : 1));
 }
+
+export interface PaymentAhead {
+  dueDate: string;
+  amount: number;
+}
+
+// Tudo que ainda vai sair das contas até `until` (atrasados inclusive):
+// faturas e parcelas de cartão, parcelas de dívidas e cada vez que uma conta
+// fixa vai cair. A tela A receber usa pra dizer quanto você fica quando
+// alguém te pagar, já tirando o que vence antes.
+export function paymentsUntil(input: {
+  cards: Awaited<ReturnType<typeof listCards>>;
+  debts: Awaited<ReturnType<typeof listDebts>>;
+  bills: Awaited<ReturnType<typeof listRecurringBillsForUser>>;
+  today: string;
+  until: string;
+}): PaymentAhead[] {
+  const { cards, debts, bills, today, until } = input;
+  const items: PaymentAhead[] = [];
+
+  for (const card of cards) {
+    if (card.limitReleases.length > 0) {
+      for (const release of card.limitReleases) {
+        if (release.dueDate <= until) items.push({ dueDate: release.dueDate, amount: Number(release.amount) });
+      }
+      continue;
+    }
+    const statement = card.currentStatement;
+    if (!statement.isPaid && Number(statement.total) > 0 && statement.dueDate <= until) {
+      items.push({ dueDate: statement.dueDate, amount: Number(statement.total) });
+    }
+  }
+
+  for (const debt of debts) {
+    for (const installment of debt.installments) {
+      if (installment.isPaid || !installment.dueDate || installment.dueDate > until) continue;
+      items.push({ dueDate: installment.dueDate, amount: Number(installment.amount) });
+    }
+  }
+
+  const thisMonth = today.slice(0, 7);
+  for (const bill of bills) {
+    if (!bill.isActive || bill.transactionType !== "expense") continue;
+    let month = bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
+    for (;;) {
+      const dueDate = dateForDayInMonth(month, bill.dayOfMonth);
+      if (dueDate > until) break;
+      // Dia que já passou: a conta fixa já lançou sozinha e está no saldo.
+      if (dueDate >= today) items.push({ dueDate, amount: Number(bill.amount) });
+      month = addMonths(month, 1);
+    }
+  }
+
+  return items.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
+}

@@ -175,6 +175,7 @@ interface DashboardResponse {
   nextInvoice: NextInvoice | null;
   // Opcional: respostas em cache de uma versão antiga não têm.
   savedInSecuredCards?: number;
+  owedOnCards?: number;
   loansSummary?: { outstanding: string; overdue: string; overdueCount: number };
   // Opcional: respostas em cache de uma versão antiga não têm.
   upcoming?: UpcomingItem[];
@@ -283,6 +284,7 @@ export function DashboardPage() {
   const [savedInSecuredCards, setSavedInSecuredCards] = useState<number>(
     () => readCache(staticKey("savedInSecuredCards")) ?? 0
   );
+  const [owedOnCards, setOwedOnCards] = useState<number>(() => readCache(staticKey("owedOnCards")) ?? 0);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>(() => readCache(staticKey("upcoming")) ?? []);
   const [loansOutstanding, setLoansOutstanding] = useState<number>(
     () => readCache(staticKey("loansOutstanding")) ?? 0
@@ -322,6 +324,7 @@ export function DashboardPage() {
       setGoalHighlight(data.goalHighlight);
       setNextInvoice(data.nextInvoice);
       setSavedInSecuredCards(data.savedInSecuredCards ?? 0);
+      setOwedOnCards(data.owedOnCards ?? 0);
       setLoansOutstanding(Number(data.loansSummary?.outstanding ?? 0));
       setUpcoming(data.upcoming ?? []);
       // ?? []: a response cached by an older build has no `alerts` at all.
@@ -334,6 +337,7 @@ export function DashboardPage() {
     writeCache(sKey("goalHighlight"), data.goalHighlight);
     writeCache(sKey("nextInvoice"), data.nextInvoice);
     writeCache(sKey("savedInSecuredCards"), data.savedInSecuredCards ?? 0);
+    writeCache(sKey("owedOnCards"), data.owedOnCards ?? 0);
     writeCache(sKey("loansOutstanding"), Number(data.loansSummary?.outstanding ?? 0));
     writeCache(sKey("upcoming"), data.upcoming ?? []);
     writeCache(mKey("personalMonthTotals"), data.personalMonthTotals);
@@ -1089,6 +1093,19 @@ export function DashboardPage() {
               {loansOutstanding > 0 && (
                 <p className="money-card-future">
                   Quando receber tudo: <strong>{formatCurrency(moneyTotal + loansOutstanding)}</strong>
+                </p>
+              )}
+              {/* O outro lado: tira dívidas e faturas/parcelas de cartão em
+                  aberto, pra o número não mostrar só o que vai entrar. */}
+              {totalDebtRemaining + owedOnCards > 0 && (
+                <p className="money-card-future money-card-owed">
+                  Depois de pagar o que deve:{" "}
+                  <strong className={moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards < 0 ? "danger-text" : ""}>
+                    {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards)}
+                  </strong>
+                  <span className="money-card-future-note">
+                    Tira {formatCurrency(totalDebtRemaining + owedOnCards)} de dívidas e cartões
+                  </span>
                 </p>
               )}
               <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>

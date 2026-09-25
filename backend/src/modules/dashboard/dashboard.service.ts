@@ -3,7 +3,7 @@ import { getGroupForUser } from "../groups/groups.service";
 import { listDebts } from "../debts/debts.service";
 import { getCategoryBudgets, getCurrentBudget } from "../budgets/budgets.service";
 import { listGoals } from "../goals/goals.service";
-import { listCards } from "../cards/cards.service";
+import { listCards, owedOnCardsCents, savedInSecuredCardsCents } from "../cards/cards.service";
 import {
   getBalance,
   getDailySeriesForUser,
@@ -127,13 +127,14 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   // Money parked in cartões com limite garantido -- left the accounts
   // (guardar is a transfer) but is still the person's, so "Seu dinheiro"
   // on the Painel adds it back.
-  const savedInSecuredCards = cards
-    .filter((card) => card.limitType === "secured")
-    .reduce((sum, card) => sum + Math.round(Number(card.limit ?? 0) * 100), 0);
+  const savedInSecuredCards = savedInSecuredCardsCents(cards);
 
   return {
     group: { accounts: groupResult.accounts, members: groupResult.members },
     savedInSecuredCards: savedInSecuredCards / 100,
+    // Faturas e parcelas de cartão ainda em aberto -- o Painel tira isso (e
+    // as dívidas) pra mostrar "depois de pagar o que deve".
+    owedOnCards: owedOnCardsCents(cards) / 100,
     // Empréstimos: o que ainda vai voltar -- "Seu dinheiro" mostra isso como
     // "quando receber tudo" em cima do que está nas contas.
     loansSummary: loans.summary,

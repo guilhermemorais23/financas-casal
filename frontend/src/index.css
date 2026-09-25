@@ -90,7 +90,7 @@
   --color-brand-accent: var(--coffee-500);
   --radius: 20px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-brand: "Archivo", var(--font-sans);
+  --font-brand: var(--font-sans);
   --font-display: var(--font-sans);
   /* Escala de tamanhos do app: use só estes (0.72 / 0.8 / 0.9 / 1 / 1.15 /
      1.35 / 1.75 / 2.1rem, e 2.4-2.75rem só pros números grandes). */
@@ -5207,6 +5207,21 @@ video {
   border-bottom: 0;
 }
 
+.loan-row-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.loan-row-head .loan-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.loan-receive {
+  flex-shrink: 0;
+}
+
 .loan-row-main {
   display: flex;
   align-items: center;
@@ -5415,6 +5430,11 @@ video {
 
 .loan-projection strong {
   color: var(--color-text);
+}
+
+.loan-projection-note {
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
 }
 
 @media (max-width: 720px) {
@@ -7115,10 +7135,10 @@ select {
 
 .auth-wordmark {
   font-family: var(--font-brand);
-  font-weight: 900;
+  font-weight: 800;
   font-size: clamp(4rem, 22vw, 5.5rem);
   line-height: 0.9;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: var(--color-primary);
 }
 
@@ -7178,4 +7198,16 @@ select {
 
 .page-stack > .segmented {
   background: var(--tan-track);
+}
+
+/* "Depois de pagar o que deve" -- quebra linha pra explicação caber. */
+.money-card-future.money-card-owed {
+  white-space: normal;
+}
+
+.money-card-future-note {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
 }

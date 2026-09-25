@@ -1,5 +1,6 @@
 // Cria um grupo de demonstração no EMULADOR (nunca em produção): duas pessoas,
-// conta conjunta com gastos divididos, conta fixa, cartão, meta e orçamento.
+// conta conjunta com gastos divididos, conta fixa, cartão, dívida, meta,
+// orçamento e empréstimos a receber.
 // Depois é só entrar no app local com demo@par.local / demo1234.
 //
 // Uso (com `npm run dev` já rodando na raiz): npm run seed:demo
@@ -86,7 +87,16 @@ async function main() {
   await api(you, "/recurring-bills", "POST", { accountId: joint, payerId: youId, description: "Internet", categoryId: cat("Contas Fixas"), amount: 119.9, dayOfMonth: Math.min(28, new Date().getDate() + 3), splitType: "equal" });
   await api(you, "/recurring-bills", "POST", { accountId: mine, payerId: youId, description: "Streaming", categoryId: cat("Lazer"), amount: 55.9, dayOfMonth: 5 });
 
-  await api(you, "/cards", "POST", { name: "Cartão do casal", closingDay: 23, dueDay: 30, scope: "joint", limit: 3000, limitType: "normal" });
+  const card = await api<{ id: string }>(you, "/cards", "POST", { name: "Cartão do casal", closingDay: 23, dueDay: 30, scope: "joint", limit: 3000, limitType: "normal" });
+  await api(you, `/cards/${card.id}/purchases`, "POST", { description: "Tênis", amount: 480, categoryId: null, buyerId: youId, purchaseDate: day(-4), installments: 3 });
+
+  await api(you, "/debts", "POST", { name: "Celular parcelado", totalAmount: 1800, installmentsCount: 6, scope: "personal", startMonth: day(0).slice(0, 7), dueDay: 15 });
+
+  // A receber: um com prazo, um sem prazo e um que a Ana emprestou da Nossa
+  // Conta com juros (aparece pros dois, só ela mexe).
+  await api(you, "/loans", "POST", { personName: "João", amount: 1000, lentAt: day(-40), dueDate: day(12), note: "Conserto do carro", accountId: mine });
+  await api(you, "/loans", "POST", { personName: "Mãe", amount: 350, lentAt: day(-10), dueDate: null, note: null, accountId: mine });
+  await api(partner, "/loans", "POST", { personName: "Cunhado", amount: 600, lentAt: day(-35), dueDate: day(60), note: "Entrada da moto", accountId: joint, interestRateMonthly: 2 });
 
   const goal = await api<{ id: string }>(you, "/goals", "POST", { name: "Viagem pro Nordeste", targetAmount: 8000, deadline: `${new Date().getFullYear()}-12-20` });
   await api(you, `/goals/${goal.id}/contribute`, "POST", { amount: 4200 });

@@ -7,7 +7,6 @@ import {
   deleteLoan,
   findLoanById,
   findLoansByGroupId,
-  findLoansByOwner,
   insertLoan,
   newLoanId,
   updateLoan,
@@ -24,7 +23,8 @@ export class RepaymentNotFoundError extends Error {}
 // amigos. Emprestar de uma conta lança uma transferência (loanId) que tira o
 // dinheiro do saldo sem contar como gasto; cada "Recebi" lança a volta.
 // Empréstimos são pessoais -- só quem emprestou vê, mesmo num grupo
-// compartilhado.
+// compartilhado. A exceção é o que saiu da Nossa Conta: o dinheiro era dos
+// dois, então os dois veem (só quem emprestou mexe).
 
 export interface LoanWithTotals extends LoanRow {
   received: string;
@@ -33,7 +33,12 @@ export interface LoanWithTotals extends LoanRow {
   interest: string;
   totalOwed: string;
   remaining: string;
+  // Quanto vai faltar no dia do prazo, com os juros que ainda vão correr até
+  // lá. Só vem quando tem juros e o prazo ainda não chegou.
+  remainingAtDue: string | null;
   isOverdue: boolean;
+  // false = empréstimo da outra pessoa que saiu da Nossa Conta (só leitura).
+  isMine: boolean;
 }
 
 export interface LoansSummary {
@@ -78,6 +83,11 @@ export function interestCents(loan: LoanRow, today: string): number {
   if (!loan.interestRateMonthly) return 0;
   const lastRepayment = loan.repayments.map((r) => r.receivedAt).sort().at(-1);
   const until = loan.status === "paid" && lastRepayment ? lastRepayment : today;
+  return interestUntilCents(loan, until);
+}
+
+function interestUntilCents(loan: LoanRow, until: string): number {
+  if (!loan.interestRateMonthly) return 0;
   const months = fullMonthsBetween(loan.lentAt, until);
   return Math.round(toCents(Number(loan.amount)) * (loan.interestRateMonthly / 100) * months);
 }
@@ -90,15 +100,24 @@ function remainingCents(loan: LoanRow, today = todayInBrazil()): number {
   return Math.max(0, totalOwedCents(loan, today) - receivedCents(loan));
 }
 
-function withTotals(loan: LoanRow, today: string): LoanWithTotals {
+function remainingAtDueCents(loan: LoanRow, today: string): number | null {
+  if (loan.status !== "open" || !loan.interestRateMonthly || !loan.dueDate || loan.dueDate <= today) return null;
+  const owedAtDue = toCents(Number(loan.amount)) + interestUntilCents(loan, loan.dueDate);
+  return Math.max(0, owedAtDue - receivedCents(loan));
+}
+
+function withTotals(loan: LoanRow, today: string, viewerId: string = loan.ownerUserId): LoanWithTotals {
   const remaining = remainingCents(loan, today);
+  const atDue = remainingAtDueCents(loan, today);
   return {
     ...loan,
     received: fromCents(receivedCents(loan)),
     interest: fromCents(interestCents(loan, today)),
     totalOwed: fromCents(totalOwedCents(loan, today)),
     remaining: fromCents(remaining),
+    remainingAtDue: atDue === null ? null : fromCents(atDue),
     isOverdue: loan.status === "open" && remaining > 0 && loan.dueDate !== null && loan.dueDate < today,
+    isMine: loan.ownerUserId === viewerId,
   };
 }
 
@@ -150,7 +169,12 @@ export function summarize(loans: LoanWithTotals[], today: string): LoansSummary 
 export async function listLoans(userId: string): Promise<{ loans: LoanWithTotals[]; summary: LoansSummary }> {
   const groupId = await requireGroupId(userId);
   const today = todayInBrazil();
-  const loans = (await findLoansByOwner(groupId, userId)).map((loan) => withTotals(loan, today)).sort(compareLoans);
+  const [rows, accounts] = await Promise.all([findLoansByGroupId(groupId), findAccountsByGroupId(groupId)]);
+  const jointIds = new Set(accounts.filter((a) => a.type === "joint").map((a) => a.id));
+  const loans = rows
+    .filter((loan) => loan.ownerUserId === userId || (loan.accountId !== null && jointIds.has(loan.accountId)))
+    .map((loan) => withTotals(loan, today, userId))
+    .sort(compareLoans);
   return { loans, summary: summarize(loans, today) };
 }
 
