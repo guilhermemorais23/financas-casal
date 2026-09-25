@@ -31,7 +31,8 @@ export interface PreviewRow {
 }
 
 // Uma pergunta da importação: todos os lançamentos (novos) com o mesmo nome e
-// o mesmo sentido. Vem do maior valor pro menor -- responder as primeiras já
+// o mesmo sentido. Vêm primeiro as entradas, depois as saídas, cada parte do
+// maior valor pro menor -- responder as primeiras já
 // cobre quase todo o dinheiro.
 export interface PreviewGroup {
   key: string;
@@ -185,7 +186,9 @@ export async function previewStatement(userId: string, input: StatementInput) {
   });
   const groups = [...byKey.values()]
     .map(({ group, cents }) => ({ ...group, total: fromCents(cents), cents }))
-    .sort((a, b) => b.cents - a.cents)
+    // Primeiro tudo que entrou, depois o que saiu; em cada parte, do maior
+    // valor pro menor.
+    .sort((a, b) => Number(b.transactionType === "income") - Number(a.transactionType === "income") || b.cents - a.cents)
     .map(({ cents: _cents, ...group }) => group);
 
   return { format, assumedAllExpenses, rows: preview, groups, pdf };

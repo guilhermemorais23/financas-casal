@@ -7974,6 +7974,18 @@ select {
   color: var(--color-text-muted);
 }
 
+.import-phase {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius);
+  background: var(--color-primary-soft);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .import-mirror {
   display: grid;
   gap: 0.4rem;

@@ -183,7 +183,17 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   // Perguntas = nomes que o PAR. ainda não conhece (os de regra já chegam
   // respondidos, mas podem ser mudados no resumo).
-  const questions = useMemo(() => preview?.groups.filter((group) => !group.rule) ?? [], [preview]);
+  // Primeiro as entradas, depois as saídas (a ordem do servidor já vem assim;
+  // aqui garante mesmo que a lista mude).
+  const questions = useMemo(
+    () =>
+      (preview?.groups.filter((group) => !group.rule) ?? [])
+        .map((group, order) => ({ group, order }))
+        .sort((a, b) => Number(b.group.transactionType === "income") - Number(a.group.transactionType === "income") || a.order - b.order)
+        .map(({ group }) => group),
+    [preview]
+  );
+  const incomeQuestions = questions.filter((group) => group.transactionType === "income").length;
 
   // Ida e volta: mesmo nome, mesmo valor, um entrou e o outro saiu com até 3
   // dias de diferença (ex.: o pai mandou R$ 170 e o filho devolveu). Cada
@@ -510,7 +520,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         <h1 id="import-title">Importar extrato</h1>
         {stage === "questions" && questions.length > 0 && (
           <span className="import-progress">
-            {Math.min(questionIndex + 1, questions.length)} de {questions.length}
+            {questionIndex < incomeQuestions
+              ? `Entradas · ${questionIndex + 1} de ${incomeQuestions}`
+              : `Saídas · ${Math.min(questionIndex - incomeQuestions + 1, questions.length - incomeQuestions)} de ${questions.length - incomeQuestions}`}
           </span>
         )}
       </div>
@@ -656,6 +668,12 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
             </p>
           )}
           <div className="import-question">
+            {questionIndex === incomeQuestions && incomeQuestions > 0 && !returnToSummary && (
+              <p className="import-phase">
+                <Icon name="check" /> Entradas prontas. Agora as saídas: {questions.length - incomeQuestions} nome
+                {questions.length - incomeQuestions === 1 ? "" : "s"}.
+              </p>
+            )}
             <span className="import-question-tags">
               <span className={`import-question-type ${current.transactionType}`}>
                 {current.transactionType === "income" ? "Entrou" : "Saiu"}
