@@ -95,7 +95,9 @@ export function CardsPage() {
   const [limitType, setLimitType] = useState<"normal" | "secured">("normal");
   // Cartão garantido: o dinheiro sai da conta hoje, ou já estava guardado
   // fora do app (poupança/caixinha) e o limite é um valor a mais.
-  const [securedFromAccount, setSecuredFromAccount] = useState(false);
+  // Sem padrão de propósito: as duas situações são comuns e escolher errado
+  // deixa o saldo da conta errado, então a pessoa responde.
+  const [securedFromAccount, setSecuredFromAccount] = useState<boolean | null>(null);
   const [defaultCreditCardId, setDefaultCreditCardId] = useState(() => readCreditCardPreference(user?.id ?? ""));
   const [scope, setScope] = useState<"personal" | "joint">("joint");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -156,6 +158,10 @@ export function CardsPage() {
       setError("Informe quanto você guardou no cartão -- é esse valor que vira o limite.");
       return;
     }
+    if (limitType === "secured" && securedFromAccount === null) {
+      setError("Conte de onde veio o dinheiro do limite: da sua conta ou de outro lugar.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -177,7 +183,7 @@ export function CardsPage() {
       setDueDay("5");
       setLimit("");
       setLimitType("normal");
-      setSecuredFromAccount(false);
+      setSecuredFromAccount(null);
       setIsCreateOpen(false);
       showToast("Cartão criado");
       await loadCards();
@@ -486,6 +492,37 @@ export function CardsPage() {
                   </button>
                 </div>
               </form>
+            )}
+
+            {isSecured && card.limitReleases?.length > 0 && (
+              <div className="secured-outlook">
+                <p className="secured-outlook-title">Como fica na próxima fatura</p>
+                <ul>
+                  <li>
+                    <span>Guardado no cartão (continua seu)</span>
+                    <strong>{formatCurrency(limitCents ?? 0)}</strong>
+                  </li>
+                  <li>
+                    <span>
+                      Fatura de {monthYearLabel(card.limitReleases[0].month)}, vence{" "}
+                      {parseLocalDate(card.limitReleases[0].dueDate).toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                      })}
+                    </span>
+                    <strong className="owe-text">−{formatCurrency(Number(card.limitReleases[0].amount))}</strong>
+                  </li>
+                </ul>
+                <p className="field-hint">
+                  <strong>Pagando com o dinheiro da conta:</strong> o limite volta pra{" "}
+                  {formatCurrency(Math.max(0, Number(card.limitReleases[0].availableAfter)))} e o guardado continua inteiro.
+                </p>
+                <p className="field-hint">
+                  <strong>Sem pagar:</strong> o banco tira{" "}
+                  {formatCurrency(Number(card.limitReleases[0].amount))} do guardado pra quitar e sobram{" "}
+                  {formatCurrency(Math.max(0, (limitCents ?? 0) - Number(card.limitReleases[0].amount)))} de limite.
+                </p>
+              </div>
             )}
 
             {card.limitReleases?.length > 0 && (
@@ -840,17 +877,17 @@ export function CardsPage() {
                 <div className="segmented">
                   <button
                     type="button"
-                    className={`segmented-option${!securedFromAccount ? " active" : ""}`}
-                    onClick={() => setSecuredFromAccount(false)}
+                    className={`segmented-option${securedFromAccount === true ? " active" : ""}`}
+                    onClick={() => setSecuredFromAccount(true)}
                   >
-                    Já estava guardado
+                    Tirei da minha conta
                   </button>
                   <button
                     type="button"
-                    className={`segmented-option${securedFromAccount ? " active" : ""}`}
-                    onClick={() => setSecuredFromAccount(true)}
+                    className={`segmented-option${securedFromAccount === false ? " active" : ""}`}
+                    onClick={() => setSecuredFromAccount(false)}
                   >
-                    Sai da conta agora
+                    Já estava guardado fora
                   </button>
                 </div>
               </div>
@@ -869,9 +906,11 @@ export function CardsPage() {
               />
               <p className="field-hint">
                 {limitType === "secured"
-                  ? securedFromAccount
-                    ? "Esse valor sai da sua conta hoje e vira o limite do cartão. Continua sendo seu: dá pra guardar mais ou resgatar depois."
-                    : "Vira o limite do cartão sem mexer no saldo da conta: é um valor a mais. O que você comprar entra na fatura do mês seguinte."
+                  ? securedFromAccount === null
+                    ? "Ex.: sobrou do salário e você passou pro cartão = tirei da minha conta. Tinha numa poupança que o app não acompanha = já estava guardado fora."
+                    : securedFromAccount
+                      ? "Esse valor sai da sua conta hoje e vira o limite do cartão. Continua sendo seu: dá pra guardar mais ou resgatar depois."
+                      : "Vira o limite do cartão sem mexer no saldo da conta. O que você comprar entra na fatura do mês seguinte."
                   : "Se preencher, a gente acompanha quanto do limite já está comprometido."}
               </p>
             </div>
