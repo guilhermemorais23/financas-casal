@@ -63,7 +63,7 @@ export function RegisterPage() {
 
   return (
     <div className="page-center">
-      <Brand />
+      <Brand animated />
       <div className="card">
         <h1>Criar conta</h1>
         <p className="card-subtitle">Grátis para começar. Sem cartão necessário.</p>

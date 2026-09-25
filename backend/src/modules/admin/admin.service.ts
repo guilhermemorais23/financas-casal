@@ -1,6 +1,6 @@
 import { db } from "../../db/firestore";
 import { listRecentAccess, type AccessLogEntry } from "../../utils/accessLog";
-import { listRecentErrors, type ErrorLogEntry } from "../../utils/errorLog";
+import { isQuotaError, listMemoryErrors, listRecentErrors, type ErrorLogEntry } from "../../utils/errorLog";
 
 export class NotAdminError extends Error {}
 
@@ -35,6 +35,9 @@ export interface AdminOverview {
   whatsappLinked: number;
   recentErrors: ErrorLogEntry[];
   recentAccess: AccessLogEntry[];
+  // true quando o Firestore não respondeu (ex.: cota do dia estourada): os
+  // números vêm zerados e os erros vêm da memória do servidor.
+  firestoreUnavailable?: boolean;
 }
 
 // "Casal completo" (paired) vs "sozinho" (solo) isn't a stored flag -- it's
@@ -42,6 +45,25 @@ export interface AdminOverview {
 // groupId field (not full user docs) keeps this cheap even as the user
 // count grows.
 export async function getAdminOverview(): Promise<AdminOverview> {
+  try {
+    return await loadAdminOverview();
+  } catch (err) {
+    if (!isQuotaError(err)) throw err;
+    return {
+      totalUsers: 0,
+      totalGroups: 0,
+      pairedGroups: 0,
+      soloGroups: 0,
+      telegramLinked: 0,
+      whatsappLinked: 0,
+      recentErrors: listMemoryErrors(20),
+      recentAccess: [],
+      firestoreUnavailable: true,
+    };
+  }
+}
+
+async function loadAdminOverview(): Promise<AdminOverview> {
   const [userCountSnap, groupCountSnap, telegramCountSnap, whatsappCountSnap, userGroupIds, recentErrors, recentAccess] =
     await Promise.all([
       usersCol.count().get(),

@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
+import { memoizeScoped } from "../../utils/readCache";
 
 export interface CategoryRow {
   id: string;
@@ -30,7 +31,11 @@ function toCategoryRow(doc: FirebaseFirestore.DocumentSnapshot): CategoryRow {
   };
 }
 
-export async function findVisibleCategories(groupId: string | null): Promise<CategoryRow[]> {
+export function findVisibleCategories(groupId: string | null): Promise<CategoryRow[]> {
+  return memoizeScoped(`categories:${groupId}`, [`group:${groupId}`, "categories"], () => loadFindVisibleCategories(groupId));
+}
+
+async function loadFindVisibleCategories(groupId: string | null): Promise<CategoryRow[]> {
   const queries = [categoriesCol.where("groupId", "==", null).get()];
   if (groupId) {
     queries.push(categoriesCol.where("groupId", "==", groupId).get());

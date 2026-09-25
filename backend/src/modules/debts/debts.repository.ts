@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
+import { memoizeScoped } from "../../utils/readCache";
 import { fromCents, toCents } from "../../utils/money";
 import { currentMonthParam, monthParamFromDate } from "../../utils/month";
 import { deleteTransaction } from "../transactions/transactions.repository";
@@ -138,12 +139,20 @@ export async function findDebtsVisibleTo(groupId: string, userId: string): Promi
 // this isn't scoped to "what one user can see" (a single equality filter,
 // no new index). Used by the reminders job, same reasoning as
 // cards.repository's findCardsByGroupId.
-export async function findDebtsByGroupId(groupId: string): Promise<DebtRow[]> {
+export function findDebtsByGroupId(groupId: string): Promise<DebtRow[]> {
+  return memoizeScoped(`debts:${groupId}`, [`group:${groupId}`, "debts"], () => loadFindDebtsByGroupId(groupId));
+}
+
+async function loadFindDebtsByGroupId(groupId: string): Promise<DebtRow[]> {
   const snapshot = await debtsCol.where("groupId", "==", groupId).get();
   return snapshot.docs.map(toDebtRow);
 }
 
-export async function findInstallmentsByDebtIds(debtIds: string[]): Promise<DebtInstallmentRow[]> {
+export function findInstallmentsByDebtIds(debtIds: string[]): Promise<DebtInstallmentRow[]> {
+  return memoizeScoped(`installments:${[...debtIds].sort().join(",")}`, ["debts"], () => loadFindInstallmentsByDebtIds(debtIds));
+}
+
+async function loadFindInstallmentsByDebtIds(debtIds: string[]): Promise<DebtInstallmentRow[]> {
   if (debtIds.length === 0) return [];
   const results = await Promise.all(
     debtIds.map(async (debtId) => {

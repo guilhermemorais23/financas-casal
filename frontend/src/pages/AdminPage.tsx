@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
-import { AdminDiagnostics, AdminFeedback } from "./AdminSections";
+import { AdminAnnouncements, AdminDiagnostics, AdminFeedback } from "./AdminSections";
 
 interface ErrorLogEntry {
   id: string;
@@ -30,11 +30,13 @@ interface AdminOverview {
   whatsappLinked: number;
   recentErrors: ErrorLogEntry[];
   recentAccess: AccessLogEntry[];
+  firestoreUnavailable?: boolean;
 }
 
 const ADMIN_SECTIONS = [
   { section: "overview", label: "Geral" },
   { section: "feedback", label: "Feedback" },
+  { section: "announcements", label: "Novidades" },
   { section: "diagnostics", label: "Diagnóstico" },
   { section: "logs", label: "Logs" },
 ] as const;
@@ -59,8 +61,10 @@ export function AdminPage() {
   // (the sidebar's "Admin" sub-links on desktop, the tabs below on mobile).
   const requested = searchParams.get("section");
   const section =
-    requested === "logs" || requested === "feedback" || requested === "diagnostics" ? requested : "overview";
-  const sectionTitle = { overview: "Visão geral", logs: "Logs", feedback: "Feedback", diagnostics: "Diagnóstico" }[section];
+    requested === "logs" || requested === "feedback" || requested === "diagnostics" || requested === "announcements"
+      ? requested
+      : "overview";
+  const sectionTitle = { overview: "Visão geral", logs: "Logs", feedback: "Feedback", diagnostics: "Diagnóstico", announcements: "Novidades" }[section];
 
   useEffect(() => {
     apiRequest<AdminOverview>("/admin/overview", { token })
@@ -124,7 +128,14 @@ export function AdminPage() {
             </button>
           ))}
         </div>
+        {overview.firestoreUnavailable && (
+          <p className="alert" role="alert">
+            O banco de dados (Firestore) não está respondendo, provavelmente porque a cota diária do plano grátis
+            acabou. Os números abaixo estão zerados e os erros vêm da memória do servidor. Volta sozinho por volta das 4h.
+          </p>
+        )}
         {section === "feedback" && <AdminFeedback />}
+        {section === "announcements" && <AdminAnnouncements />}
         {section === "diagnostics" && <AdminDiagnostics />}
 
         {section === "overview" && (

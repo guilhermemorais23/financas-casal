@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { adminRouter } from "./modules/admin/admin.routes";
+import { announcementsRouter } from "./modules/announcements/announcements.routes";
 import { alertsRouter } from "./modules/alerts/alerts.routes";
 import { assistantRouter } from "./modules/assistant/assistant.routes";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
@@ -33,6 +34,7 @@ import {
 import { asyncHandler } from "./middleware/asyncHandler";
 import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
+import { readCacheScope } from "./middleware/readCacheScope";
 
 // Render sits behind a reverse proxy, so req.ip is otherwise the proxy's own
 // address -- trust its X-Forwarded-For so rate limiting (and any future
@@ -66,6 +68,7 @@ export function createApp() {
   // (base64 blows up ~33% over the raw image bytes).
   app.use(express.json({ limit: "1mb" }));
   app.use("/api", apiLimiter);
+  app.use("/api", readCacheScope);
 
   // Unauthenticated on purpose -- this is what the keep-alive cron pings.
   // /api/me always answers 401 when hit without a token, which cron-job.org
@@ -100,6 +103,7 @@ export function createApp() {
   app.use("/api/shares", sharesRouter);
   app.use("/api/statements", statementsRouter);
   app.use("/api/feedback", feedbackRouter);
+  app.use("/api/announcements", announcementsRouter);
   app.use("/api/loans", loansRouter);
   app.use("/api/month-close", monthCloseRouter);
   app.use("/api/public/shares", publicSharesRouter);

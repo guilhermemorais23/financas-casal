@@ -59,6 +59,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
 const ADMIN_SUBLINKS = [
   { section: "overview", label: "Visão geral" },
   { section: "feedback", label: "Feedback" },
+  { section: "announcements", label: "Novidades" },
   { section: "diagnostics", label: "Diagnóstico" },
   { section: "logs", label: "Logs" },
 ];
@@ -180,7 +181,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   return (
     <div className="app-shell-nav">
       <header className="app-mobile-topbar">
-        <Brand />
+        <Brand animated />
         <button
           type="button"
           className="topbar-avatar"
@@ -193,7 +194,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
 
       <aside className="app-sidebar">
         <div className="app-sidebar-brand">
-          <Brand />
+          <Brand animated />
         </div>
         <div className="app-sidebar-scroll">
         <nav className="app-nav">

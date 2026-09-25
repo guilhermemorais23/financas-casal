@@ -7229,3 +7229,237 @@ select {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* Pop-ups de novidade (components/AnnouncementPopup) ----------------------- */
+.announcement-slide {
+  min-height: 0;
+}
+
+.announcement-count {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* Admin > Novidades: formulário | prévia, lista de enviados embaixo */
+.announce-admin {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.announce-admin .card {
+  max-width: none;
+}
+
+.announce-sent {
+  grid-column: 1 / -1;
+}
+
+.announce-form textarea {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--tan-input);
+  color: var(--color-text);
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.announce-form textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.announce-form .card-title {
+  margin-bottom: 0.75rem;
+}
+
+.announce-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.announce-form .field .announce-row {
+  margin-bottom: 0;
+}
+
+.field-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.announce-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0 0.75rem;
+}
+
+.announce-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.announce-icon-pick {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.announce-icon-pick .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.announce-icon-pick.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.announce-people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.announce-person-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.announce-person-row:hover,
+.announce-person-row:focus-visible {
+  background: var(--color-bg-soft);
+}
+
+.announce-person-row small,
+.announce-person-picked small,
+.announce-sent-info small {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.announce-person-picked {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.announce-person-info,
+.announce-sent-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.announce-side {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+}
+
+.announce-side-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.announce-preview {
+  max-height: none;
+  max-width: none;
+  animation: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.announce-preview .welcome-tour-slide {
+  animation: none;
+}
+
+.announce-preview .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.announce-sent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.announce-sent-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.announce-sent-list li:first-child {
+  border-top: 0;
+}
+
+.announce-sent-list li.is-off {
+  opacity: 0.55;
+}
+
+.announce-sent-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.announce-sent-icon .icon {
+  width: 17px;
+  height: 17px;
+}
+
+@media (max-width: 860px) {
+  .announce-admin {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .announce-side {
+    position: static;
+  }
+}

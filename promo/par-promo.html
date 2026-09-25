@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PAR. — vídeo de apresentação</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800&display=swap" rel="stylesheet" />
+<!--
+  Video de apresentacao do PAR. (v2), feito so com HTML + JS (Web Animations
+  API), usando telas reais do app (promo/telas/, capturadas com dados de
+  demonstracao).
+
+  Tudo roda numa linha do tempo unica: cada animacao e criada pausada com o
+  seu "delay" e a funcao seek(t) posiciona todas no tempo t. Assim da pra:
+    - abrir este arquivo no navegador e assistir (fica em loop);
+    - gravar quadro a quadro, sem travadas (promo/gravar.mjs usa ?gravar).
+-->
+<style>
+  :root {
+    --page: #f3f4f6;
+    --surface: #ffffff;
+    --ink: #16161d;
+    --ink-2: #5f6070;
+    --line: #e4e5ea;
+    --purple: #6d54ec;
+    --purple-soft: #ece9fc;
+    --font-brand: "Archivo", system-ui, sans-serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #111; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: var(--font-sans); color: var(--ink); }
+
+  /* Palco fixo 1280x720; no navegador ele e escalado pra caber na janela. */
+  #stage {
+    position: relative; width: 1280px; height: 720px; flex: none;
+    background: var(--page); overflow: hidden; transform-origin: center; color: var(--ink);
+  }
+
+  /* Fundo: os dois quadrados da marca, grandes e bem claros */
+  .bg-sq { position: absolute; border-radius: 4px; }
+  #bg1 { width: 460px; height: 460px; left: -190px; top: -220px; background: var(--purple-soft); }
+  #bg2 { width: 420px; height: 420px; right: -170px; bottom: -210px; border: 30px solid rgba(22, 22, 29, 0.05); }
+
+  /* Logo */
+  .lockup { position: absolute; display: flex; align-items: center; gap: 44px; }
+  .lockup .mark { display: block; line-height: 0; }
+  .lockup svg { overflow: visible; display: block; }
+  .lockup .name {
+    font-family: var(--font-brand); font-weight: 800; letter-spacing: -0.02em; font-size: 150px;
+    line-height: 1; opacity: 0;
+  }
+  .dot { color: var(--purple); }
+  .tagline { position: absolute; left: 0; right: 0; text-align: center; font-size: 32px; font-weight: 500; color: var(--ink-2); }
+
+  /* Frases rapidas */
+  .kw {
+    position: absolute; left: 0; right: 0; top: 296px; text-align: center; opacity: 0;
+    font-size: 84px; font-weight: 800; letter-spacing: -0.035em;
+  }
+  .kw em { font-style: normal; color: var(--purple); }
+
+  /* Texto de cada cena */
+  .copy { position: absolute; left: 110px; top: 200px; width: 560px; }
+  .copy > * { opacity: 0; }
+  .kicker {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+    font-size: 15px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--purple);
+  }
+  .pill-new {
+    font-size: 12px; letter-spacing: 0.06em; padding: 4px 10px; border-radius: 999px;
+    background: var(--purple); color: #fff;
+  }
+  .copy h2 { font-size: 64px; line-height: 1.02; font-weight: 800; letter-spacing: -0.035em; margin-bottom: 22px; text-wrap: balance; }
+  .copy h2 em { font-style: normal; color: var(--purple); }
+  .copy p { font-size: 22px; line-height: 1.45; color: var(--ink-2); max-width: 470px; }
+  #c7 { top: 70px; width: 380px; }
+  #c7 h2 { font-size: 52px; }
+  #c7 p { font-size: 20px; }
+
+  /* Celular com as telas reais */
+  #phone {
+    position: absolute; left: 812px; top: 20px; width: 310px; height: 680px; opacity: 0;
+    background: #16161d; border-radius: 46px; padding: 10px;
+    box-shadow: 0 40px 80px -30px rgba(22, 22, 29, 0.5), 0 0 0 2px #2d2d38 inset;
+  }
+  #screen { position: relative; width: 290px; height: 660px; border-radius: 37px; overflow: hidden; background: #fff; }
+  .status {
+    position: relative; z-index: 3; height: 32px; background: #fff; display: flex; align-items: center;
+    justify-content: space-between; padding: 4px 24px 0; font-size: 12px; font-weight: 700;
+  }
+  .status i { position: absolute; left: 50%; top: 7px; width: 80px; height: 22px; border-radius: 12px; background: #16161d; transform: translateX(-50%); }
+  .status .bat { width: 20px; height: 10px; border: 2px solid #16161d; border-radius: 3px; position: relative; }
+  .status .bat::after { content: ""; position: absolute; inset: 1px 4px 1px 1px; background: #16161d; border-radius: 1px; }
+  /* A área do app: 390x844 do celular real, em escala */
+  #app { position: absolute; left: 0; top: 32px; width: 290px; height: 628px; overflow: hidden; background: var(--page); }
+  .layer { position: absolute; inset: 0; opacity: 0; }
+  .layer img { position: absolute; left: 0; top: 0; width: 290px; display: block; }
+  .layer img.over { opacity: 0; }
+  #topbar { position: absolute; left: 0; top: 0; width: 290px; z-index: 2; }
+  .menu { position: absolute; left: 0; bottom: 0; width: 290px; z-index: 2; opacity: 0; }
+  .tap { position: absolute; z-index: 4; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: rgba(22, 22, 29, 0.3); opacity: 0; }
+
+  /* Notebook (Admin > Novidades) */
+  #laptop { position: absolute; left: 530px; top: 160px; width: 720px; opacity: 0; }
+  #laptop .lid { background: #16161d; border-radius: 18px 18px 6px 6px; padding: 12px 12px 14px; }
+  #laptop .shot { position: relative; width: 696px; height: 435px; overflow: hidden; border-radius: 6px; background: #fff; }
+  #laptop .shot img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+  #laptop .base { height: 16px; margin: 0 -34px; background: linear-gradient(#cfd1d8, #a9abb4); border-radius: 0 0 16px 16px; }
+
+  .cta {
+    position: absolute; left: 50%; top: 520px; opacity: 0; white-space: nowrap;
+    background: var(--purple); color: #fff; font-weight: 800; font-size: 24px; padding: 16px 34px; border-radius: 999px;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="bg-sq" id="bg1"></div>
+  <div class="bg-sq" id="bg2"></div>
+
+  <!-- Abertura -->
+  <div class="lockup" id="logo1">
+    <span class="mark"><svg viewBox="0 0 94 104" width="150" height="166"><rect class="sq-f" x="6" y="14" width="46" height="46" fill="#6d54ec" /><rect class="sq-o" x="34" y="42" width="46" height="46" fill="none" stroke="#16161d" stroke-width="8" /></svg></span>
+    <span class="name">PAR<span class="dot">.</span></span>
+  </div>
+  <div class="tagline" id="tag1" style="top: 470px"></div>
+
+  <div class="kw" id="kw1">Visual novo.</div>
+  <div class="kw" id="kw2">Lançamento em 2 toques.</div>
+  <div class="kw" id="kw3">Avisos no app.</div>
+  <div class="kw" id="kw4">Olha como <em>ficou.</em></div>
+
+  <!-- Textos -->
+  <div class="copy" id="c1"><div class="kicker">Painel</div><h2>Seu mês,<br><em>num olhar.</em></h2><p>Quanto sobra, quanto dá pra gastar por dia, o que vence logo e o extrato do mês.</p></div>
+  <div class="copy" id="c2"><div class="kicker"><span class="pill-new">Novo</span>Lançamento rápido</div><h2>Valor primeiro.<br><em>Pronto.</em></h2><p>Digite o valor e a descrição; o resto já vem preenchido. Data, conta e divisão ficam em Mais opções.</p></div>
+  <div class="copy" id="c3"><div class="kicker">Par</div><h2>Conta do casal,<br><em>sem conta de cabeça.</em></h2><p>Quanto cada um pagou, o que está em aberto e onde o casal mais gastou.</p></div>
+  <div class="copy" id="c4"><div class="kicker">Contas</div><h2>Cartões, fixas,<br><em>dívidas e quem te deve.</em></h2><p>Fatura, limite e parcelas; contas que se lançam sozinhas todo mês; empréstimos com data pra receber.</p></div>
+  <div class="copy" id="c5"><div class="kicker">Planejar</div><h2>Metas e a<br><em>lista do mercado.</em></h2><p>Quanto guardar por mês pra chegar no prazo, e uma lista de compras que os dois editam.</p></div>
+  <div class="copy" id="c6"><div class="kicker">Relatórios</div><h2>Pra onde foi<br><em>o dinheiro.</em></h2><p>Entrada, saída e saldo, gastos por categoria, exportar e importar extrato do banco.</p></div>
+  <div class="copy" id="c7"><div class="kicker"><span class="pill-new">Novo</span>Admin · Novidades</div><h2>Avisos que chegam <em>em todo mundo.</em></h2><p>Escolha um modelo, escreva, veja a prévia e mande pra todos ou pra uma pessoa. Cada um vê uma vez.</p></div>
+
+  <!-- Notebook -->
+  <div id="laptop">
+    <div class="lid"><div class="shot">
+      <img id="a1" src="telas/admin-novidades.jpg" alt="" />
+      <img id="a2" src="telas/admin-confirmar.jpg" alt="" />
+      <img id="a3" src="telas/admin-enviado.jpg" alt="" />
+    </div></div>
+    <div class="base"></div>
+  </div>
+
+  <!-- Celular -->
+  <div id="phone"><div id="screen">
+    <div class="status"><span>9:41</span><i></i><span class="bat"></span></div>
+    <div id="app">
+      <div class="layer" id="L1"><img id="i-painel" src="telas/painel.jpg" alt="" /></div>
+      <div class="layer" id="L2">
+        <img id="i-novo1" src="telas/novo-1.jpg" alt="" />
+        <img id="i-novo2" class="over" src="telas/novo-2.jpg" alt="" />
+        <img id="i-novo3" class="over" src="telas/novo-3.jpg" alt="" />
+      </div>
+      <div class="layer" id="L3"><img id="i-par" src="telas/par.jpg" alt="" /></div>
+      <div class="layer" id="L4">
+        <img id="i-cartoes" src="telas/cartoes.jpg" alt="" />
+        <img id="i-fixas" class="over" src="telas/fixas.jpg" alt="" />
+        <img id="i-dividas" class="over" src="telas/dividas.jpg" alt="" />
+        <img id="i-receber" class="over" src="telas/receber.jpg" alt="" />
+      </div>
+      <div class="layer" id="L5">
+        <img id="i-metas" src="telas/metas.jpg" alt="" />
+        <img id="i-compras" class="over" src="telas/compras.jpg" alt="" />
+      </div>
+      <div class="layer" id="L6"><img id="i-relatorios" src="telas/relatorios.jpg" alt="" /></div>
+      <div class="layer" id="L7"><img id="i-popup" src="telas/popup-ana.jpg" alt="" /></div>
+      <img id="topbar" src="telas/barra-topo.png" alt="" />
+      <img class="menu" id="m-painel" src="telas/menu-painel.png" alt="" />
+      <img class="menu" id="m-par" src="telas/menu-par.png" alt="" />
+      <img class="menu" id="m-contas" src="telas/menu-contas.png" alt="" />
+      <img class="menu" id="m-mais" src="telas/menu-mais.png" alt="" />
+    </div>
+  </div></div>
+
+  <!-- Final -->
+  <div class="lockup" id="logo2">
+    <span class="mark"><svg viewBox="0 0 94 104" width="150" height="166"><rect class="sq-f" x="6" y="14" width="46" height="46" fill="#6d54ec" /><rect class="sq-o" x="34" y="42" width="46" height="46" fill="none" stroke="#16161d" stroke-width="8" /></svg></span>
+    <span class="name">PAR<span class="dot">.</span></span>
+  </div>
+  <div class="tagline" id="tag2" style="top: 430px"></div>
+  <div class="cta" id="cta">Chama o seu par.</div>
+</div>
+
+<script>
+  // ---------------------------------------------------------------------
+  // Linha do tempo
+  // ---------------------------------------------------------------------
+  const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+  const INOUT = "cubic-bezier(0.65, 0, 0.35, 1)";
+  const BACK = "cubic-bezier(0.34, 1.56, 0.64, 1)";
+  const ANIMS = [];
+  const TICKS = [];
+  const $ = (s) => document.querySelector(s);
+
+  // Animacao pausada que comeca em `start` e segura o estado final.
+  // Criadas em ordem cronologica: a mais nova ganha da anterior.
+  function A(el, frames, start, dur, easing = EASE) {
+    const a = el.animate(frames, { delay: start, duration: dur, fill: "forwards", easing });
+    a.pause();
+    ANIMS.push(a);
+  }
+  // Funcao chamada a cada quadro com o progresso (0..1) entre start e start+dur.
+  function T(start, dur, fn) {
+    TICKS.push({ start, dur, fn });
+  }
+  function seek(t) {
+    for (const a of ANIMS) a.currentTime = t;
+    for (const k of TICKS) k.fn(Math.min(1, Math.max(0, (t - k.start) / k.dur)), t);
+  }
+
+  const fadeIn = (el, start, dur = 500, from = "translateY(24px)", easing = EASE) =>
+    A(el, [{ opacity: 0, transform: from }, { opacity: 1, transform: "none" }], start, dur, easing);
+  const fadeOut = (el, start, dur = 350, to = "translateY(-16px)") =>
+    A(el, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: to }], start, dur, "ease-in");
+  const show = (el, start, dur = 350) => A(el, [{ opacity: 0 }, { opacity: 1 }], start, dur, "linear");
+  const hide = (el, start, dur = 350) => A(el, [{ opacity: 1 }, { opacity: 0 }], start, dur, "linear");
+  const type = (el, start, dur, text) => T(start, dur, (p) => (el.textContent = text.slice(0, Math.round(p * text.length))));
+
+  // Escala das telas: capturadas com 390px de largura (x2), mostradas com 290px.
+  const K = 290 / 390;
+  const APP_H = 628;
+  // Rola a imagem de uma tela até `y` (em px da tela do celular real).
+  let scrollAt = new Map();
+  function scroll(img, start, dur, y) {
+    const from = scrollAt.get(img) ?? 0;
+    const max = Math.max(0, (img.naturalHeight / 2) * K - APP_H);
+    const to = -Math.min(max, y * K);
+    A(img, [{ transform: `translateY(${from}px)` }, { transform: `translateY(${to}px)` }], start, dur, INOUT);
+    scrollAt.set(img, to);
+  }
+  // Toque na tela (x, y em px do celular real, a partir do topo da área do app).
+  function tap(x, y, start) {
+    const el = document.createElement("span");
+    el.className = "tap";
+    el.style.left = x * K + "px";
+    el.style.top = y * K + "px";
+    $("#app").appendChild(el);
+    A(el, [{ opacity: 0, transform: "scale(0.4)" }, { opacity: 1, transform: "scale(0.8)", offset: 0.35 }, { opacity: 0, transform: "scale(1.5)" }], start, 600, "ease-out");
+  }
+
+  // Logo: quadrados aparecem, abrem, o nome sai do meio e desliza pro lado
+  // (mesma ideia do componente Brand do app).
+  function logo(lock, start) {
+    const mark = lock.querySelector(".mark");
+    const name = lock.querySelector(".name");
+    const f = lock.querySelector(".sq-f");
+    const o = lock.querySelector(".sq-o");
+    mark.style.opacity = 0;
+    for (const r of [f, o]) { r.style.transformBox = "fill-box"; r.style.transformOrigin = "center"; }
+    const dx = mark.offsetLeft + mark.offsetWidth / 2 - (name.offsetLeft + name.offsetWidth / 2);
+    const dy = mark.offsetTop + mark.offsetHeight / 2 - (name.offsetTop + name.offsetHeight / 2);
+    const ES = 0.5;
+    const open = ((name.offsetWidth * ES) / 2 + 22) * (94 / mark.offsetWidth);
+    A(mark, [{ opacity: 0, transform: "scale(0.2) rotate(-30deg)" }, { opacity: 1, transform: "none" }], start, 480, BACK);
+    const s = start + 420;
+    const sizes = { open: 600, emerge: 650, slide: 850 };
+    const total = sizes.open + sizes.emerge + sizes.slide;
+    const openAt = sizes.open / total;
+    const emergedAt = (sizes.open + sizes.emerge) / total;
+    const sq = (d) => {
+      const opened = `translate(${d}px, ${d * 0.35}px) rotate(${d > 0 ? 10 : -10}deg)`;
+      return [
+        { transform: "none", offset: 0, easing: EASE },
+        { transform: opened, offset: openAt },
+        { transform: opened, offset: emergedAt, easing: EASE },
+        { transform: "none", offset: 1 },
+      ];
+    };
+    A(f, sq(-open), s, total, "linear");
+    A(o, sq(open), s, total, "linear");
+    const at = (k) => `translate(${dx}px, ${dy}px) scale(${k})`;
+    A(name, [
+      { transform: at(0.1), opacity: 0, offset: 0 },
+      { transform: at(0.1), opacity: 0, offset: openAt * 0.6, easing: EASE },
+      { transform: at(ES), opacity: 1, offset: emergedAt, easing: EASE },
+      { transform: "none", opacity: 1, offset: 1 },
+    ], s, total, "linear");
+    return s + total;
+  }
+
+  function center(lock, top) {
+    lock.style.top = top + "px";
+    lock.style.left = (1280 - lock.offsetWidth) / 2 + "px";
+  }
+
+  function build() {
+    T(0, 1, (_, t) => {
+      $("#bg1").style.transform = `rotate(${t * 0.003}deg)`;
+      $("#bg2").style.transform = `rotate(${-t * 0.0025}deg)`;
+    });
+
+    // ---------- Abertura ----------
+    const logo1 = $("#logo1");
+    center(logo1, 220);
+    const logoEnd = logo(logo1, 150);
+    type($("#tag1"), logoEnd - 150, 800, "Finanças em grupo, sem atrito.");
+    fadeOut(logo1, 3900, 420, "scale(0.94)");
+    fadeOut($("#tag1"), 3900, 420, "translateY(10px)");
+
+    // ---------- Frases ----------
+    ["#kw1", "#kw2", "#kw3"].map($).forEach((w, i) => {
+      const s = 4400 + i * 800;
+      A(w, [{ opacity: 0, transform: "translateY(40px)" }, { opacity: 1, transform: "none" }], s, 260, EASE);
+      A(w, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-40px)" }], s + 620, 170, "ease-in");
+    });
+    const kw4 = $("#kw4");
+    A(kw4, [{ opacity: 0, transform: "scale(1.2)", filter: "blur(8px)" }, { opacity: 1, transform: "none", filter: "blur(0)" }], 6850, 550, EASE);
+    fadeOut(kw4, 8000, 320, "scale(0.95)");
+
+    // ---------- Celular ----------
+    const phone = $("#phone");
+    A(phone, [{ opacity: 0, transform: "translateY(180px) rotate(6deg)" }, { opacity: 1, transform: "none" }], 8250, 900, EASE);
+
+    function scene(copy, layer, menu, s, e) {
+      [...copy.children].forEach((el, i) => {
+        fadeIn(el, s + 250 + i * 130, 600);
+        fadeOut(el, e - 420 + i * 40, 320);
+      });
+      A(layer, [{ opacity: 0, transform: "translateX(40px)" }, { opacity: 1, transform: "none" }], s + 150, 500, EASE);
+      A(layer, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-40px)" }], e - 400, 380, "ease-in");
+      if (menu) { show(menu, s + 150, 300); hide(menu, e - 300, 250); }
+    }
+
+    // Painel
+    let s = 8500;
+    scene($("#c1"), $("#L1"), $("#m-painel"), s, 15000);
+    const painel = $("#i-painel");
+    scroll(painel, s + 1700, 1400, 560);
+    scroll(painel, s + 3500, 1500, 1350);
+    scroll(painel, s + 5200, 900, 2250);
+
+    // Lancamento rapido
+    s = 15000;
+    scene($("#c2"), $("#L2"), null, s, 21000);
+    tap(195, 314, s + 1000);
+    tap(195, 400, s + 1450);
+    show($("#i-novo2"), s + 1650, 300);
+    tap(195, 548, s + 2800);
+    show($("#i-novo3"), s + 3000, 300);
+    scroll($("#i-novo3"), s + 3700, 1300, 460);
+    tap(195, 880 - 460, s + 5150);
+
+    // Par
+    s = 21000;
+    scene($("#c3"), $("#L3"), $("#m-par"), s, 26800);
+    scroll($("#i-par"), s + 1600, 1400, 420);
+    scroll($("#i-par"), s + 3400, 1500, 1060);
+
+    // Contas: cartoes -> fixas -> dividas -> a receber
+    s = 26800;
+    scene($("#c4"), $("#L4"), $("#m-contas"), s, 33400);
+    // Troca de aba e rola até a lista (o formulário de cadastro fica em cima).
+    const tabs = [["#i-dividas", 152, 800], ["#i-fixas", 238, 640], ["#i-receber", 324, 0]];
+    tabs.forEach(([id, x, y], i) => {
+      const t = s + 2000 + i * 1500;
+      $(id).style.zIndex = i + 1;
+      if (i === 0) tap(x, 101, t - 150);
+      show($(id), t, 260);
+      if (y) scroll($(id), t + 350, 800, y);
+    });
+
+    // Metas e compras
+    s = 33400;
+    scene($("#c5"), $("#L5"), $("#m-mais"), s, 39000);
+    scroll($("#i-metas"), s + 1400, 1200, 250);
+    show($("#i-compras"), s + 3200, 350);
+
+    // Relatorios
+    s = 39000;
+    scene($("#c6"), $("#L6"), $("#m-mais"), s, 44800);
+    scroll($("#i-relatorios"), s + 1500, 1400, 400);
+    scroll($("#i-relatorios"), s + 3300, 1500, 1050);
+
+    A(phone, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(160px) rotate(-5deg)" }], 44500, 600, "ease-in");
+
+    // ---------- Novidades (Admin -> pop-up no celular) ----------
+    s = 45100;
+    const c7 = $("#c7");
+    [...c7.children].forEach((el, i) => fadeIn(el, s + 200 + i * 130, 600));
+    const laptop = $("#laptop");
+    A(laptop, [{ opacity: 0, transform: "translateY(60px) scale(0.96)" }, { opacity: 1, transform: "none" }], s + 100, 800, EASE);
+    show($("#a1"), s + 100, 1);
+    show($("#a2"), s + 3200, 300);
+    show($("#a3"), s + 4400, 300);
+    // O celular volta pequeno no canto do notebook, com o pop-up chegando.
+    A(phone, [{ opacity: 0, transform: "translate(40px, 200px) scale(0.72)" }, { opacity: 1, transform: "translate(40px, 60px) scale(0.72)" }], s + 5600, 800, EASE);
+    A(phone, [{ opacity: 1, transform: "translate(40px, 60px) scale(0.72)" }, { opacity: 0, transform: "translate(40px, 200px) scale(0.72)" }], s + 9700, 400, "ease-in");
+    show($("#L7"), s + 5600, 1);
+    // O print do pop-up já tem a barra do topo (escurecida).
+    hide($("#topbar"), s + 5600, 1);
+    A(laptop, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(40px)" }], s + 9700, 400, "ease-in");
+    [...c7.children].forEach((el, i) => fadeOut(el, s + 9700 + i * 40, 320));
+
+    // ---------- Final ----------
+    const logo2 = $("#logo2");
+    center(logo2, 190);
+    const end2 = logo(logo2, 55600);
+    type($("#tag2"), end2 - 200, 800, "Finanças em grupo, sem atrito.");
+    A($("#cta"), [{ opacity: 0, transform: "translateX(-50%) translateY(20px) scale(0.9)" }, { opacity: 1, transform: "translateX(-50%)" }], end2 + 700, 600, BACK);
+    return end2 + 3200;
+  }
+
+  // ---------------------------------------------------------------------
+  // Tocar (navegador) ou gravar quadro a quadro (?gravar)
+  // ---------------------------------------------------------------------
+  const images = [...document.images].map((img) => img.decode().catch(() => {}));
+  Promise.all([document.fonts.ready, ...images]).then(() => {
+    const TOTAL = build();
+    window.TOTAL = TOTAL;
+    window.seek = seek;
+    if (location.search.includes("gravar")) {
+      seek(0);
+      window.pronto = true;
+      return;
+    }
+    const stage = $("#stage");
+    const fit = () => (stage.style.transform = `scale(${Math.min(innerWidth / 1280, innerHeight / 720)})`);
+    fit();
+    addEventListener("resize", fit);
+    const t0 = performance.now();
+    const loop = (now) => {
+      seek((now - t0) % TOTAL);
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  });
+</script>
+</body>
+</html>

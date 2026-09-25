@@ -13,7 +13,7 @@ import {
 } from "firebase/auth";
 import { FirebaseError } from "firebase/app";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiRequest, setTokenRefresher, warmUpApi } from "../api/client";
+import { ApiError, apiRequest, setTokenRefresher, warmUpApi } from "../api/client";
 import { firebaseAuth } from "../firebase";
 
 export interface AuthUser {
@@ -177,8 +177,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let profile: AuthUser;
         try {
           profile = await fetchProfileShared(idToken);
-        } catch {
-          // No Firestore profile doc yet (first sign-in) -- bootstrap creates it.
+        } catch (err) {
+          // Só cria o perfil quando ele não existe mesmo (404, primeiro
+          // login). Servidor fora ou cota do banco estourada não é motivo
+          // pra tentar gravar de novo -- só piora.
+          if (!(err instanceof ApiError && err.status === 404)) throw err;
           profile = await bootstrapProfile(idToken, displayNameFor(firebaseUser));
         }
         setUser(profile);

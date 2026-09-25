@@ -2,7 +2,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { ChatBubbles, KIND_LABELS, type FeedbackKind, type FeedbackMessage } from "../components/FeedbackChat";
-import { Icon } from "../components/Icon";
+import { AnnouncementContent, type Announcement } from "../components/AnnouncementPopup";
+import { useConfirm } from "../components/ConfirmDialog";
+import { Icon, type IconName } from "../components/Icon";
 import { useToast } from "../components/ToastProvider";
 
 interface FeedbackThread {
@@ -261,5 +263,402 @@ export function AdminDiagnostics() {
         </ul>
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Admin > Novidades: pop-ups que aparecem no app, pra todo mundo ou pra uma
+// pessoa só. Cada pessoa vê cada pop-up uma vez.
+// ---------------------------------------------------------------------------
+
+interface Person {
+  id: string;
+  displayName: string;
+  email: string;
+}
+
+interface AnnouncementDraft {
+  icon: IconName;
+  tag: string;
+  title: string;
+  text: string;
+  bullets: string;
+  ctaLabel: string;
+  ctaPath: string;
+  audience: "all" | "user";
+  targetUserId: string;
+}
+
+const EMPTY_DRAFT: AnnouncementDraft = {
+  icon: "spark",
+  tag: "Novidade",
+  title: "",
+  text: "",
+  bullets: "",
+  ctaLabel: "",
+  ctaPath: "",
+  audience: "all",
+  targetUserId: "",
+};
+
+// Modelos prontos: escolha um e só troque o texto.
+const TEMPLATES: { label: string; draft: Partial<AnnouncementDraft> }[] = [
+  {
+    label: "Nova função",
+    draft: {
+      icon: "spark",
+      tag: "Novidade",
+      title: "Chegou: ",
+      text: "Conta em uma frase o que mudou e por que ajuda.",
+      bullets: "O que dá pra fazer\nOnde encontrar",
+      ctaLabel: "Ver agora",
+      ctaPath: "/dashboard",
+      audience: "all",
+    },
+  },
+  {
+    label: "Aviso geral",
+    draft: { icon: "info", tag: "Aviso", title: "", text: "", bullets: "", ctaLabel: "", ctaPath: "", audience: "all" },
+  },
+  {
+    label: "Manutenção",
+    draft: {
+      icon: "wrench",
+      tag: "Manutenção",
+      title: "App fora do ar por alguns minutos",
+      text: "Hoje às 23h vamos fazer uma atualização. Seus dados ficam guardados; se algo não abrir nesse horário, é só tentar de novo em seguida.",
+      bullets: "",
+      ctaLabel: "",
+      ctaPath: "",
+      audience: "all",
+    },
+  },
+  {
+    label: "Recado pessoal",
+    draft: { icon: "chat", tag: "Pra você", title: "", text: "", bullets: "", ctaLabel: "", ctaPath: "", audience: "user" },
+  },
+];
+
+const ICON_CHOICES: IconName[] = ["spark", "info", "alert", "heart", "chat", "wrench", "home", "coin", "chart", "target", "card", "cart"];
+
+const SCREENS: { path: string; label: string }[] = [
+  { path: "/dashboard", label: "Painel" },
+  { path: "/par", label: "Par" },
+  { path: "/transactions/new", label: "Novo lançamento" },
+  { path: "/reports", label: "Relatórios" },
+  { path: "/cards", label: "Cartões" },
+  { path: "/debts", label: "Dívidas" },
+  { path: "/recurring-bills", label: "Contas fixas" },
+  { path: "/loans", label: "A receber" },
+  { path: "/goals", label: "Metas" },
+  { path: "/investments", label: "Investimentos" },
+  { path: "/shopping", label: "Lista de compras" },
+  { path: "/account", label: "Conta e grupo" },
+];
+
+function bulletsOf(draft: AnnouncementDraft): string[] {
+  return draft.bullets
+    .split("\n")
+    .map((b) => b.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+export function AdminAnnouncements() {
+  const { token } = useAuth();
+  const { showToast } = useToast();
+  const confirm = useConfirm();
+  const [draft, setDraft] = useState<AnnouncementDraft>(EMPTY_DRAFT);
+  const [people, setPeople] = useState<Person[] | null>(null);
+  const [personQuery, setPersonQuery] = useState("");
+  const [sent, setSent] = useState<Announcement[] | null>(null);
+  const [isSending, setIsSending] = useState(false);
+
+  function loadSent() {
+    apiRequest<{ announcements: Announcement[] }>("/announcements", { token })
+      .then((res) => setSent(res.announcements))
+      .catch(() => setSent([]));
+  }
+
+  useEffect(loadSent, [token]);
+
+  // A lista de pessoas só é baixada quando o admin escolhe "Uma pessoa".
+  useEffect(() => {
+    if (draft.audience !== "user" || people !== null) return;
+    apiRequest<{ people: Person[] }>("/announcements/people", { token })
+      .then((res) => setPeople(res.people))
+      .catch(() => setPeople([]));
+  }, [draft.audience, people, token]);
+
+  function set<K extends keyof AnnouncementDraft>(key: K, value: AnnouncementDraft[K]) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  const target = people?.find((p) => p.id === draft.targetUserId) ?? null;
+  const query = personQuery.trim().toLowerCase();
+  const matches = (people ?? [])
+    .filter((p) => !query || p.displayName.toLowerCase().includes(query) || p.email.toLowerCase().includes(query))
+    .slice(0, 8);
+
+  const missing =
+    draft.title.trim().length < 2
+      ? "Falta o título"
+      : draft.text.trim().length < 2
+        ? "Falta o texto"
+        : draft.audience === "user" && !target
+          ? "Escolha a pessoa"
+          : draft.ctaPath && !draft.ctaLabel.trim()
+            ? "Dê um nome pro botão"
+            : null;
+
+  async function handleSend(event: FormEvent) {
+    event.preventDefault();
+    if (missing) return;
+    const who = draft.audience === "all" ? "todo mundo" : target!.displayName || target!.email;
+    const ok = await confirm({
+      title: `Mandar pra ${who}?`,
+      body:
+        draft.audience === "all"
+          ? "O pop-up aparece uma vez pra cada pessoa, na próxima vez que ela abrir o app."
+          : "O pop-up aparece pra essa pessoa na próxima vez que ela abrir o app.",
+      confirmLabel: "Mandar",
+      tone: "primary",
+    });
+    if (!ok) return;
+    setIsSending(true);
+    try {
+      await apiRequest("/announcements", {
+        method: "POST",
+        token,
+        body: {
+          icon: draft.icon,
+          tag: draft.tag,
+          title: draft.title,
+          text: draft.text,
+          bullets: bulletsOf(draft),
+          ctaLabel: draft.ctaPath ? draft.ctaLabel : "",
+          ctaPath: draft.ctaPath,
+          audience: draft.audience,
+          targetUserId: draft.audience === "user" ? draft.targetUserId : undefined,
+        },
+      });
+      showToast("Pop-up enviado", { description: `Vai aparecer pra ${who}` });
+      setDraft(EMPTY_DRAFT);
+      setPersonQuery("");
+      loadSent();
+    } catch (err) {
+      showToast("Não foi possível enviar", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  async function toggleActive(announcement: Announcement) {
+    try {
+      const updated = await apiRequest<Announcement>(`/announcements/${announcement.id}`, {
+        method: "PATCH",
+        token,
+        body: { active: !announcement.active },
+      });
+      setSent((prev) => prev?.map((a) => (a.id === updated.id ? updated : a)) ?? prev);
+      showToast(updated.active ? "Pop-up reativado" : "Pop-up desativado", {
+        description: updated.active ? "Quem ainda não viu vai ver" : "Ninguém mais vai ver este pop-up",
+      });
+    } catch (err) {
+      showToast("Não foi possível mudar", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    }
+  }
+
+  return (
+    <div className="announce-admin">
+      <form className="card announce-form" onSubmit={handleSend}>
+        <p className="card-title">Novo pop-up</p>
+
+        <div className="announce-row" role="group" aria-label="Modelo">
+          {TEMPLATES.map((t) => (
+            <button key={t.label} type="button" className="chat-kind-pick" onClick={() => setDraft({ ...EMPTY_DRAFT, ...t.draft })}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="field">
+          <span className="field-label">Pra quem</span>
+          <div className="announce-row">
+            <button type="button" className={`chat-kind-pick${draft.audience === "all" ? " active" : ""}`} onClick={() => set("audience", "all")}>
+              Todo mundo
+            </button>
+            <button type="button" className={`chat-kind-pick${draft.audience === "user" ? " active" : ""}`} onClick={() => set("audience", "user")}>
+              Uma pessoa
+            </button>
+          </div>
+        </div>
+
+        {draft.audience === "user" && (
+          <div className="field">
+            <label htmlFor="announce-person">Pessoa</label>
+            {target ? (
+              <div className="announce-person-picked">
+                <span className="loan-avatar" aria-hidden="true">
+                  {(target.displayName || target.email).charAt(0).toUpperCase()}
+                </span>
+                <span className="announce-person-info">
+                  <strong className="text-truncate">{target.displayName || "Sem nome"}</strong>
+                  <small className="text-truncate">{target.email}</small>
+                </span>
+                <button type="button" className="link-button" onClick={() => set("targetUserId", "")}>
+                  Trocar
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  id="announce-person"
+                  type="search"
+                  value={personQuery}
+                  onChange={(e) => setPersonQuery(e.target.value)}
+                  placeholder="Buscar por nome ou email"
+                  autoComplete="off"
+                />
+                <ul className="announce-people">
+                  {people === null ? (
+                    <li className="field-hint">Carregando...</li>
+                  ) : matches.length === 0 ? (
+                    <li className="field-hint">Ninguém encontrado.</li>
+                  ) : (
+                    matches.map((p) => (
+                      <li key={p.id}>
+                        <button type="button" className="announce-person-row" onClick={() => set("targetUserId", p.id)}>
+                          <strong className="text-truncate">{p.displayName || "Sem nome"}</strong>
+                          <small className="text-truncate">{p.email}</small>
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="field">
+          <span className="field-label">Ícone</span>
+          <div className="announce-icons">
+            {ICON_CHOICES.map((icon) => (
+              <button
+                key={icon}
+                type="button"
+                className={`announce-icon-pick${draft.icon === icon ? " active" : ""}`}
+                aria-label={icon}
+                aria-pressed={draft.icon === icon}
+                onClick={() => set("icon", icon)}
+              >
+                <Icon name={icon} className="icon" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="announce-grid">
+          <div className="field">
+            <label htmlFor="announce-tag">Etiqueta</label>
+            <input id="announce-tag" value={draft.tag} maxLength={24} onChange={(e) => set("tag", e.target.value)} placeholder="Novidade" />
+          </div>
+          <div className="field">
+            <label htmlFor="announce-title">Título</label>
+            <input id="announce-title" value={draft.title} maxLength={80} onChange={(e) => set("title", e.target.value)} placeholder="Chegou o fechamento do mês" />
+          </div>
+        </div>
+
+        <div className="field">
+          <label htmlFor="announce-text">Texto</label>
+          <textarea id="announce-text" rows={3} value={draft.text} maxLength={600} onChange={(e) => set("text", e.target.value)} />
+        </div>
+
+        <div className="field">
+          <label htmlFor="announce-bullets">Destaques (opcional, um por linha, até 4)</label>
+          <textarea id="announce-bullets" rows={3} value={draft.bullets} onChange={(e) => set("bullets", e.target.value)} />
+        </div>
+
+        <div className="announce-grid">
+          <div className="field">
+            <label htmlFor="announce-cta-path">Botão leva pra (opcional)</label>
+            <select id="announce-cta-path" value={draft.ctaPath} onChange={(e) => set("ctaPath", e.target.value)}>
+              <option value="">Sem botão, só "Entendi"</option>
+              {SCREENS.map((s) => (
+                <option key={s.path} value={s.path}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {draft.ctaPath && (
+            <div className="field">
+              <label htmlFor="announce-cta-label">Texto do botão</label>
+              <input id="announce-cta-label" value={draft.ctaLabel} maxLength={30} onChange={(e) => set("ctaLabel", e.target.value)} placeholder="Ver agora" />
+            </div>
+          )}
+        </div>
+
+        <button type="submit" className="btn btn-primary" disabled={!!missing || isSending}>
+          {isSending ? "Enviando..." : missing ?? (draft.audience === "all" ? "Mandar pra todo mundo" : `Mandar pra ${target?.displayName.split(" ")[0] || "essa pessoa"}`)}
+        </button>
+      </form>
+
+      <div className="announce-side">
+        <p className="announce-side-label">Prévia</p>
+        <div className="modal-panel welcome-tour announce-preview" aria-hidden="true">
+          <span className="welcome-tour-skip link-button">Fechar</span>
+          <AnnouncementContent
+            announcement={{
+              icon: draft.icon,
+              tag: draft.tag,
+              title: draft.title || "Título do pop-up",
+              text: draft.text || "O texto aparece aqui.",
+              bullets: bulletsOf(draft),
+            }}
+          />
+          <div className="modal-actions">
+            {draft.ctaPath ? (
+              <>
+                <span className="btn btn-outline">Agora não</span>
+                <span className="btn btn-primary">{draft.ctaLabel || "Botão"}</span>
+              </>
+            ) : (
+              <span className="btn btn-primary">Entendi</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="card announce-sent">
+        <p className="card-title">Enviados</p>
+        {sent === null ? (
+          <p className="empty-state">Carregando...</p>
+        ) : sent.length === 0 ? (
+          <p className="empty-state">Nenhum pop-up enviado ainda.</p>
+        ) : (
+          <ul className="announce-sent-list">
+            {sent.map((a) => (
+              <li key={a.id} className={a.active ? "" : "is-off"}>
+                <span className="announce-sent-icon" aria-hidden="true">
+                  <Icon name={a.icon} className="icon" />
+                </span>
+                <span className="announce-sent-info">
+                  <strong className="text-truncate">{a.title}</strong>
+                  <small>
+                    {a.audience === "all" ? "Todo mundo" : `Pra ${a.targetName ?? "uma pessoa"}`} · {when(a.createdAt)} · visto por {a.seenCount}
+                    {a.active ? "" : " · desativado"}
+                  </small>
+                </span>
+                <button type="button" className="link-button" onClick={() => toggleActive(a)}>
+                  {a.active ? "Desativar" : "Reativar"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
