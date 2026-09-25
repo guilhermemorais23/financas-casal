@@ -10,6 +10,7 @@ import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
 import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
 import { BILLS_TABS } from "../components/BillsTabs";
 import { FeedbackChat, useFeedbackUnread } from "../components/FeedbackChat";
+import { useSwipeDownToClose } from "../hooks/useSwipeDownToClose";
 import { useTheme } from "../hooks/useTheme";
 import { currentMonthParam, formatCurrency, monthLongName } from "../utils/format";
 
@@ -89,6 +90,8 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isAdminNavOpen, setIsAdminNavOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const moreSheetRef = useRef<HTMLDivElement>(null);
+  useSwipeDownToClose(moreSheetRef, () => setIsMoreOpen(false), isMoreOpen);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const isOnNewTransaction = location.pathname === "/transactions/new";
@@ -374,13 +377,14 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       {isMoreOpen && (
         <div className="more-sheet-backdrop" onClick={() => setIsMoreOpen(false)}>
           <div
+            ref={moreSheetRef}
             className="more-sheet"
             role="dialog"
             aria-modal="true"
             aria-label="Mais opções"
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="more-sheet-handle" aria-hidden="true" />
+            <span className="more-sheet-handle" data-swipe-handle aria-hidden="true" />
             <div className="more-sheet-user">
               <Avatar photoDataUrl={user?.photoDataUrl} name={user?.displayName} />
               <div className="more-sheet-user-text">

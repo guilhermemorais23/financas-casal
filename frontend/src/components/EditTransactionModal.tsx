@@ -3,6 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
 import { useToast } from "./ToastProvider";
+import { Sheet } from "./Sheet";
 
 interface CategoryRow {
   id: string;
@@ -108,132 +109,128 @@ export function EditTransactionModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
-        <h1>Editar lançamento</h1>
+    <Sheet onClose={onClose}>
+      <h1>Editar lançamento</h1>
 
-        <div className="segmented">
-          <button
-            type="button"
-            className={`segmented-option${transactionType === "expense" ? " active" : ""}`}
-            onClick={() => setTransactionType("expense")}
-          >
-            Despesa
-          </button>
-          <button
-            type="button"
-            className={`segmented-option${transactionType === "income" ? " active" : ""}`}
-            onClick={() => setTransactionType("income")}
-          >
-            Receita
-          </button>
+      <div className="segmented">
+        <button
+          type="button"
+          className={`segmented-option${transactionType === "expense" ? " active" : ""}`}
+          onClick={() => setTransactionType("expense")}
+        >
+          Despesa
+        </button>
+        <button
+          type="button"
+          className={`segmented-option${transactionType === "income" ? " active" : ""}`}
+          onClick={() => setTransactionType("income")}
+        >
+          Receita
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="edit-description">Descrição</label>
+          <input
+            id="edit-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+          />
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <div className="field-row">
           <div className="field">
-            <label htmlFor="edit-description">Descrição</label>
+            <label htmlFor="edit-amount">Valor (R$)</label>
             <input
-              id="edit-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              id="edit-amount"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
               required
             />
           </div>
-
-          <div className="field-row">
-            <div className="field">
-              <label htmlFor="edit-amount">Valor (R$)</label>
-              <input
-                id="edit-amount"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="edit-date">Data</label>
-              <input
-                id="edit-date"
-                type="date"
-                value={occurredAt}
-                onChange={(e) => setOccurredAt(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
           <div className="field">
-            <label htmlFor="edit-category">Categoria</label>
-            <select id="edit-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Sem categoria</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  
-                  {category.name}
+            <label htmlFor="edit-date">Data</label>
+            <input
+              id="edit-date"
+              type="date"
+              value={occurredAt}
+              onChange={(e) => setOccurredAt(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+
+        <div className="field">
+          <label htmlFor="edit-category">Categoria</label>
+          <select id="edit-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Sem categoria</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="edit-account">Conta</label>
+            <select id="edit-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
                 </option>
               ))}
             </select>
           </div>
-
-          <div className="field-row">
-            <div className="field">
-              <label htmlFor="edit-account">Conta</label>
-              <select id="edit-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    
-                    {account.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="edit-payer">{transactionType === "income" ? "Quem recebeu" : "Quem pagou"}</label>
-              <select id="edit-payer" value={payerId} onChange={(e) => setPayerId(e.target.value)}>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.id === user?.id ? "Você" : member.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
           <div className="field">
-            <label htmlFor="edit-payment-method">
-              {transactionType === "income" ? "Forma de recebimento" : "Forma de pagamento"}
-            </label>
-            <select
-              id="edit-payment-method"
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod | "")}
-            >
-              <option value="">Não informado</option>
-              {PAYMENT_METHOD_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+            <label htmlFor="edit-payer">{transactionType === "income" ? "Quem recebeu" : "Quem pagou"}</label>
+            <select id="edit-payer" value={payerId} onChange={(e) => setPayerId(e.target.value)}>
+              {members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.id === user?.id ? "Você" : member.displayName}
                 </option>
               ))}
             </select>
           </div>
+        </div>
 
-          {error && (
-            <p className="alert" role="alert">
-              {error}
-            </p>
-          )}
+        <div className="field">
+          <label htmlFor="edit-payment-method">
+            {transactionType === "income" ? "Forma de recebimento" : "Forma de pagamento"}
+          </label>
+          <select
+            id="edit-payment-method"
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod | "")}
+          >
+            <option value="">Não informado</option>
+            {PAYMENT_METHOD_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={onClose}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? "Salvando..." : "Salvar alterações"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {error && (
+          <p className="alert" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? "Salvando..." : "Salvar alterações"}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }

@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import { firebaseAuth } from "../firebase";
 import { compressToSquareDataUrl } from "../utils/imageCompression";
 import { useToast } from "./ToastProvider";
+import { Sheet } from "./Sheet";
 
 const AVATAR_SIZE = 160;
 
@@ -112,94 +113,92 @@ export function ProfileSettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
-        <h1>Editar perfil</h1>
+    <Sheet onClose={onClose}>
+      <h1>Editar perfil</h1>
 
-        <form onSubmit={handleSubmit}>
-          <div className="profile-avatar-picker">
-            {photoDataUrl ? (
-              <img src={photoDataUrl} alt="" className="profile-avatar-preview" />
-            ) : (
-              <span className="profile-avatar-preview profile-avatar-fallback">
-                {displayName.charAt(0).toUpperCase() || "?"}
-              </span>
-            )}
-            <div className="profile-avatar-actions">
-              <button type="button" className="btn btn-outline" onClick={() => fileInputRef.current?.click()}>
-                {photoDataUrl ? "Trocar foto" : "Adicionar foto"}
+      <form onSubmit={handleSubmit}>
+        <div className="profile-avatar-picker">
+          {photoDataUrl ? (
+            <img src={photoDataUrl} alt="" className="profile-avatar-preview" />
+          ) : (
+            <span className="profile-avatar-preview profile-avatar-fallback">
+              {displayName.charAt(0).toUpperCase() || "?"}
+            </span>
+          )}
+          <div className="profile-avatar-actions">
+            <button type="button" className="btn btn-outline" onClick={() => fileInputRef.current?.click()}>
+              {photoDataUrl ? "Trocar foto" : "Adicionar foto"}
+            </button>
+            {photoDataUrl && (
+              <button type="button" className="link-button" onClick={() => setPhotoDataUrl(null)}>
+                Remover foto
               </button>
-              {photoDataUrl && (
-                <button type="button" className="link-button" onClick={() => setPhotoDataUrl(null)}>
-                  Remover foto
-                </button>
-              )}
-              <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handlePhotoChange} />
-            </div>
+            )}
+            <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handlePhotoChange} />
           </div>
+        </div>
 
+        <div className="field">
+          <label htmlFor="profile-name">Nome</label>
+          <input
+            id="profile-name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="profile-email">Email</label>
+          <input
+            id="profile-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+
+        {needsCurrentPassword && (
           <div className="field">
-            <label htmlFor="profile-name">Nome</label>
+            <label htmlFor="profile-current-password">Senha atual</label>
             <input
-              id="profile-name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
+              id="profile-current-password"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
               required
             />
           </div>
+        )}
 
-          <div className="field">
-            <label htmlFor="profile-email">Email</label>
-            <input
-              id="profile-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
+        <div className="field">
+          <label htmlFor="profile-phone">Telefone (opcional)</label>
+          <input
+            id="profile-phone"
+            type="tel"
+            placeholder="(11) 91234-5678"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+        </div>
 
-          {needsCurrentPassword && (
-            <div className="field">
-              <label htmlFor="profile-current-password">Senha atual</label>
-              <input
-                id="profile-current-password"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-              />
-            </div>
-          )}
+        {error && (
+          <p className="alert" role="alert">
+            {error}
+          </p>
+        )}
+        {info && <p className="card-subtitle">{info}</p>}
 
-          <div className="field">
-            <label htmlFor="profile-phone">Telefone (opcional)</label>
-            <input
-              id="profile-phone"
-              type="tel"
-              placeholder="(11) 91234-5678"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-
-          {error && (
-            <p className="alert" role="alert">
-              {error}
-            </p>
-          )}
-          {info && <p className="card-subtitle">{info}</p>}
-
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={onClose}>
-              {info ? "Fechar" : "Cancelar"}
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? "Salvando..." : "Salvar"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onClose}>
+            {info ? "Fechar" : "Cancelar"}
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }

@@ -6312,3 +6312,165 @@ video {
   color: var(--color-text);
   font-weight: 500;
 }
+
+/* Lançamento rápido: valor grande primeiro, o resto em "Mais opções". */
+.amount-input {
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+
+.more-options-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0.25rem 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.more-options-toggle > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.more-options-toggle strong {
+  font-size: 0.9rem;
+}
+
+.more-options-toggle small {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.more-options-toggle .icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  transition: transform 0.15s ease;
+}
+
+.more-options-toggle[aria-expanded="true"] .icon {
+  transform: rotate(180deg);
+}
+
+/* Janelas (components/Sheet.tsx): X fixo no canto; no celular viram painel
+   que sobe de baixo, com puxador pra arrastar e fechar. */
+.modal-panel.sheet-card {
+  position: relative;
+}
+
+.sheet-close-floating {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+}
+
+.modal-panel.sheet-card > h1:first-of-type,
+.modal-panel.sheet-card .import-head {
+  padding-right: 2.75rem;
+}
+
+@media (max-width: 720px) {
+  .modal-backdrop:has(> .sheet-card) {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-panel.sheet-card {
+    max-width: none;
+    max-height: 92vh;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    padding: 1.25rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom));
+    animation: sheet-up 0.22s ease-out;
+  }
+
+  .modal-panel.sheet-card .sheet-close-floating {
+    top: 1.35rem;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-panel.sheet-card {
+    animation: none;
+  }
+}
+
+/* Fechamento do mês (primeira semana, no Painel) */
+.month-close-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.month-close-numbers > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: var(--glyph-bg);
+}
+
+.month-close-numbers span {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.month-close-numbers strong {
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.month-close-numbers strong.negative {
+  color: var(--status-critical);
+}
+
+.month-close-card .card-subtitle {
+  margin: 0 0 0.35rem;
+}
+
+.month-close-dismiss {
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 480px) {
+  .month-close-numbers {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+
+  .month-close-numbers > div {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}

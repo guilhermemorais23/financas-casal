@@ -361,7 +361,6 @@ export function RecurringBillsPage() {
                 <option value="">Sem categoria</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
-                    
                     {category.name}
                   </option>
                 ))}

@@ -387,13 +387,15 @@ export interface PayerSummaryRow {
   total: string;
 }
 
-export type SummaryScope = "joint" | "visible";
+export type SummaryScope = "joint" | "visible" | "own";
 
 // "joint": only what leaves "Nossa Conta" -- used by the Par page, which is
 // specifically about the shared budget.
 // "visible": joint + the requester's own personal account -- matches exactly
 // what findTransactionsVisibleTo returns, so a page showing both a category
 // breakdown and an extrato (Relatórios) never has one contradict the other.
+// "own": só a conta pessoal de quem pede -- a mesma base do número do Painel
+// e do fechamento do mês, pra "onde mais foi" bater com "saiu".
 function fetchExpenseDocsForSummary(
   groupId: string,
   requestingUserId: string,
@@ -430,6 +432,10 @@ async function loadExpenseDocsForSummary(
     .where("transactionType", "==", "expense")
     .where("occurredAt", ">=", monthStart)
     .where("occurredAt", "<", monthEnd);
+
+  if (scope === "own") {
+    return (await ownQuery.get()).docs;
+  }
 
   const [jointSnap, ownSnap] = await Promise.all([jointQuery.get(), ownQuery.get()]);
   const seen = new Set<string>();

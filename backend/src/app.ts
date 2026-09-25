@@ -10,6 +10,7 @@ import { categoriesRouter } from "./modules/categories/categories.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { debtsRouter } from "./modules/debts/debts.routes";
 import { feedbackRouter } from "./modules/feedback/feedback.routes";
+import { monthCloseRouter } from "./modules/monthClose/monthClose.routes";
 import { loansRouter } from "./modules/loans/loans.routes";
 import { goalsRouter } from "./modules/goals/goals.routes";
 import { groupsRouter } from "./modules/groups/groups.routes";
@@ -100,6 +101,7 @@ export function createApp() {
   app.use("/api/statements", statementsRouter);
   app.use("/api/feedback", feedbackRouter);
   app.use("/api/loans", loansRouter);
+  app.use("/api/month-close", monthCloseRouter);
   app.use("/api/public/shares", publicSharesRouter);
 
   app.use(errorHandler);

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "./ToastProvider";
+import { Sheet } from "./Sheet";
 
 export interface EditableDebt {
   id: string;
@@ -64,54 +65,52 @@ export function EditDebtModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
-        <h1>Editar dívida</h1>
+    <Sheet onClose={onClose}>
+      <h1>Editar dívida</h1>
 
-        <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label htmlFor="edit-debt-name">Nome</label>
-            <input id="edit-debt-name" value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="edit-debt-name">Nome</label>
+          <input id="edit-debt-name" value={name} onChange={(e) => setName(e.target.value)} required />
+        </div>
 
-          <div className="field">
-            <label htmlFor="edit-debt-description">Descrição (opcional)</label>
-            <input
-              id="edit-debt-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
+        <div className="field">
+          <label htmlFor="edit-debt-description">Descrição (opcional)</label>
+          <input
+            id="edit-debt-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
 
-          <div className="field">
-            <label htmlFor="edit-debt-due-day">Dia do vencimento (opcional)</label>
-            <input
-              id="edit-debt-due-day"
-              type="number"
-              min={1}
-              max={31}
-              placeholder="ex: 10"
-              value={dueDay}
-              onChange={(e) => setDueDay(e.target.value)}
-            />
-          </div>
+        <div className="field">
+          <label htmlFor="edit-debt-due-day">Dia do vencimento (opcional)</label>
+          <input
+            id="edit-debt-due-day"
+            type="number"
+            min={1}
+            max={31}
+            placeholder="ex: 10"
+            value={dueDay}
+            onChange={(e) => setDueDay(e.target.value)}
+          />
+        </div>
 
-          {error && (
-            <p className="alert" role="alert">
-              {error}
-            </p>
-          )}
+        {error && (
+          <p className="alert" role="alert">
+            {error}
+          </p>
+        )}
 
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={onClose}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? "Salvando..." : "Salvar alterações"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? "Salvando..." : "Salvar alterações"}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
