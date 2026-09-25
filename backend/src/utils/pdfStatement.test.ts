@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PdfPasswordError, findUnreadLines, parsePdfStatement, readLinesWithoutAi, reconcile } from "./pdfStatement";
+import { PdfPasswordError, findUnreadLines, parsePdfStatement, readBalanceColumn, readLinesWithoutAi, reconcile } from "./pdfStatement";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, "__fixtures__", name)));
 
@@ -77,5 +77,56 @@ describe("readLinesWithoutAi: nome na linha de baixo", () => {
     expect(findUnreadLines(lines, [{ date: "2026-09-02", description: "MERCADO", amountCents: -1000, externalId: null }])).toEqual([
       "03/09 12345 67890 -20,00",
     ]);
+  });
+});
+
+describe("readBalanceColumn (layout do Bradesco Celular)", () => {
+  const page = (n: number) => [
+    "Bradesco Celular",
+    "Data: 25/09/2026 - 17h22",
+    "Nome: FULANO DE TAL",
+    `Extrato de: Agência: 1 | Conta: 1234-5 | Movimentação entre: 01/09/2026 e 25/09/2026 Folha: ${n}/2`,
+    "Data Histórico Docto. Crédito (R$) Débito (R$) Saldo (R$)",
+  ];
+  const lines = [
+    ...page(1),
+    "31/08/2026 COD. LANC. 0 0,00 1.000,00",
+    "PIX RECEBIDO",
+    "01/09/2026 1642458 50,00 1.050,00",
+    "REM: Maria de Lourdes Silv 01/09",
+    "RENTAB.INVEST FACILCRED* 0935700 0,22 1.050,22",
+    "COMPRA CARTAO VISA",
+    "0501620 26,06 1.024,16",
+    "REDE COMPRAS AEROCLU",
+    ...page(2),
+    "PIX ENVIADO",
+    "02/09/2026 0831374 100,00 924,16",
+    "DES: JOAO PESSOA SERVICO D 01/09",
+    "Total 50,22 126,06 924,16",
+    "02/09/2026 COD. LANC. 0 924,16",
+    "PIX QR CODE DINAMICO",
+    "03/09/2026 1048143 24,16 900,00",
+    "DES: REDE BOM COMERCIO LTD 03/09",
+    "Total 0,00 24,16 900,00",
+  ];
+
+  it("junta histórico + nome, tira o sinal do saldo e nunca lança linha de saldo", () => {
+    const read = readBalanceColumn(lines)!;
+    expect(read.rows.map((row) => [row.date, row.description, row.amountCents])).toEqual([
+      ["2026-09-01", "PIX RECEBIDO - Maria de Lourdes Silv", 5000],
+      ["2026-09-01", "RENTAB.INVEST FACILCRED*", 22],
+      ["2026-09-01", "COMPRA CARTAO VISA - REDE COMPRAS AEROCLU", -2606],
+      ["2026-09-02", "PIX ENVIADO - JOAO PESSOA SERVICO D", -10000],
+      ["2026-09-03", "PIX QR CODE DINAMICO - REDE BOM COMERCIO LTD", -2416],
+    ]);
+    expect(read.openingBalanceCents).toBe(100000);
+    expect(read.closingBalanceCents).toBe(90000);
+    expect(read.mismatched).toEqual([]);
+    expect(reconcile(read)).toEqual({ reconciled: true, differenceCents: 0 });
+  });
+
+  it("põe na lista do não conciliado a linha em que o saldo não bate (linha faltando)", () => {
+    const missing = lines.filter((line) => !line.startsWith("RENTAB"));
+    expect(readBalanceColumn(missing)!.mismatched).toEqual(["0501620 26,06 1.024,16"]);
   });
 });

@@ -194,6 +194,118 @@ export function readLinesWithoutAi(lines: string[]): PdfRead {
   };
 }
 
+// ---- extrato com coluna de saldo (Bradesco e parecidos) -----------------
+//
+// Cada lançamento ocupa até três linhas:
+//   PIX ENVIADO                              <- histórico
+//   01/09/2026 0831374 109,71 55.362,46      <- [data] docto valor saldo
+//   DES: JOAO PESSOA SERVICO D 01/09         <- nome de quem recebeu/pagou
+// Crédito e débito vêm os dois positivos: o sinal sai da diferença de saldo
+// entre uma linha e a anterior. Linha em que o saldo não bate com o valor
+// vai pra lista do "não conciliado".
+
+const MONEY = String.raw`-?\d{1,3}(?:\.\d{3})*,\d{2}`;
+const VALUE_LINE = new RegExp(String.raw`^(?:(\d{2}\/\d{2}\/\d{4})\s+)?(.*?)\s*\b(\d{1,9})\s+(${MONEY})\s+(${MONEY})$`);
+const BALANCE_ONLY = new RegExp(String.raw`^(?:(\d{2}\/\d{2}\/\d{4})\s+)?(?:cod\.?\s*lanc\.?|saldo).*?\s(${MONEY})$`, "i");
+const PAGE_HEADER = /^(data:|nome:|extrato de:|data\s+hist)|folha:\s*\d+\s*\/\s*\d+/i;
+
+const noDigits = (line: string) => line.replace(/\d/g, "");
+
+// "DES: Maria de Lourdes Silv 01/09" -> "Maria de Lourdes Silv".
+function nameFrom(line: string): string {
+  return line
+    .replace(/^(des|rem|fav|favorecido|pagador)\s*:\s*/i, "")
+    .replace(/\s+\d{2}\/\d{2}$/, "")
+    .trim();
+}
+
+export interface BalanceColumnRead extends PdfRead {
+  mismatched: string[];
+}
+
+export function readBalanceColumn(lines: string[]): BalanceColumnRead | null {
+  // Cabeçalho que o banco repete em toda página: o que vem antes da linha
+  // "Data Histórico ..." na primeira página.
+  const firstColumns = lines.findIndex((line) => /^data\s+hist/i.test(line));
+  const pageHeader = new Set(lines.slice(0, Math.max(firstColumns + 1, 0)).map(noDigits));
+
+  const rows: ParsedStatementRow[] = [];
+  const mismatched: string[] = [];
+  let opening: number | null = null;
+  let balance: number | null = null;
+  let date: string | null = null;
+  let pending: string[] = [];
+  let last: ParsedStatementRow | null = null;
+
+  const attachName = (texts: string[]) => {
+    if (!last) return;
+    const name = texts.filter((t) => !/^(bco|age|cta)\s*:/i.test(t)).map(nameFrom).filter(Boolean).join(" ");
+    if (name) last.description = `${last.description} - ${name}`;
+  };
+
+  for (const line of lines) {
+    if (pageHeader.has(noDigits(line)) || PAGE_HEADER.test(line) || /^total\b/i.test(line)) continue;
+
+    const balanceOnly = line.match(BALANCE_ONLY);
+    const value = !balanceOnly || /\d+,\d{2}\s+-?[\d.]+,\d{2}$/.test(line) ? line.match(VALUE_LINE) : null;
+    if (!value && balanceOnly) {
+      if (balanceOnly[1]) date = parseDate(balanceOnly[1]);
+      const cents = parseAmountToCents(balanceOnly[2]);
+      if (cents !== null) {
+        balance = cents;
+        if (opening === null) opening = cents;
+      }
+      attachName(pending);
+      pending = [];
+      last = null;
+      continue;
+    }
+    if (!value) {
+      pending.push(line);
+      continue;
+    }
+
+    const [, rawDate, inline, , rawAmount, rawBalance] = value;
+    if (rawDate) date = parseDate(rawDate);
+    const amount = parseAmountToCents(rawAmount);
+    const newBalance = parseAmountToCents(rawBalance);
+    if (amount === null || newBalance === null || !date) {
+      pending = [];
+      continue;
+    }
+    // Linhas soltas entre dois lançamentos: se esta linha já traz o próprio
+    // histórico, todas eram o nome do anterior; senão a última é o histórico
+    // desta e as outras, o nome do anterior.
+    const text = inline.trim();
+    const history = text || pending.pop() || "";
+    attachName(pending);
+    pending = [];
+
+    if (/cod\.?\s*lanc/i.test(history) || amount === 0) {
+      balance = newBalance;
+      if (opening === null) opening = newBalance;
+      last = null;
+      continue;
+    }
+
+    let cents = -Math.abs(amount);
+    if (balance !== null) {
+      const delta = newBalance - balance;
+      if (delta === Math.abs(amount)) cents = Math.abs(amount);
+      else if (delta !== -Math.abs(amount)) mismatched.push(line);
+    } else if (opening === null) {
+      opening = newBalance + Math.abs(amount); // melhor palpite: foi saída
+    }
+    balance = newBalance;
+    last = { date, description: history || "Lançamento", amountCents: cents, externalId: null };
+    rows.push(last);
+  }
+  attachName(pending);
+
+  if (rows.length < 3) return null;
+  return { rows, openingBalanceCents: opening, closingBalanceCents: balance, mismatched };
+}
+
 // Linhas que têm data e valor mas não viraram lançamento (nem são saldo):
 // o que pode ter ficado de fora quando a soma não bate.
 export function findUnreadLines(lines: string[], rows: ParsedStatementRow[]): string[] {
@@ -273,6 +385,18 @@ export function reconcile(read: PdfRead) {
 
 export async function parsePdfStatement(data: Uint8Array, password?: string): Promise<PdfStatement> {
   const lines = await extractPdfLines(data, password);
+
+  // Extrato com coluna de saldo: leitura exata, conferida linha a linha.
+  // Quando bate, nem precisa da IA.
+  const byBalance = readBalanceColumn(lines);
+  if (byBalance) {
+    const { mismatched, ...read } = byBalance;
+    const check = reconcile(read);
+    if (check.reconciled !== false || mismatched.length > 0) {
+      return { ...read, ...check, readBy: "text", unreadLines: mismatched.slice(0, 30) };
+    }
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   let read = readLinesWithoutAi(lines);
   let readBy: PdfStatement["readBy"] = "text";

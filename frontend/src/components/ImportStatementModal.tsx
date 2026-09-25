@@ -455,16 +455,16 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               <small>
                 {isReading
                   ? "Copiando data, nome e valor de cada linha e conferindo com o saldo."
-                  : "PDF do extrato, OFX ou CSV, do app ou do site do banco"}
+                  : "PDF do extrato (pode ter senha), OFX ou CSV, do app ou do site do banco"}
               </small>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => inputRef.current?.click()} disabled={isReading}>
-                Escolher arquivo
+                Escolher PDF ou arquivo
               </button>
               <input
                 ref={inputRef}
                 id="import-file"
                 type="file"
-                accept=".ofx,.qfx,.csv,.txt,.pdf,text/csv,application/pdf"
+                accept="application/pdf,.pdf,.ofx,.qfx,.csv,.txt,text/csv"
                 hidden
                 onChange={(event) => {
                   const file = event.target.files?.[0];
