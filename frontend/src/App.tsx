@@ -5,6 +5,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PageSkeleton } from "./components/Skeleton";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import { ToastProvider } from "./components/ToastProvider";
+import { AnnouncementPopup } from "./components/AnnouncementPopup";
 import { WelcomeTour } from "./components/WelcomeTour";
 import { importWithRecovery } from "./utils/appRecovery";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
@@ -198,6 +199,7 @@ function App() {
           </Routes>
         </Suspense>
         <WelcomeTour />
+        <AnnouncementPopup />
         </ErrorBoundary>
       </AuthProvider>
       </ConfirmProvider>

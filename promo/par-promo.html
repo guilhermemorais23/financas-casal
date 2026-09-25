@@ -6,9 +6,11 @@
 <title>PAR. — vídeo de apresentação</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800;900&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800&display=swap" rel="stylesheet" />
 <!--
-  Video de apresentacao do PAR., feito so com HTML + JS (Web Animations API).
+  Video de apresentacao do PAR. (v2), feito so com HTML + JS (Web Animations
+  API), usando telas reais do app (promo/telas/, capturadas com dados de
+  demonstracao).
 
   Tudo roda numa linha do tempo unica: cada animacao e criada pausada com o
   seu "delay" e a funcao seek(t) posiciona todas no tempo t. Assim da pra:
@@ -17,24 +19,14 @@
 -->
 <style>
   :root {
-    --page: #efece5;
-    --surface: #fbfaf8;
-    --ink: #191933;
-    --ink-2: #62637e;
-    --ink-3: #9495ae;
-    --line: #e6e2d8;
-    --track: #e7e2d7;
+    --page: #f3f4f6;
+    --surface: #ffffff;
+    --ink: #16161d;
+    --ink-2: #5f6070;
+    --line: #e4e5ea;
     --purple: #6d54ec;
-    --purple-dark: #452fac;
     --purple-soft: #ece9fc;
-    --blue: #3e79f7;
-    --blue-soft: #e4ecfe;
-    --good: #0ca30c;
-    --good-text: #006300;
-    --warn: #fab219;
-    --bad: #d03b3b;
     --font-brand: "Archivo", system-ui, sans-serif;
-    --font-display: "Fraunces", Georgia, serif;
     --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -44,183 +36,84 @@
   /* Palco fixo 1280x720; no navegador ele e escalado pra caber na janela. */
   #stage {
     position: relative; width: 1280px; height: 720px; flex: none;
-    background: var(--page); overflow: hidden; transform-origin: center;
+    background: var(--page); overflow: hidden; transform-origin: center; color: var(--ink);
   }
-  .abs { position: absolute; }
-  .hid { opacity: 0; }
 
-  /* Fundo: quadrados grandes da marca girando devagar */
-  .bg-sq { position: absolute; border-radius: 6px; }
-  #bg1 { width: 520px; height: 520px; left: -170px; top: -210px; background: var(--purple-soft); }
-  #bg2 { width: 460px; height: 460px; right: -150px; bottom: -200px; border: 34px solid rgba(62, 121, 247, 0.10); }
+  /* Fundo: os dois quadrados da marca, grandes e bem claros */
+  .bg-sq { position: absolute; border-radius: 4px; }
+  #bg1 { width: 460px; height: 460px; left: -190px; top: -220px; background: var(--purple-soft); }
+  #bg2 { width: 420px; height: 420px; right: -170px; bottom: -210px; border: 30px solid rgba(22, 22, 29, 0.05); }
 
-  /* Logo (lockup) */
-  .lockup { position: absolute; display: flex; align-items: center; }
+  /* Logo */
+  .lockup { position: absolute; display: flex; align-items: center; gap: 44px; }
   .lockup .mark { display: block; line-height: 0; }
   .lockup svg { overflow: visible; display: block; }
   .lockup .name {
-    font-family: var(--font-brand); font-weight: 800; letter-spacing: -0.02em;
-    color: var(--ink); line-height: 1; opacity: 0;
+    font-family: var(--font-brand); font-weight: 800; letter-spacing: -0.02em; font-size: 150px;
+    line-height: 1; opacity: 0;
   }
   .dot { color: var(--purple); }
-  .big-lockup { gap: 44px; }
-  .big-lockup .name { font-size: 150px; }
-  .tagline {
-    position: absolute; left: 0; right: 0; text-align: center;
-    font-family: var(--font-display); font-weight: 500; font-size: 36px; color: var(--ink-2);
-  }
+  .tagline { position: absolute; left: 0; right: 0; text-align: center; font-size: 32px; font-weight: 500; color: var(--ink-2); }
 
-  /* Palavras rapidas */
+  /* Frases rapidas */
   .kw {
-    position: absolute; left: 0; right: 0; top: 300px; text-align: center;
-    font-family: var(--font-brand); font-weight: 800; font-size: 96px; letter-spacing: -0.03em; opacity: 0;
+    position: absolute; left: 0; right: 0; top: 296px; text-align: center; opacity: 0;
+    font-size: 84px; font-weight: 800; letter-spacing: -0.035em;
   }
   .kw em { font-style: normal; color: var(--purple); }
 
-  /* Texto da esquerda de cada cena */
-  .copy { position: absolute; left: 110px; top: 190px; width: 600px; }
+  /* Texto de cada cena */
+  .copy { position: absolute; left: 110px; top: 200px; width: 560px; }
   .copy > * { opacity: 0; }
   .kicker {
-    font-family: var(--font-brand); font-weight: 800; font-size: 17px; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--purple); margin-bottom: 18px;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+    font-size: 15px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--purple);
   }
-  .kicker b { color: var(--ink-3); font-weight: 700; margin-right: 10px; }
-  .copy h2 {
-    font-family: var(--font-display); font-weight: 600; font-size: 72px; line-height: 1.02;
-    letter-spacing: -0.02em; margin-bottom: 24px;
+  .pill-new {
+    font-size: 12px; letter-spacing: 0.06em; padding: 4px 10px; border-radius: 999px;
+    background: var(--purple); color: #fff;
   }
+  .copy h2 { font-size: 64px; line-height: 1.02; font-weight: 800; letter-spacing: -0.035em; margin-bottom: 22px; text-wrap: balance; }
   .copy h2 em { font-style: normal; color: var(--purple); }
-  .copy p { font-size: 23px; line-height: 1.45; color: var(--ink-2); max-width: 470px; }
+  .copy p { font-size: 22px; line-height: 1.45; color: var(--ink-2); max-width: 470px; }
+  #c7 { top: 70px; width: 380px; }
+  #c7 h2 { font-size: 52px; }
+  #c7 p { font-size: 20px; }
 
-  /* Celular */
+  /* Celular com as telas reais */
   #phone {
-    position: absolute; left: 800px; top: 34px; width: 330px; height: 652px;
-    background: var(--ink); border-radius: 50px; padding: 11px; opacity: 0;
-    box-shadow: 0 40px 80px -30px rgba(25, 25, 51, 0.55), 0 0 0 2px #2c2c4a inset;
+    position: absolute; left: 812px; top: 20px; width: 310px; height: 680px; opacity: 0;
+    background: #16161d; border-radius: 46px; padding: 10px;
+    box-shadow: 0 40px 80px -30px rgba(22, 22, 29, 0.5), 0 0 0 2px #2d2d38 inset;
   }
-  #screen {
-    position: relative; width: 100%; height: 100%; border-radius: 40px; overflow: hidden;
-    background: var(--page);
-  }
+  #screen { position: relative; width: 290px; height: 660px; border-radius: 37px; overflow: hidden; background: #fff; }
   .status {
-    height: 40px; display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 26px 0; font-size: 13px; font-weight: 700;
+    position: relative; z-index: 3; height: 32px; background: #fff; display: flex; align-items: center;
+    justify-content: space-between; padding: 4px 24px 0; font-size: 12px; font-weight: 700;
   }
-  .status i { width: 88px; height: 24px; border-radius: 14px; background: var(--ink); position: absolute; left: 50%; top: 9px; transform: translateX(-50%); }
-  .status .bat { width: 22px; height: 11px; border: 2px solid var(--ink); border-radius: 3px; position: relative; }
-  .status .bat::after { content: ""; position: absolute; inset: 1px; right: 5px; background: var(--ink); border-radius: 1px; }
-  .appbar { display: flex; align-items: center; justify-content: space-between; padding: 6px 18px 8px; }
-  .mini-lockup { display: flex; align-items: center; gap: 7px; font-family: var(--font-brand); font-weight: 800; font-size: 19px; letter-spacing: -0.02em; }
-  .avatar {
-    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
-    color: #fff; font-weight: 800; font-size: 13px; background: var(--purple); flex: none;
+  .status i { position: absolute; left: 50%; top: 7px; width: 80px; height: 22px; border-radius: 12px; background: #16161d; transform: translateX(-50%); }
+  .status .bat { width: 20px; height: 10px; border: 2px solid #16161d; border-radius: 3px; position: relative; }
+  .status .bat::after { content: ""; position: absolute; inset: 1px 4px 1px 1px; background: #16161d; border-radius: 1px; }
+  /* A área do app: 390x844 do celular real, em escala */
+  #app { position: absolute; left: 0; top: 32px; width: 290px; height: 628px; overflow: hidden; background: var(--page); }
+  .layer { position: absolute; inset: 0; opacity: 0; }
+  .layer img { position: absolute; left: 0; top: 0; width: 290px; display: block; }
+  .layer img.over { opacity: 0; }
+  #topbar { position: absolute; left: 0; top: 0; width: 290px; z-index: 2; }
+  .menu { position: absolute; left: 0; bottom: 0; width: 290px; z-index: 2; opacity: 0; }
+  .tap { position: absolute; z-index: 4; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: rgba(22, 22, 29, 0.3); opacity: 0; }
+
+  /* Notebook (Admin > Novidades) */
+  #laptop { position: absolute; left: 530px; top: 160px; width: 720px; opacity: 0; }
+  #laptop .lid { background: #16161d; border-radius: 18px 18px 6px 6px; padding: 12px 12px 14px; }
+  #laptop .shot { position: relative; width: 696px; height: 435px; overflow: hidden; border-radius: 6px; background: #fff; }
+  #laptop .shot img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+  #laptop .base { height: 16px; margin: 0 -34px; background: linear-gradient(#cfd1d8, #a9abb4); border-radius: 0 0 16px 16px; }
+
+  .cta {
+    position: absolute; left: 50%; top: 520px; opacity: 0; white-space: nowrap;
+    background: var(--purple); color: #fff; font-weight: 800; font-size: 24px; padding: 16px 34px; border-radius: 999px;
   }
-  .avatar.b { background: var(--blue); }
-  .scr { position: absolute; left: 0; right: 0; top: 88px; bottom: 0; padding: 4px 14px; opacity: 0; }
-  .scr-title { font-family: var(--font-display); font-weight: 600; font-size: 24px; margin: 2px 4px 10px; }
-
-  .card {
-    background: var(--surface); border-radius: 18px; padding: 13px 14px; margin-bottom: 10px;
-    box-shadow: 0 1px 0 rgba(25, 25, 51, 0.05), 0 10px 24px -16px rgba(25, 25, 51, 0.35);
-  }
-  .lbl { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
-  .money-xl { font-family: var(--font-brand); font-weight: 800; font-size: 34px; letter-spacing: -0.02em; }
-  .money-l { font-family: var(--font-brand); font-weight: 800; font-size: 24px; letter-spacing: -0.02em; }
-  .money-m { font-family: var(--font-brand); font-weight: 800; font-size: 15px; }
-  .row { display: flex; align-items: center; gap: 8px; }
-  .between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .chip { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; }
-  .chip.good { background: #e3f4e3; color: var(--good-text); }
-  .chip.bad { background: #fbe6e6; color: #9b2323; }
-  .chip.warn { background: #fdf0d2; color: #7a5200; }
-  .chip.purple { background: var(--purple-soft); color: var(--purple-dark); }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .grid2 .card { margin-bottom: 10px; }
-  .muted { color: var(--ink-2); font-size: 12px; }
-  .item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; font-weight: 600; opacity: 0; }
-  .item:first-of-type { border-top: 0; }
-  .item .grow { flex: 1; }
-  .ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex: none; }
-  .ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .bars { display: flex; align-items: flex-end; gap: 6px; height: 54px; }
-  .bars span { flex: 1; height: 100%; background: var(--purple); border-radius: 4px 4px 2px 2px; transform-origin: bottom; transform: scaleY(0); }
-  .bars span:nth-child(2n) { background: var(--blue); }
-
-  /* Formulario de lancamento */
-  .field { background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 8px 12px; margin-bottom: 9px; }
-  .field .lbl { margin-bottom: 1px; font-size: 11px; }
-  .field .val { font-size: 17px; font-weight: 700; min-height: 22px; }
-  .caret { display: inline-block; width: 2px; height: 18px; background: var(--purple); vertical-align: -3px; margin-left: 1px; }
-  .pay { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 9px; }
-  .pay span { position: relative; z-index: 1; text-align: center; font-size: 12px; font-weight: 700; padding: 9px 0; border-radius: 12px; background: var(--surface); border: 1.5px solid var(--line); }
-  .pay .sel { position: absolute; z-index: 2; left: 0; top: 0; height: 100%; width: calc((100% - 15px) / 4); border-radius: 12px; border: 2px solid var(--purple); background: rgba(109, 84, 236, 0.10); opacity: 0; }
-  .toggle { width: 46px; height: 27px; border-radius: 999px; background: var(--track); position: relative; flex: none; }
-  .toggle i { position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
-  .btn {
-    display: block; width: 100%; text-align: center; padding: 13px 0; border-radius: 15px;
-    background: var(--purple); color: #fff; font-weight: 800; font-size: 15px;
-  }
-  .toast {
-    position: absolute; left: 14px; right: 14px; top: 96px; z-index: 5; opacity: 0;
-    background: var(--ink); color: #fff; border-radius: 16px; padding: 12px 14px;
-    display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600;
-  }
-  .check { width: 24px; height: 24px; border-radius: 50%; background: var(--good); display: grid; place-items: center; flex: none; }
-  .check svg { width: 14px; height: 14px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-  .tap { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(25, 25, 51, 0.28); opacity: 0; z-index: 6; }
-
-  /* Par */
-  .track { height: 10px; border-radius: 999px; background: var(--track); overflow: hidden; }
-  .track i { display: block; height: 100%; border-radius: 999px; transform-origin: left; transform: scaleX(0); }
-  .person { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
-  .person .grow { flex: 1; }
-  .person .top { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
-  .paid { display: none; }
-
-  /* Contas */
-  .tabs { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border-radius: 14px; padding: 4px; margin-bottom: 11px; }
-  .tabs span { position: relative; z-index: 1; text-align: center; font-size: 12px; font-weight: 700; padding: 7px 0; }
-  .tabs .ind { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 4); border-radius: 10px; background: var(--purple-soft); }
-  .pane { position: absolute; left: 14px; right: 14px; top: 62px; opacity: 0; }
-  .credit {
-    height: 150px; border-radius: 18px; padding: 16px; color: #fff; margin-bottom: 10px;
-    background: linear-gradient(135deg, #6d54ec, #452fac 60%, #241a52);
-    display: flex; flex-direction: column; justify-content: space-between;
-  }
-  .credit .chipcard { width: 34px; height: 25px; border-radius: 6px; background: linear-gradient(135deg, #f7d88a, #d2a64a); }
-  .credit .num { font-family: var(--font-brand); font-weight: 700; letter-spacing: 0.12em; font-size: 16px; }
-
-  /* Metas / relatorios */
-  .ring { position: relative; width: 108px; height: 108px; flex: none; }
-  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-  .ring .pct { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-brand); font-weight: 800; font-size: 24px; }
-  .donut { position: relative; width: 170px; height: 170px; margin: 4px auto 10px; }
-  .donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-  .donut .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
-  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 12px; font-weight: 600; }
-  .legend div { display: flex; align-items: center; gap: 6px; opacity: 0; }
-  .legend i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-  .actions { display: grid; grid-template-columns: 1fr 1fr 1.6fr; gap: 6px; }
-  .actions span { text-align: center; font-size: 12px; font-weight: 800; padding: 10px 0; border-radius: 12px; background: var(--surface); border: 1.5px solid var(--line); opacity: 0; }
-  .actions span:last-child { background: var(--purple); color: #fff; border-color: var(--purple); }
-  .box { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--ink-3); position: relative; flex: none; }
-  .box i { position: absolute; inset: -2px; border-radius: 6px; background: var(--purple); opacity: 0; display: grid; place-items: center; }
-  .box svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
-  .strike { position: relative; }
-  .strike::after { content: ""; position: absolute; left: 0; right: 0; top: 52%; height: 2px; background: var(--ink-3); transform: scaleX(var(--k, 0)); transform-origin: left; }
-
-  /* Extras */
-  #extras-title { position: absolute; left: 0; right: 0; top: 120px; text-align: center; font-family: var(--font-display); font-weight: 600; font-size: 64px; letter-spacing: -0.02em; opacity: 0; }
-  #extras-title em { font-style: normal; color: var(--purple); }
-  #extras { position: absolute; left: 130px; right: 130px; top: 270px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
-  .feat { background: var(--surface); border-radius: 22px; padding: 22px 20px; opacity: 0; box-shadow: 0 16px 34px -22px rgba(25, 25, 51, 0.35); }
-  .feat .ic { width: 44px; height: 44px; border-radius: 13px; margin-bottom: 14px; }
-  .feat .ic svg { width: 23px; height: 23px; }
-  .feat b { display: block; font-size: 19px; line-height: 1.2; margin-bottom: 5px; }
-  .feat span { font-size: 14px; color: var(--ink-2); line-height: 1.35; }
-
-  /* Final */
-  .cta { position: absolute; left: 50%; top: 520px; transform: translateX(-50%); opacity: 0; background: var(--purple); color: #fff; font-weight: 800; font-size: 24px; padding: 16px 34px; border-radius: 999px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -228,154 +121,74 @@
   <div class="bg-sq" id="bg1"></div>
   <div class="bg-sq" id="bg2"></div>
 
-  <!-- Abertura: logo -->
-  <div class="lockup big-lockup" id="logo1">
-    <span class="mark"><svg viewBox="0 0 94 104" width="150" height="166"><rect class="sq-f" x="6" y="14" width="46" height="46" fill="#6d54ec" /><rect class="sq-o" x="34" y="42" width="46" height="46" fill="none" stroke="#191933" stroke-width="8" /></svg></span>
+  <!-- Abertura -->
+  <div class="lockup" id="logo1">
+    <span class="mark"><svg viewBox="0 0 94 104" width="150" height="166"><rect class="sq-f" x="6" y="14" width="46" height="46" fill="#6d54ec" /><rect class="sq-o" x="34" y="42" width="46" height="46" fill="none" stroke="#16161d" stroke-width="8" /></svg></span>
     <span class="name">PAR<span class="dot">.</span></span>
   </div>
-  <div class="tagline" id="tag1" style="top: 468px"></div>
+  <div class="tagline" id="tag1" style="top: 470px"></div>
 
-  <!-- Palavras rapidas -->
-  <div class="kw" id="kw1">Mercado.</div>
-  <div class="kw" id="kw2">Aluguel.</div>
-  <div class="kw" id="kw3">Pix pro amigo.</div>
-  <div class="kw" id="kw4">Fatura do cartão.</div>
-  <div class="kw" id="kw5">Tudo num <em>lugar só.</em></div>
+  <div class="kw" id="kw1">Visual novo.</div>
+  <div class="kw" id="kw2">Lançamento em 2 toques.</div>
+  <div class="kw" id="kw3">Avisos no app.</div>
+  <div class="kw" id="kw4">Olha como <em>ficou.</em></div>
 
-  <!-- Textos das cenas -->
-  <div class="copy" id="c1"><div class="kicker"><b>01</b>Painel</div><h2>Seu dinheiro,<br><em>num olhar.</em></h2><p>Saldo de hoje, quanto dá pra gastar por dia e o que vence logo.</p></div>
-  <div class="copy" id="c2"><div class="kicker"><b>02</b>Lançamentos</div><h2>Lançou,<br><em>tá dividido.</em></h2><p>Crédito, débito, Pix ou dinheiro. Divida com quem quiser, em segundos.</p></div>
-  <div class="copy" id="c3"><div class="kicker"><b>03</b>Par</div><h2>Quem pagou,<br><em>quem deve.</em></h2><p>Veja quanto cada um pagou e acerte as contas com um toque.</p></div>
-  <div class="copy" id="c4"><div class="kicker"><b>04</b>Contas</div><h2>Cartões, fixas<br><em>e dívidas.</em></h2><p>Limite, parcelas, assinaturas e o que te devem, com lembrete antes de vencer.</p></div>
-  <div class="copy" id="c5"><div class="kicker"><b>05</b>Planejar</div><h2>Metas que<br><em>saem do papel.</em></h2><p>Guarde um pouco por mês, acompanhe investimentos e a lista de compras do grupo.</p></div>
-  <div class="copy" id="c6"><div class="kicker"><b>06</b>Relatórios</div><h2>Pra onde foi<br><em>o dinheiro?</em></h2><p>Gastos por categoria, visão do ano, PDF, CSV e importação de extrato do banco.</p></div>
+  <!-- Textos -->
+  <div class="copy" id="c1"><div class="kicker">Painel</div><h2>Seu mês,<br><em>num olhar.</em></h2><p>Quanto sobra, quanto dá pra gastar por dia, o que vence logo e o extrato do mês.</p></div>
+  <div class="copy" id="c2"><div class="kicker"><span class="pill-new">Novo</span>Lançamento rápido</div><h2>Valor primeiro.<br><em>Pronto.</em></h2><p>Digite o valor e a descrição; o resto já vem preenchido. Data, conta e divisão ficam em Mais opções.</p></div>
+  <div class="copy" id="c3"><div class="kicker">Par</div><h2>Conta do casal,<br><em>sem conta de cabeça.</em></h2><p>Quanto cada um pagou, o que está em aberto e onde o casal mais gastou.</p></div>
+  <div class="copy" id="c4"><div class="kicker">Contas</div><h2>Cartões, fixas,<br><em>dívidas e quem te deve.</em></h2><p>Fatura, limite e parcelas; contas que se lançam sozinhas todo mês; empréstimos com data pra receber.</p></div>
+  <div class="copy" id="c5"><div class="kicker">Planejar</div><h2>Metas e a<br><em>lista do mercado.</em></h2><p>Quanto guardar por mês pra chegar no prazo, e uma lista de compras que os dois editam.</p></div>
+  <div class="copy" id="c6"><div class="kicker">Relatórios</div><h2>Pra onde foi<br><em>o dinheiro.</em></h2><p>Entrada, saída e saldo, gastos por categoria, exportar e importar extrato do banco.</p></div>
+  <div class="copy" id="c7"><div class="kicker"><span class="pill-new">Novo</span>Admin · Novidades</div><h2>Avisos que chegam <em>em todo mundo.</em></h2><p>Escolha um modelo, escreva, veja a prévia e mande pra todos ou pra uma pessoa. Cada um vê uma vez.</p></div>
+
+  <!-- Notebook -->
+  <div id="laptop">
+    <div class="lid"><div class="shot">
+      <img id="a1" src="telas/admin-novidades.jpg" alt="" />
+      <img id="a2" src="telas/admin-confirmar.jpg" alt="" />
+      <img id="a3" src="telas/admin-enviado.jpg" alt="" />
+    </div></div>
+    <div class="base"></div>
+  </div>
 
   <!-- Celular -->
   <div id="phone"><div id="screen">
     <div class="status"><span>9:41</span><i></i><span class="bat"></span></div>
-    <div class="appbar">
-      <span class="mini-lockup"><svg viewBox="0 0 94 104" width="20" height="22"><rect x="6" y="14" width="46" height="46" fill="#6d54ec" /><rect x="34" y="42" width="46" height="46" fill="none" stroke="#191933" stroke-width="9" /></svg><span>PAR<span class="dot">.</span></span></span>
-      <span class="avatar">G</span>
+    <div id="app">
+      <div class="layer" id="L1"><img id="i-painel" src="telas/painel.jpg" alt="" /></div>
+      <div class="layer" id="L2">
+        <img id="i-novo1" src="telas/novo-1.jpg" alt="" />
+        <img id="i-novo2" class="over" src="telas/novo-2.jpg" alt="" />
+        <img id="i-novo3" class="over" src="telas/novo-3.jpg" alt="" />
+      </div>
+      <div class="layer" id="L3"><img id="i-par" src="telas/par.jpg" alt="" /></div>
+      <div class="layer" id="L4">
+        <img id="i-cartoes" src="telas/cartoes.jpg" alt="" />
+        <img id="i-fixas" class="over" src="telas/fixas.jpg" alt="" />
+        <img id="i-dividas" class="over" src="telas/dividas.jpg" alt="" />
+        <img id="i-receber" class="over" src="telas/receber.jpg" alt="" />
+      </div>
+      <div class="layer" id="L5">
+        <img id="i-metas" src="telas/metas.jpg" alt="" />
+        <img id="i-compras" class="over" src="telas/compras.jpg" alt="" />
+      </div>
+      <div class="layer" id="L6"><img id="i-relatorios" src="telas/relatorios.jpg" alt="" /></div>
+      <div class="layer" id="L7"><img id="i-popup" src="telas/popup-ana.jpg" alt="" /></div>
+      <img id="topbar" src="telas/barra-topo.png" alt="" />
+      <img class="menu" id="m-painel" src="telas/menu-painel.png" alt="" />
+      <img class="menu" id="m-par" src="telas/menu-par.png" alt="" />
+      <img class="menu" id="m-contas" src="telas/menu-contas.png" alt="" />
+      <img class="menu" id="m-mais" src="telas/menu-mais.png" alt="" />
     </div>
-
-    <!-- 01 Painel -->
-    <div class="scr" id="s1">
-      <div class="card">
-        <div class="lbl">Seu dinheiro hoje</div>
-        <div class="money-xl" id="p-saldo">R$ 0,00</div>
-        <div class="row" style="margin-top: 8px"><span class="chip good">+ R$ 6.200 entrou</span><span class="chip bad">− R$ 1.367 saiu</span></div>
-      </div>
-      <div class="grid2">
-        <div class="card"><div class="lbl">Dá pra gastar por dia</div><div class="money-l" id="p-dia">R$ 0</div><div class="muted">até o dia 30</div></div>
-        <div class="card"><div class="lbl">Últimos 7 dias</div><div class="bars" id="p-bars"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-      </div>
-      <div class="card">
-        <div class="between"><div class="lbl" style="margin: 0">Vence logo</div><span class="chip warn" id="p-alert">2 contas</span></div>
-        <div class="item" id="p-v1"><span class="ic" style="background: var(--blue-soft); color: var(--blue)"><svg viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01" /></svg></span><span class="grow">Internet<br><span class="muted">amanhã</span></span><span class="money-m">R$ 99,90</span></div>
-        <div class="item" id="p-v2"><span class="ic" style="background: #fdf0d2; color: #a26b00"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg></span><span class="grow">Conta de luz<br><span class="muted">em 3 dias</span></span><span class="money-m">R$ 187,40</span></div>
-      </div>
-    </div>
-
-    <!-- 02 Lancamento -->
-    <div class="scr" id="s2">
-      <div class="scr-title">Novo gasto</div>
-      <div class="field"><div class="lbl">Descrição</div><div class="val"><span id="l-desc"></span><span class="caret" id="l-caret"></span></div></div>
-      <div class="field"><div class="lbl">Valor</div><div class="val money-l" style="font-size: 26px" id="l-valor">R$ 0,00</div></div>
-      <div class="lbl" style="margin-left: 4px">Como pagou</div>
-      <div class="pay"><span>Crédito</span><span>Débito</span><span>Pix</span><span>Dinheiro</span><i class="sel" id="l-sel"></i></div>
-      <div class="card" style="margin-bottom: 12px">
-        <div class="between"><div><div style="font-weight: 700; font-size: 14px">Dividir igualmente</div><div class="muted" id="l-split" style="opacity: 0">2 pessoas · <b style="color: var(--purple)">R$ 121,95</b> cada</div></div><span class="toggle" id="l-tog"><i id="l-knob"></i></span></div>
-      </div>
-      <span class="btn" id="l-btn">Salvar</span>
-    </div>
-
-    <!-- 03 Par -->
-    <div class="scr" id="s3">
-      <div class="card">
-        <div class="lbl">Gastaram juntos em setembro</div>
-        <div class="money-xl" id="r-total">R$ 0,00</div>
-        <div class="person"><span class="avatar">G</span><div class="grow"><div class="top"><span>Você</span><span id="r-g">R$ 0</span></div><div class="track"><i id="r-gb" style="background: var(--purple); width: 58%"></i></div></div></div>
-        <div class="person"><span class="avatar b">A</span><div class="grow"><div class="top"><span>Ana</span><span id="r-a">R$ 0</span></div><div class="track"><i id="r-ab" style="background: var(--blue); width: 42%"></i></div></div></div>
-      </div>
-      <div class="card" id="r-debt" style="opacity: 0">
-        <div class="lbl">Acertar as contas</div>
-        <div class="between" style="margin-bottom: 12px"><div style="font-size: 15px; font-weight: 700">Ana te deve</div><div class="money-l strike" id="r-amt">R$ 273,00</div></div>
-        <div style="position: relative; height: 46px">
-          <span class="btn abs" id="r-btn" style="inset: 0">Marcar como pago</span>
-          <span class="abs" id="r-paid" style="inset: 0; opacity: 0; border-radius: 15px; background: #e3f4e3; color: var(--good-text); font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px"><span class="check"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span>Pago · entrou no saldo</span>
-        </div>
-      </div>
-      <div class="card" id="r-hist" style="opacity: 0">
-        <div class="item" style="opacity: 1"><span class="avatar b" style="width: 26px; height: 26px; font-size: 11px">A</span><span class="grow">Mercado da semana<br><span class="muted">Ana pagou · dividido</span></span><span class="money-m">R$ 243,90</span></div>
-      </div>
-    </div>
-
-    <!-- 04 Contas -->
-    <div class="scr" id="s4">
-      <div class="tabs"><span>Cartões</span><span>Dívidas</span><span>Fixas</span><span>Receber</span><i class="ind" id="t-ind"></i></div>
-      <div class="pane" id="t1">
-        <div class="credit"><div class="between"><span style="font-weight: 800">Cartão do casal</span><span class="chipcard"></span></div><div class="num">•••• •••• •••• 4821</div></div>
-        <div class="card"><div class="between" style="font-size: 13px; font-weight: 700; margin-bottom: 7px"><span>Limite usado</span><span id="t-lim">R$ 0</span></div><div class="track"><i id="t-limb" style="background: var(--purple); width: 62%"></i></div><div class="muted" style="margin-top: 6px">de R$ 4.000 · fecha dia 3</div></div>
-        <div class="card"><div class="between"><span style="font-weight: 700; font-size: 14px">TV da sala</span><span class="chip purple">parcela 3/10</span></div></div>
-      </div>
-      <div class="pane" id="t2">
-        <div class="card"><div class="lbl">Financiamento do carro</div><div class="money-l">R$ 18.400</div><div class="track" style="margin: 10px 0 6px"><i id="t-debtb" style="background: var(--blue); width: 45%"></i></div><div class="between muted"><span>45% quitado</span><span>juros 1,2% a.m.</span></div></div>
-        <div class="card"><div class="between"><span style="font-weight: 700; font-size: 14px">Próxima parcela</span><span class="chip warn">dia 10</span></div></div>
-      </div>
-      <div class="pane" id="t3">
-        <div class="card">
-          <div class="item" style="opacity: 1"><span class="ic" style="background: var(--purple-soft); color: var(--purple)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2" /><path d="M8 21h8" /></svg></span><span class="grow">Streaming<br><span class="muted">todo dia 5</span></span><span class="money-m">R$ 39,90</span></div>
-          <div class="item" style="opacity: 1"><span class="ic" style="background: #e3f4e3; color: var(--good)"><svg viewBox="0 0 24 24"><path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12" /></svg></span><span class="grow">Academia<br><span class="muted">todo dia 8</span></span><span class="money-m">R$ 99,00</span></div>
-          <div class="item" style="opacity: 1"><span class="ic" style="background: var(--blue-soft); color: var(--blue)"><svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9H3z" /></svg></span><span class="grow">Aluguel<br><span class="muted">todo dia 10</span></span><span class="money-m">R$ 1.800</span></div>
-        </div>
-      </div>
-      <div class="pane" id="t4">
-        <div class="card"><div class="lbl">Te devem</div><div class="money-xl">R$ 650,00</div><div class="muted" style="margin-top: 6px">Quando receber tudo, você fica com <b style="color: var(--good-text)">R$ 5.482,50</b></div></div>
-        <div class="card"><div class="person" style="margin: 0"><span class="avatar b">L</span><div class="grow" style="font-weight: 700; font-size: 14px">Lucas<br><span class="muted">emprestou em agosto</span></div><span class="money-m">R$ 400</span></div></div>
-      </div>
-    </div>
-
-    <!-- 05 Planejar -->
-    <div class="scr" id="s5">
-      <div class="card"><div class="row" style="gap: 14px">
-        <div class="ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="#e7e2d7" stroke-width="11" /><circle id="m-ring" cx="50" cy="50" r="42" fill="none" stroke="#6d54ec" stroke-width="11" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100" /></svg><span class="pct" id="m-pct">0%</span></div>
-        <div><div class="lbl">Meta</div><div style="font-weight: 800; font-size: 16px; margin-bottom: 4px">Viagem pra praia</div><div class="muted">R$ <span id="m-val">0</span> de R$ 10.000</div><span class="chip purple" style="display: inline-block; margin-top: 7px">guardar R$ 400/mês</span></div>
-      </div></div>
-      <div class="card">
-        <div class="between"><div class="lbl" style="margin: 0">Investimentos</div><span class="chip good">+12,4% no ano</span></div>
-        <svg viewBox="0 0 280 80" style="width: 100%; height: 76px; margin-top: 6px"><path id="m-line" d="M4 70 C 30 66, 44 58, 66 60 S 104 44, 126 46 S 160 30, 184 34 S 226 14, 276 8" fill="none" stroke="#3e79f7" stroke-width="3.5" stroke-linecap="round" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" /></svg>
-      </div>
-      <div class="card">
-        <div class="lbl">Lista de compras</div>
-        <div class="item" style="opacity: 1"><span class="box"><i id="m-b1"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></i></span><span class="grow"><span class="strike" id="m-t1">Café</span></span><span class="avatar b" style="width: 22px; height: 22px; font-size: 10px">A</span></div>
-        <div class="item" style="opacity: 1"><span class="box"><i id="m-b2"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></i></span><span class="grow"><span class="strike" id="m-t2">Detergente</span></span><span class="avatar" style="width: 22px; height: 22px; font-size: 10px">G</span></div>
-        <div class="item" style="opacity: 1"><span class="box"></span><span class="grow">Frutas da semana</span></div>
-      </div>
-    </div>
-
-    <!-- 06 Relatorios -->
-    <div class="scr" id="s6">
-      <div class="scr-title">Setembro</div>
-      <div class="card">
-        <div class="donut"><svg viewBox="0 0 100 100" id="r-donut"></svg><div class="center"><div class="muted">gastos</div><div class="money-l" id="r-gastos">R$ 0</div></div></div>
-        <div class="legend" id="r-legend"></div>
-      </div>
-      <div class="actions"><span>PDF</span><span>CSV</span><span>Importar extrato</span></div>
-    </div>
-
-    <div class="toast" id="l-toast"><span class="check"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg></span><span style="flex: 1">Lançado · Mercado da semana</span><b>−R$ 243,90</b></div>
   </div></div>
 
-  <!-- E ainda tem mais -->
-  <div id="extras-title">E ainda tem <em>mais.</em></div>
-  <div id="extras"></div>
-
   <!-- Final -->
-  <div class="lockup big-lockup" id="logo2">
-    <span class="mark"><svg viewBox="0 0 94 104" width="150" height="166"><rect class="sq-f" x="6" y="14" width="46" height="46" fill="#6d54ec" /><rect class="sq-o" x="34" y="42" width="46" height="46" fill="none" stroke="#191933" stroke-width="8" /></svg></span>
+  <div class="lockup" id="logo2">
+    <span class="mark"><svg viewBox="0 0 94 104" width="150" height="166"><rect class="sq-f" x="6" y="14" width="46" height="46" fill="#6d54ec" /><rect class="sq-o" x="34" y="42" width="46" height="46" fill="none" stroke="#16161d" stroke-width="8" /></svg></span>
     <span class="name">PAR<span class="dot">.</span></span>
   </div>
-  <div class="tagline" id="tag2" style="top: 440px"></div>
+  <div class="tagline" id="tag2" style="top: 430px"></div>
   <div class="cta" id="cta">Chama o seu par.</div>
 </div>
 
@@ -384,6 +197,7 @@
   // Linha do tempo
   // ---------------------------------------------------------------------
   const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+  const INOUT = "cubic-bezier(0.65, 0, 0.35, 1)";
   const BACK = "cubic-bezier(0.34, 1.56, 0.64, 1)";
   const ANIMS = [];
   const TICKS = [];
@@ -404,44 +218,53 @@
     for (const a of ANIMS) a.currentTime = t;
     for (const k of TICKS) k.fn(Math.min(1, Math.max(0, (t - k.start) / k.dur)), t);
   }
-  const easeOut = (p) => 1 - Math.pow(1 - p, 3);
 
   const fadeIn = (el, start, dur = 500, from = "translateY(24px)", easing = EASE) =>
     A(el, [{ opacity: 0, transform: from }, { opacity: 1, transform: "none" }], start, dur, easing);
   const fadeOut = (el, start, dur = 350, to = "translateY(-16px)") =>
     A(el, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: to }], start, dur, "ease-in");
-  const pop = (el, start, dur = 500) =>
-    A(el, [{ opacity: 0, transform: "scale(0.6)" }, { opacity: 1, transform: "scale(1)" }], start, dur, BACK);
-  const brl = (v, dec = 2) =>
-    "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
-  const count = (el, start, dur, to, dec = 2) => T(start, dur, (p) => (el.textContent = brl(to * easeOut(p), dec)));
+  const show = (el, start, dur = 350) => A(el, [{ opacity: 0 }, { opacity: 1 }], start, dur, "linear");
+  const hide = (el, start, dur = 350) => A(el, [{ opacity: 1 }, { opacity: 0 }], start, dur, "linear");
   const type = (el, start, dur, text) => T(start, dur, (p) => (el.textContent = text.slice(0, Math.round(p * text.length))));
+
+  // Escala das telas: capturadas com 390px de largura (x2), mostradas com 290px.
+  const K = 290 / 390;
+  const APP_H = 628;
+  // Rola a imagem de uma tela até `y` (em px da tela do celular real).
+  let scrollAt = new Map();
+  function scroll(img, start, dur, y) {
+    const from = scrollAt.get(img) ?? 0;
+    const max = Math.max(0, (img.naturalHeight / 2) * K - APP_H);
+    const to = -Math.min(max, y * K);
+    A(img, [{ transform: `translateY(${from}px)` }, { transform: `translateY(${to}px)` }], start, dur, INOUT);
+    scrollAt.set(img, to);
+  }
+  // Toque na tela (x, y em px do celular real, a partir do topo da área do app).
   function tap(x, y, start) {
     const el = document.createElement("span");
     el.className = "tap";
-    $("#screen").appendChild(el);
-    el.style.left = x + "px";
-    el.style.top = y + "px";
+    el.style.left = x * K + "px";
+    el.style.top = y * K + "px";
+    $("#app").appendChild(el);
     A(el, [{ opacity: 0, transform: "scale(0.4)" }, { opacity: 1, transform: "scale(0.8)", offset: 0.35 }, { opacity: 0, transform: "scale(1.5)" }], start, 600, "ease-out");
   }
 
   // Logo: quadrados aparecem, abrem, o nome sai do meio e desliza pro lado
   // (mesma ideia do componente Brand do app).
-  function logo(lock, start, sizes = { open: 600, emerge: 650, slide: 850 }) {
+  function logo(lock, start) {
     const mark = lock.querySelector(".mark");
     const name = lock.querySelector(".name");
     const f = lock.querySelector(".sq-f");
-    mark.style.opacity = 0;
     const o = lock.querySelector(".sq-o");
+    mark.style.opacity = 0;
     for (const r of [f, o]) { r.style.transformBox = "fill-box"; r.style.transformOrigin = "center"; }
-
     const dx = mark.offsetLeft + mark.offsetWidth / 2 - (name.offsetLeft + name.offsetWidth / 2);
     const dy = mark.offsetTop + mark.offsetHeight / 2 - (name.offsetTop + name.offsetHeight / 2);
     const ES = 0.5;
     const open = ((name.offsetWidth * ES) / 2 + 22) * (94 / mark.offsetWidth);
-
     A(mark, [{ opacity: 0, transform: "scale(0.2) rotate(-30deg)" }, { opacity: 1, transform: "none" }], start, 480, BACK);
     const s = start + 420;
+    const sizes = { open: 600, emerge: 650, slide: 850 };
     const total = sizes.open + sizes.emerge + sizes.slide;
     const openAt = sizes.open / total;
     const emergedAt = (sizes.open + sizes.emerge) / total;
@@ -472,10 +295,9 @@
   }
 
   function build() {
-    // Fundo girando devagar o video todo
     T(0, 1, (_, t) => {
-      $("#bg1").style.transform = `rotate(${t * 0.004}deg) translate(${Math.sin(t / 3000) * 14}px, 0)`;
-      $("#bg2").style.transform = `rotate(${-t * 0.003}deg)`;
+      $("#bg1").style.transform = `rotate(${t * 0.003}deg)`;
+      $("#bg2").style.transform = `rotate(${-t * 0.0025}deg)`;
     });
 
     // ---------- Abertura ----------
@@ -486,179 +308,114 @@
     fadeOut(logo1, 3900, 420, "scale(0.94)");
     fadeOut($("#tag1"), 3900, 420, "translateY(10px)");
 
-    // ---------- Palavras ----------
-    const words = ["#kw1", "#kw2", "#kw3", "#kw4"].map($);
-    words.forEach((w, i) => {
-      const s = 4400 + i * 470;
-      A(w, [{ opacity: 0, transform: "translateY(40px) scale(0.96)" }, { opacity: 1, transform: "none" }], s, 220, EASE);
-      A(w, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-40px)" }], s + 360, 150, "ease-in");
+    // ---------- Frases ----------
+    ["#kw1", "#kw2", "#kw3"].map($).forEach((w, i) => {
+      const s = 4400 + i * 800;
+      A(w, [{ opacity: 0, transform: "translateY(40px)" }, { opacity: 1, transform: "none" }], s, 260, EASE);
+      A(w, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-40px)" }], s + 620, 170, "ease-in");
     });
-    const kw5 = $("#kw5");
-    A(kw5, [{ opacity: 0, transform: "scale(1.25)", filter: "blur(8px)" }, { opacity: 1, transform: "none", filter: "blur(0)" }], 6350, 600, EASE);
-    fadeOut(kw5, 7700, 350, "scale(0.95)");
+    const kw4 = $("#kw4");
+    A(kw4, [{ opacity: 0, transform: "scale(1.2)", filter: "blur(8px)" }, { opacity: 1, transform: "none", filter: "blur(0)" }], 6850, 550, EASE);
+    fadeOut(kw4, 8000, 320, "scale(0.95)");
 
-    // ---------- Celular + cenas ----------
+    // ---------- Celular ----------
     const phone = $("#phone");
-    A(phone, [{ opacity: 0, transform: "translateY(180px) rotate(6deg)" }, { opacity: 1, transform: "none" }], 7950, 900, EASE);
-    A(phone, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(160px) rotate(-5deg)" }], 38700, 600, "ease-in");
+    A(phone, [{ opacity: 0, transform: "translateY(180px) rotate(6deg)" }, { opacity: 1, transform: "none" }], 8250, 900, EASE);
 
-    function scene(copy, scr, s, e) {
+    function scene(copy, layer, menu, s, e) {
       [...copy.children].forEach((el, i) => {
         fadeIn(el, s + 250 + i * 130, 600);
         fadeOut(el, e - 420 + i * 40, 320);
       });
-      A(scr, [{ opacity: 0, transform: "translateX(60px)" }, { opacity: 1, transform: "none" }], s + 200, 550, EASE);
-      A(scr, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-60px)" }], e - 420, 380, "ease-in");
+      A(layer, [{ opacity: 0, transform: "translateX(40px)" }, { opacity: 1, transform: "none" }], s + 150, 500, EASE);
+      A(layer, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-40px)" }], e - 400, 380, "ease-in");
+      if (menu) { show(menu, s + 150, 300); hide(menu, e - 300, 250); }
     }
 
-    // 01 Painel
-    let s = 8200;
-    scene($("#c1"), $("#s1"), s, 13200);
-    count($("#p-saldo"), s + 500, 1500, 4832.5);
-    count($("#p-dia"), s + 1100, 1100, 86, 0);
-    [...$("#p-bars").children].forEach((b, i) => {
-      const h = [0.45, 0.7, 0.35, 0.9, 0.55, 1, 0.62][i];
-      A(b, [{ transform: "scaleY(0)" }, { transform: `scaleY(${h})` }], s + 1300 + i * 90, 600, BACK);
-    });
-    fadeIn($("#p-v1"), s + 2200, 500, "translateX(30px)");
-    fadeIn($("#p-v2"), s + 2450, 500, "translateX(30px)");
-    A($("#p-alert"), [{ transform: "scale(1)" }, { transform: "scale(1.25)" }, { transform: "scale(1)" }], s + 3000, 500, "ease-in-out");
-    A($("#p-alert"), [{ transform: "scale(1)" }, { transform: "scale(1.25)" }, { transform: "scale(1)" }], s + 3700, 500, "ease-in-out");
+    // Painel
+    let s = 8500;
+    scene($("#c1"), $("#L1"), $("#m-painel"), s, 15000);
+    const painel = $("#i-painel");
+    scroll(painel, s + 1700, 1400, 560);
+    scroll(painel, s + 3500, 1500, 1350);
+    scroll(painel, s + 5200, 900, 2250);
 
-    // 02 Lancamento
-    s = 13200;
-    scene($("#c2"), $("#s2"), s, 18500);
-    type($("#l-desc"), s + 700, 900, "Mercado da semana");
-    T(s, 5300, (p, t) => ($("#l-caret").style.opacity = t < s + 1900 && Math.floor(t / 380) % 2 === 0 ? 1 : 0));
-    count($("#l-valor"), s + 1800, 700, 243.9);
-    const sel = $("#l-sel");
-    const payW = $(".pay").offsetWidth;
-    const step = (payW - 15) / 4 + 5;
-    A(sel, [{ opacity: 0, transform: "scale(0.8)" }, { opacity: 1, transform: "none" }], s + 2500, 250, EASE);
-    A(sel, [{ transform: "translateX(0)" }, { transform: `translateX(${step}px)` }], s + 2850, 300, EASE);
-    A(sel, [{ transform: `translateX(${step}px)` }, { transform: `translateX(${step * 2}px)` }], s + 3200, 300, EASE);
-    tap(189, 298, s + 3200);
-    A($("#l-tog"), [{ background: "#e7e2d7" }, { background: "#6d54ec" }], s + 3650, 250, "ease-out");
-    A($("#l-knob"), [{ transform: "none" }, { transform: "translateX(19px)" }], s + 3650, 300, BACK);
-    tap(257, 352, s + 3600);
-    fadeIn($("#l-split"), s + 3850, 400, "translateY(6px)");
-    tap(154, 413, s + 4250);
-    A($("#l-btn"), [{ transform: "scale(1)" }, { transform: "scale(0.95)" }, { transform: "scale(1)" }], s + 4250, 300, "ease-in-out");
-    A($("#l-toast"), [{ opacity: 0, transform: "translateY(-70px)" }, { opacity: 1, transform: "none" }], s + 4450, 450, BACK);
-    A($("#l-toast"), [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-70px)" }], s + 5250, 300, "ease-in");
+    // Lancamento rapido
+    s = 15000;
+    scene($("#c2"), $("#L2"), null, s, 21000);
+    tap(195, 314, s + 1000);
+    tap(195, 400, s + 1450);
+    show($("#i-novo2"), s + 1650, 300);
+    tap(195, 548, s + 2800);
+    show($("#i-novo3"), s + 3000, 300);
+    scroll($("#i-novo3"), s + 3700, 1300, 460);
+    tap(195, 880 - 460, s + 5150);
 
-    // 03 Par
-    s = 18500;
-    scene($("#c3"), $("#s3"), s, 23600);
-    count($("#r-total"), s + 500, 1300, 3418);
-    count($("#r-g"), s + 800, 1200, 1982, 0);
-    count($("#r-a"), s + 800, 1200, 1436, 0);
-    A($("#r-gb"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], s + 800, 1100, EASE);
-    A($("#r-ab"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], s + 900, 1100, EASE);
-    fadeIn($("#r-debt"), s + 1700, 500);
-    tap(154, 365, s + 3000);
-    A($("#r-btn"), [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(0.9)" }], s + 3150, 250, "ease-in");
-    A($("#r-paid"), [{ opacity: 0, transform: "scale(0.9)" }, { opacity: 1, transform: "none" }], s + 3300, 400, BACK);
-    T(s + 3300, 400, (p) => $("#r-amt").style.setProperty("--k", p));
-    A($("#r-amt"), [{ color: "#191933" }, { color: "#9495ae" }], s + 3300, 400, "linear");
-    fadeIn($("#r-hist"), s + 3700, 500);
+    // Par
+    s = 21000;
+    scene($("#c3"), $("#L3"), $("#m-par"), s, 26800);
+    scroll($("#i-par"), s + 1600, 1400, 420);
+    scroll($("#i-par"), s + 3400, 1500, 1060);
 
-    // 04 Contas
-    s = 23600;
-    scene($("#c4"), $("#s4"), s, 29100);
-    const panes = ["#t1", "#t2", "#t3", "#t4"].map($);
-    const tabW = ($(".tabs").offsetWidth - 8) / 4;
-    const tabAt = [s + 300, s + 1650, s + 2950, s + 4150];
-    fadeIn(panes[0], s + 450, 450, "translateY(12px)");
-    count($("#t-lim"), s + 700, 1000, 2480, 0);
-    A($("#t-limb"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], s + 700, 1000, EASE);
-    for (let i = 1; i < 4; i++) {
-      const t = tabAt[i];
-      tap(18 + tabW * i + tabW / 2, 110, t - 150);
-      A($("#t-ind"), [{ transform: `translateX(${tabW * (i - 1)}px)` }, { transform: `translateX(${tabW * i}px)` }], t, 380, EASE);
-      fadeOut(panes[i - 1], t, 220, "translateX(-24px)");
-      fadeIn(panes[i], t + 150, 420, "translateX(24px)");
-    }
-    A($("#t-debtb"), [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], tabAt[1] + 250, 900, EASE);
-
-    // 05 Planejar
-    s = 29100;
-    scene($("#c5"), $("#s5"), s, 34100);
-    A($("#m-ring"), [{ strokeDasharray: "0 100" }, { strokeDasharray: "68 100" }], s + 500, 1600, EASE);
-    T(s + 500, 1600, (p) => {
-      $("#m-pct").textContent = Math.round(68 * easeOut(p)) + "%";
-      $("#m-val").textContent = Math.round(6800 * easeOut(p)).toLocaleString("pt-BR");
-    });
-    A($("#m-line"), [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], s + 1200, 1400, "ease-in-out");
-    [["#m-b1", "#m-t1"], ["#m-b2", "#m-t2"]].forEach(([b, tx], i) => {
-      const t = s + 2800 + i * 550;
-      pop($(b), t, 350);
-      T(t + 100, 300, (p) => $(tx).style.setProperty("--k", p));
-      A($(tx), [{ color: "#191933" }, { color: "#9495ae" }], t + 100, 300, "linear");
+    // Contas: cartoes -> fixas -> dividas -> a receber
+    s = 26800;
+    scene($("#c4"), $("#L4"), $("#m-contas"), s, 33400);
+    // Troca de aba e rola até a lista (o formulário de cadastro fica em cima).
+    const tabs = [["#i-dividas", 152, 800], ["#i-fixas", 238, 640], ["#i-receber", 324, 0]];
+    tabs.forEach(([id, x, y], i) => {
+      const t = s + 2000 + i * 1500;
+      $(id).style.zIndex = i + 1;
+      if (i === 0) tap(x, 101, t - 150);
+      show($(id), t, 260);
+      if (y) scroll($(id), t + 350, 800, y);
     });
 
-    // 06 Relatorios
-    s = 34100;
-    scene($("#c6"), $("#s6"), s, 39000);
-    const cats = [
-      ["Mercado", 34, "#2a78d6"], ["Casa", 26, "#6d54ec"], ["Transporte", 14, "#eb6834"],
-      ["Lazer", 12, "#1baf7a"], ["Outros", 14, "#eda100"],
-    ];
-    const NS = "http://www.w3.org/2000/svg";
-    let acc = 0;
-    cats.forEach(([nome, pct, cor], i) => {
-      const c = document.createElementNS(NS, "circle");
-      for (const [k, v] of Object.entries({ cx: 50, cy: 50, r: 38, fill: "none", stroke: cor, "stroke-width": 16, pathLength: 100, "stroke-dasharray": "0 100", "stroke-dashoffset": -acc }))
-        c.setAttribute(k, v);
-      $("#r-donut").appendChild(c);
-      const t = s + 500 + i * 260;
-      A(c, [{ strokeDasharray: "0 100" }, { strokeDasharray: `${pct - 0.8} 100` }], t, 450, "ease-out");
-      acc += pct;
-      const lg = document.createElement("div");
-      lg.innerHTML = `<i style="background:${cor}"></i>${nome}<b style="margin-left:auto">${pct}%</b>`;
-      $("#r-legend").appendChild(lg);
-      fadeIn(lg, t + 100, 400, "translateY(8px)");
-    });
-    count($("#r-gastos"), s + 500, 1500, 5210, 0);
-    [...document.querySelectorAll(".actions span")].forEach((el, i) => pop(el, s + 2300 + i * 150, 450));
-    tap(234, 425, s + 3400);
+    // Metas e compras
+    s = 33400;
+    scene($("#c5"), $("#L5"), $("#m-mais"), s, 39000);
+    scroll($("#i-metas"), s + 1400, 1200, 250);
+    show($("#i-compras"), s + 3200, 350);
 
-    // ---------- E ainda tem mais ----------
-    const feats = [
-      ["Lembretes por email", "Fatura vencendo e orçamento estourado.", "#6d54ec", "#ece9fc", '<path d="M4 6h16v12H4z" /><path d="m4 7 8 6 8-6" />'],
-      ["Assistente do mês", "Um resumo do mês, em conversa.", "#3e79f7", "#e4ecfe", '<path d="M4 5h16v11H9l-5 4z" />'],
-      ["Alertas inteligentes", "Avisa antes do problema chegar.", "#a26b00", "#fdf0d2", '<path d="M12 3 2 20h20z" /><path d="M12 10v4M12 17h.01" />'],
-      ["Grupo sem limite", "Casal, família, república.", "#006300", "#e3f4e3", '<circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 20c0-2.2.9-4 3-4.5 1.9.5 3 2.3 3 4.5" />'],
-      ["Juros das dívidas", "Saiba quanto custa cada parcela.", "#eb6834", "#fde9e0", '<path d="M19 5 5 19" /><circle cx="7" cy="7" r="2.5" /><circle cx="17" cy="17" r="2.5" />'],
-      ["Importa extrato", "OFX ou CSV direto do banco.", "#6d54ec", "#ece9fc", '<path d="M12 3v12M7 10l5 5 5-5M5 21h14" />'],
-      ["Google e Apple", "Entre com um toque.", "#191933", "#e7e2d7", '<rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" />'],
-      ["Vira app no celular", "Instala na tela inicial.", "#3e79f7", "#e4ecfe", '<rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" />'],
-    ];
-    const ex = $("#extras");
-    fadeIn($("#extras-title"), 39300, 600);
-    fadeOut($("#extras-title"), 43900, 350);
-    feats.forEach(([t, d, cor, bg, icon], i) => {
-      const el = document.createElement("div");
-      el.className = "feat";
-      el.innerHTML = `<span class="ic" style="background:${bg};color:${cor}"><svg viewBox="0 0 24 24">${icon}</svg></span><b>${t}</b><span>${d}</span>`;
-      ex.appendChild(el);
-      A(el, [{ opacity: 0, transform: "translateY(40px) scale(0.9)" }, { opacity: 1, transform: "none" }], 39700 + i * 160, 550, BACK);
-      fadeOut(el, 43900 + (i % 4) * 40, 330, "translateY(-20px)");
-    });
+    // Relatorios
+    s = 39000;
+    scene($("#c6"), $("#L6"), $("#m-mais"), s, 44800);
+    scroll($("#i-relatorios"), s + 1500, 1400, 400);
+    scroll($("#i-relatorios"), s + 3300, 1500, 1050);
+
+    A(phone, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(160px) rotate(-5deg)" }], 44500, 600, "ease-in");
+
+    // ---------- Novidades (Admin -> pop-up no celular) ----------
+    s = 45100;
+    const c7 = $("#c7");
+    [...c7.children].forEach((el, i) => fadeIn(el, s + 200 + i * 130, 600));
+    const laptop = $("#laptop");
+    A(laptop, [{ opacity: 0, transform: "translateY(60px) scale(0.96)" }, { opacity: 1, transform: "none" }], s + 100, 800, EASE);
+    show($("#a1"), s + 100, 1);
+    show($("#a2"), s + 3200, 300);
+    show($("#a3"), s + 4400, 300);
+    // O celular volta pequeno no canto do notebook, com o pop-up chegando.
+    A(phone, [{ opacity: 0, transform: "translate(40px, 200px) scale(0.72)" }, { opacity: 1, transform: "translate(40px, 60px) scale(0.72)" }], s + 5600, 800, EASE);
+    A(phone, [{ opacity: 1, transform: "translate(40px, 60px) scale(0.72)" }, { opacity: 0, transform: "translate(40px, 200px) scale(0.72)" }], s + 9700, 400, "ease-in");
+    show($("#L7"), s + 5600, 1);
+    // O print do pop-up já tem a barra do topo (escurecida).
+    hide($("#topbar"), s + 5600, 1);
+    A(laptop, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(40px)" }], s + 9700, 400, "ease-in");
+    [...c7.children].forEach((el, i) => fadeOut(el, s + 9700 + i * 40, 320));
 
     // ---------- Final ----------
     const logo2 = $("#logo2");
     center(logo2, 190);
-    const end2 = logo(logo2, 44400);
+    const end2 = logo(logo2, 55600);
     type($("#tag2"), end2 - 200, 800, "Finanças em grupo, sem atrito.");
     A($("#cta"), [{ opacity: 0, transform: "translateX(-50%) translateY(20px) scale(0.9)" }, { opacity: 1, transform: "translateX(-50%)" }], end2 + 700, 600, BACK);
-    return 50500;
+    return end2 + 3200;
   }
 
   // ---------------------------------------------------------------------
   // Tocar (navegador) ou gravar quadro a quadro (?gravar)
   // ---------------------------------------------------------------------
-  document.fonts.ready.then(() => {
+  const images = [...document.images].map((img) => img.decode().catch(() => {}));
+  Promise.all([document.fonts.ready, ...images]).then(() => {
     const TOTAL = build();
     window.TOTAL = TOTAL;
     window.seek = seek;

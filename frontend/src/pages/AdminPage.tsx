@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
-import { AdminDiagnostics, AdminFeedback } from "./AdminSections";
+import { AdminAnnouncements, AdminDiagnostics, AdminFeedback } from "./AdminSections";
 
 interface ErrorLogEntry {
   id: string;
@@ -52,8 +52,10 @@ export function AdminPage() {
   // sidebar's "Admin > Visão geral"/"Logs" sub-links (?section=...).
   const requested = searchParams.get("section");
   const section =
-    requested === "logs" || requested === "feedback" || requested === "diagnostics" ? requested : "overview";
-  const sectionTitle = { overview: "Visão geral", logs: "Logs", feedback: "Feedback", diagnostics: "Diagnóstico" }[section];
+    requested === "logs" || requested === "feedback" || requested === "diagnostics" || requested === "announcements"
+      ? requested
+      : "overview";
+  const sectionTitle = { overview: "Visão geral", logs: "Logs", feedback: "Feedback", diagnostics: "Diagnóstico", announcements: "Novidades" }[section];
 
   useEffect(() => {
     apiRequest<AdminOverview>("/admin/overview", { token })
@@ -103,6 +105,7 @@ export function AdminPage() {
       <div className="page-stack">
         <h1>Admin · {sectionTitle}</h1>
         {section === "feedback" && <AdminFeedback />}
+        {section === "announcements" && <AdminAnnouncements />}
         {section === "diagnostics" && <AdminDiagnostics />}
 
         {section === "overview" && (

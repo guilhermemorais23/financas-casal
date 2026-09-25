@@ -59,6 +59,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
 const ADMIN_SUBLINKS = [
   { section: "overview", label: "Visão geral" },
   { section: "feedback", label: "Feedback" },
+  { section: "announcements", label: "Novidades" },
   { section: "diagnostics", label: "Diagnóstico" },
   { section: "logs", label: "Logs" },
 ];
