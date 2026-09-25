@@ -696,19 +696,24 @@ export function DashboardPage() {
         <div className="stat-card wide">
           <span className="stat-card-circle" />
           <span className="stat-card-circle stat-card-circle-2" />
-          <p className="label">Você tem hoje</p>
-          <p className="value">
-            <AnimatedNumber value={moneyTotal} />
+          {/* O número grande é o que sobra no mês (entrou - saiu), não o
+              saldo acumulado das contas: quem lança só o salário todo mês e
+              não lança todo gasto veria o saldo crescer mês a mês sem ter
+              esse dinheiro de verdade. O saldo das contas fica no card
+              "Onde está seu dinheiro". */}
+          <p className="label">{dailyAllowance !== null ? "Você tem este mês" : `Sobrou em ${monthLabel}`}</p>
+          <p className={`value${monthLeft < 0 ? " negative" : ""}`}>
+            <AnimatedNumber value={monthLeft} />
           </p>
-          {/* Os três números que respondem "como estou": o que tem, quanto
-              sobra por dia, o que vence na semana. */}
           <div className="hero-numbers">
-            <div className="hero-number">
-              <span>{dailyAllowance !== null ? "Por dia até o fim do mês" : `Sobra em ${monthLabel}`}</span>
-              <strong className={(dailyAllowance ?? monthLeft) < 0 ? "negative" : ""}>
-                {formatCurrency(dailyAllowance !== null ? Math.max(0, dailyAllowance) : monthLeft)}
-              </strong>
-            </div>
+            {dailyAllowance !== null && (
+              <div className="hero-number">
+                <span>Por dia até o fim do mês</span>
+                <strong className={dailyAllowance < 0 ? "negative" : ""}>
+                  {formatCurrency(Math.max(0, dailyAllowance))}
+                </strong>
+              </div>
+            )}
             <div className="hero-number">
               <span>Vence em 7 dias</span>
               <strong>{formatCurrency(upcomingToPay)}</strong>
