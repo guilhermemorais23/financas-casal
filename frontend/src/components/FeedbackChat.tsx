@@ -30,9 +30,9 @@ function timeLabel(ms: number): string {
     : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
 }
 
-// The bubbles, shared by the person's chat and the admin inbox. `mine` is
-// which side is "me": the person sees their own messages on the right, the
-// team sees the team's.
+// As bolhas, usadas no chat da pessoa e na caixa do admin. `mine` diz qual
+// lado é "eu": a pessoa vê as próprias mensagens à direita, a equipe vê as da
+// equipe.
 export function ChatBubbles({ messages, mine }: { messages: FeedbackMessage[]; mine: "user" | "team" }) {
   return (
     <>
@@ -55,9 +55,9 @@ export function ChatBubbles({ messages, mine }: { messages: FeedbackMessage[]; m
   );
 }
 
-// "Fale com a gente": a support chat. Sending gets an instant thank-you;
-// the owner answers from Admin > Feedback and the answer shows up here (and
-// by email).
+// "Fale com a gente": um chat de suporte. Ao enviar, chega um agradecimento
+// na hora; o dono responde em Admin > Feedback e a resposta aparece aqui (e
+// por email).
 export function FeedbackChat({ onClose }: { onClose: () => void }) {
   const { token } = useAuth();
   const location = useLocation();
@@ -189,7 +189,7 @@ export function FeedbackChat({ onClose }: { onClose: () => void }) {
   );
 }
 
-// Unread answers from the team, for the badge on "Fale com a gente".
+// Respostas da equipe ainda não lidas, pro contador em "Fale com a gente".
 export function useFeedbackUnread(): number {
   const { token } = useAuth();
   const [unread, setUnread] = useState(0);

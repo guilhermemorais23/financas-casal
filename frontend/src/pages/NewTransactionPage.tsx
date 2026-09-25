@@ -37,7 +37,7 @@ export function NewTransactionPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
 
-  // Painel's "Receita" shortcut opens this with ?tipo=receita.
+  // O atalho "Receita" do Painel abre isso com ?tipo=receita.
   const [transactionType, setTransactionType] = useState<"expense" | "income">(() =>
     new URLSearchParams(window.location.search).get("tipo") === "receita" ? "income" : "expense"
   );

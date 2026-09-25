@@ -14,17 +14,17 @@ interface ToastItem {
 }
 
 export interface ToastOptions {
-  // success (default) = green check, error = red alert, info = neutral.
+  // success (padrão) = check verde, error = alerta vermelho, info = neutro.
   variant?: ToastVariant;
-  // Smaller second line under the message -- keeps the main line short so
-  // it never wraps on a phone.
+  // Segunda linha menor embaixo da mensagem -- deixa a linha principal curta
+  // pra nunca quebrar no celular.
   description?: string;
-  // A button on the toast ("Desfazer"). Clicking it runs onAction and
-  // dismisses the toast right away.
+  // Um botão no aviso ("Desfazer"). Tocar nele roda onAction e fecha o aviso
+  // na hora.
   actionLabel?: string;
   onAction?: () => void;
-  // How long the toast stays. Toasts with an action get a longer default so
-  // there is time to actually reach for the button.
+  // Quanto tempo o aviso fica. Avisos com botão ficam mais tempo por padrão,
+  // pra dar tempo de alcançar o botão.
   durationMs?: number;
 }
 
@@ -35,9 +35,9 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 let nextId = 1;
-// The CSS `.toast` animation reads --toast-ms (slide-in, hold, fade-out) --
-// both use the same per-toast duration, so the toast is only unmounted after
-// its own fade-out has finished.
+// A animação `.toast` do CSS lê --toast-ms (entra, segura, some) -- as duas
+// usam a mesma duração por aviso, então ele só sai da tela depois que o
+// próprio fade-out terminou.
 const DEFAULT_DURATION_MS = 3000;
 const ACTION_DURATION_MS = 6000;
 const MAX_VISIBLE = 3;

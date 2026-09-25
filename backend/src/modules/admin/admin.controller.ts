@@ -31,8 +31,8 @@ function ensureAdmin(req: Request, res: Response): boolean {
   }
 }
 
-// Admin > Diagnóstico: what's configured in production, without opening
-// Render. Never returns secret values, only whether they're set.
+// Admin > Diagnóstico: o que está configurado em produção, sem precisar abrir
+// o Render. Nunca devolve valores secretos, só se existem.
 export async function getDiagnosticsHandler(req: Request, res: Response) {
   if (!ensureAdmin(req, res)) return;
   res.json({

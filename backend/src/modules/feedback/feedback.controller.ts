@@ -51,8 +51,8 @@ export async function getMyUnreadHandler(req: Request, res: Response) {
   res.json({ unread: await getMyUnread(req.user!.id) });
 }
 
-// "Fale com a gente": the person's message goes into their conversation,
-// an automatic thank-you answers right away, and the owner gets an email.
+// "Fale com a gente": a mensagem da pessoa entra na conversa dela, um
+// agradecimento automático responde na hora e o dono recebe um email.
 export async function createFeedbackHandler(req: Request, res: Response) {
   const { kind, message, page } = req.body ?? {};
   const text = readText(message, res);

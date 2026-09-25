@@ -72,8 +72,8 @@ function daysBetween(fromIso: string, toIso: string): number {
   return Math.round((parseLocalDate(toIso).getTime() - parseLocalDate(fromIso).getTime()) / 86_400_000);
 }
 
-// "Vence em 5 dias" / "Atrasado há 3 dias" / "Sem prazo" -- what matters at
-// a glance on each row.
+// "Vence em 5 dias" / "Atrasado há 3 dias" / "Sem prazo" -- o que importa
+// bater o olho em cada linha.
 function dueLabel(loan: Loan): { text: string; tone: "bad" | "warn" | "muted" | "good" } {
   if (loan.status === "paid") return { text: "Recebido", tone: "good" };
   if (loan.status === "forgiven") return { text: "Perdoado", tone: "muted" };
@@ -97,7 +97,7 @@ export function LoansPage() {
   const [data, setData] = useState<LoansResponse | null>(() => readCache<LoansResponse>(cacheKey));
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Painel's "Emprestei" shortcut opens this with ?novo=1.
+  // O atalho "Emprestei" do Painel abre isso com ?novo=1.
   const [isCreateOpen, setIsCreateOpen] = useState(() => new URLSearchParams(window.location.search).get("novo") === "1");
   const [receiving, setReceiving] = useState<Loan | null>(null);
   const [editing, setEditing] = useState<Loan | null>(null);
@@ -129,9 +129,9 @@ export function LoansPage() {
   const finishedLoans = useMemo(() => (data?.loans ?? []).filter((loan) => loan.status !== "open"), [data]);
   const personalAccount = accounts.find((a) => a.type === "personal" && a.ownerUserId === user?.id);
 
-  // "Quando pagar, você fica com R$ X": the balance climbing loan by loan in
-  // the order they're expected back (the list is already sorted that way:
-  // overdue first, then by deadline, no deadline last).
+  // "Quando pagar, você fica com R$ X": o saldo subindo empréstimo por
+  // empréstimo na ordem em que devem voltar (a lista já vem nessa ordem:
+  // atrasados primeiro, depois por prazo, sem prazo por último).
   const balanceAfter = useMemo(() => {
     const map = new Map<string, number>();
     let running = inAccounts;

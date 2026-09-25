@@ -23,7 +23,7 @@ function isPositiveAmount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 && value < 100_000_000;
 }
 
-// % ao mês: absent/null/0 = sem juros; otherwise 0.01–20.
+// % ao mês: ausente/null/0 = sem juros; senão entre 0,01 e 20.
 function readInterest(value: unknown): number | null | "invalid" {
   if (value === undefined || value === null || value === 0) return null;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 20) return "invalid";

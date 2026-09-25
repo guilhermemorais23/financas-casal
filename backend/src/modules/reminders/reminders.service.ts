@@ -31,8 +31,8 @@ function formatBRL(amount: number): string {
   return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-// Counts only emails that actually went out -- a reminder is marked as sent
-// (and never retried) only when someone really got it.
+// Conta só os emails que saíram de verdade -- um lembrete só é marcado como
+// enviado (e nunca reenviado) quando alguém realmente recebeu.
 async function sendToMembers(members: MemberWithEmail[], subject: string, bodyHtml: string): Promise<number> {
   const withEmail = members.filter((member) => member.email);
   const results = await Promise.all(withEmail.map((member) => sendReminderEmail(member.email!, subject, bodyHtml)));
@@ -188,9 +188,8 @@ async function runBudgetReminder(groupId: string, members: MemberWithEmail[]): P
   return sent;
 }
 
-// Contas fixas generate their own transaction on the day, but a heads-up a
-// few days before still helps make sure the money is there. One email per
-// bill per month.
+// Contas fixas lançam sozinhas no dia, mas um aviso alguns dias antes ajuda a
+// garantir que o dinheiro está lá. Um email por conta por mês.
 const RECURRING_REMINDER_WINDOW_DAYS = 3;
 
 async function runRecurringBillReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
@@ -233,9 +232,9 @@ async function runRecurringBillReminders(groupId: string, members: MemberWithEma
   return emailsSent;
 }
 
-// A receber: on the deadline day (or the first run after it), tell whoever
-// lent that it's time to get the money back. Once per loan per deadline --
-// moving the deadline gives a new reminder.
+// A receber: no dia do prazo (ou na primeira execução depois dele), avisa
+// quem emprestou que é hora de receber. Uma vez por empréstimo por prazo --
+// mudar o prazo gera um lembrete novo.
 async function runLoanReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
   const membersById = new Map(members.map((member) => [member.id, member]));
   const today = todayInBrazil();
@@ -290,11 +289,11 @@ export async function runDueReminders(): Promise<{ groupsChecked: number; emails
   return { groupsChecked: groups.length, emailsSent };
 }
 
-// Safety net for the daily cron: the first health ping or Painel load after
-// 8h (Brasília) each day claims that day's run in Firestore -- create() fails
-// if another instance already claimed it -- and does the same work as POST
-// /api/reminders/run. Everything inside is deduped on its own
-// (reminderLogs, lastGeneratedMonth), so the cron also firing is harmless.
+// Rede de segurança pro cron diário: o primeiro ping de health depois das 8h
+// (Brasília) de cada dia reserva a execução do dia no Firestore -- create()
+// falha se outra instância já reservou -- e faz o mesmo que POST
+// /api/reminders/run. Tudo lá dentro já evita duplicidade sozinho
+// (reminderLogs, lastGeneratedMonth), então o cron rodar também não faz mal.
 let lastClaimedDay: string | null = null;
 
 export async function maybeRunDailyJobs(now = new Date()): Promise<void> {

@@ -1,9 +1,10 @@
-// Which edition of the welcome / "o que tem de novo" tour this account has
-// already seen. Everyone -- new and existing accounts -- sees each edition
-// once; bump TOUR_EDITION when the tour gets new content worth showing again.
-// Per user id, so a second person signing in on the same phone gets their own.
-// localStorage can throw (private mode, blocked storage) -- a missed tour is
-// harmless, so every access just swallows that.
+// Qual edição da apresentação de boas-vindas / "o que tem de novo" esta conta
+// já viu. Todo mundo -- contas novas e antigas -- vê cada edição uma vez;
+// aumente TOUR_EDITION quando a apresentação tiver conteúdo novo que vale
+// mostrar de novo. Por id de usuário, então uma segunda pessoa entrando no
+// mesmo celular vê a dela. localStorage pode dar erro (modo privado,
+// armazenamento bloqueado) -- perder a apresentação não faz mal, então todo
+// acesso só ignora o erro.
 export const TOUR_EDITION = "2026-09-painel-chat";
 
 const key = (userId: string) => `par:welcome-tour:${userId}`;

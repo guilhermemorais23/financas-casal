@@ -1,23 +1,25 @@
-// Silent recovery from "this tab is running an old build" and other load
-// crashes, so nobody sees the "Algo deu errado... Recarregar" screen after a
-// deploy. How it happens: the service worker updates itself (skipWaiting +
-// cleanupOutdatedCaches) while an old tab is still open; the next lazy route
-// asks for a chunk under its old hashed name, the file no longer exists, and
-// Firebase Hosting's SPA rewrite answers with index.html -- the import fails.
+// Recuperação silenciosa de "essa aba está rodando uma versão antiga" e de
+// outros erros ao carregar, pra ninguém ver a tela "Algo deu errado...
+// Recarregar" depois de um deploy. Como acontece: o service worker se atualiza
+// sozinho (skipWaiting + cleanupOutdatedCaches) com uma aba antiga ainda
+// aberta; a próxima rota lazy pede um chunk pelo nome antigo, o arquivo não
+// existe mais e o rewrite de SPA do Firebase Hosting responde com o
+// index.html -- o import falha.
 //
-// Recovery escalates, tracked in sessionStorage so it can never loop:
-//   1st failure -> ask the service worker for the new version, then reload
-//   2nd failure (within a minute) -> drop the service worker + its caches and
-//      reload with a cache-busting query (skips a stale HTTP-cached index.html)
-//   after that -> give up and let the caller show a fallback screen.
+// A recuperação vai subindo de nível, controlada no sessionStorage pra nunca
+// entrar em loop:
+//   1ª falha -> pede a versão nova ao service worker e recarrega
+//   2ª falha (em até um minuto) -> remove o service worker + os caches e
+//      recarrega com um parâmetro que fura o cache (evita um index.html velho)
+//   depois disso -> desiste e deixa quem chamou mostrar a tela de erro.
 
 const ATTEMPTS_KEY = "par:recovery-attempts";
 const WINDOW_MS = 60_000;
 const MAX_ATTEMPTS = 2;
 export const RELOAD_PARAM = "_r";
 
-// The messages browsers use when a lazy route chunk can't be fetched
-// (Chrome/Edge, Safari, Firefox, Vite's own preload helper).
+// As mensagens que os navegadores usam quando o chunk de uma rota lazy não
+// carrega (Chrome/Edge, Safari, Firefox, o preload do próprio Vite).
 export function isChunkLoadError(error: unknown): boolean {
   const message = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   return /dynamically imported module|Importing a module script failed|error loading dynamically|ChunkLoadError|Loading chunk|Unable to preload CSS|MIME type/i.test(
@@ -35,8 +37,8 @@ function recentAttempts(): number[] {
   }
 }
 
-// Without sessionStorage we can't tell a first reload from a loop -- don't
-// auto-reload at all then.
+// Sem sessionStorage não dá pra diferenciar o primeiro recarregamento de um
+// loop -- então não recarrega sozinho.
 function storageWorks(): boolean {
   try {
     sessionStorage.setItem("par:recovery-probe", "1");
@@ -60,7 +62,7 @@ async function softReload(): Promise<void> {
     const registration = await navigator.serviceWorker?.getRegistration();
     if (registration) await withTimeout(registration.update(), 1500);
   } catch {
-    // ignore -- reload anyway
+    // ignora -- recarrega mesmo assim
   }
   window.location.reload();
 }
@@ -74,15 +76,15 @@ async function hardReload(): Promise<void> {
       await withTimeout(Promise.all(keys.map((key) => caches.delete(key))), 1500);
     }
   } catch {
-    // ignore -- reload anyway
+    // ignora -- recarrega mesmo assim
   }
   const url = new URL(window.location.href);
   url.searchParams.set(RELOAD_PARAM, String(Date.now()));
   window.location.replace(url.toString());
 }
 
-// Starts the next recovery step. Returns false when recovery is exhausted
-// (the caller should show its fallback instead).
+// Começa o próximo passo da recuperação. Devolve false quando acabaram as
+// tentativas (quem chamou deve mostrar a tela de erro).
 export function recoverApp(): boolean {
   if (!canRecover()) return false;
   const attempts = recentAttempts();
@@ -95,14 +97,14 @@ export function recoverApp(): boolean {
   return true;
 }
 
-// Manual "Recarregar" button: always the thorough path.
+// Botão "Recarregar" manual: sempre o caminho completo.
 export function forceFreshReload(): void {
   void hardReload();
 }
 
-// Wraps a lazy route import: if the chunk is gone, reload into the new build
-// and keep the Suspense skeleton up meanwhile instead of throwing into the
-// error screen.
+// Envolve o import de uma rota lazy: se o chunk sumiu, recarrega na versão
+// nova e mantém o skeleton do Suspense na tela em vez de cair na tela de
+// erro.
 export async function importWithRecovery<T>(loader: () => Promise<T>): Promise<T> {
   try {
     return await loader();
@@ -112,8 +114,8 @@ export async function importWithRecovery<T>(loader: () => Promise<T>): Promise<T
   }
 }
 
-// Call once at startup: hides the cache-busting query from the address bar
-// and routes Vite's preload failures into the same recovery.
+// Chamar uma vez ao iniciar: esconde da barra de endereço o parâmetro que
+// fura o cache e manda as falhas de preload do Vite pra mesma recuperação.
 export function initAppRecovery(): void {
   try {
     const url = new URL(window.location.href);
@@ -122,9 +124,10 @@ export function initAppRecovery(): void {
       window.history.replaceState(window.history.state, "", url.toString());
     }
   } catch {
-    // ignore
+    // ignora
   }
-  // Vite fires this when a <link rel=modulepreload> / CSS of a chunk fails.
+  // O Vite dispara isso quando um <link rel=modulepreload> / CSS de um chunk
+  // falha.
   window.addEventListener("vite:preloadError", (event) => {
     if (recoverApp()) event.preventDefault();
   });

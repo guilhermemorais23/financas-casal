@@ -1001,7 +1001,7 @@ input:focus {
   color: #fff;
 }
 
-/* Thin bar draining across the bottom -- shows how long the toast stays. */
+/* Barra fina que esvazia embaixo -- mostra quanto tempo o aviso fica. */
 .toast-timer {
   position: absolute;
   left: 0;
@@ -4407,11 +4407,10 @@ input[type="checkbox"] {
   }
 }
 
-/* Feels like an app on a phone ---------------------------------------------
-   The page is exactly the phone's width: nothing can be dragged sideways,
-   and short labels (buttons, pills, list rows) stay on one line with "..."
-   instead of breaking into two. `clip` (not `hidden`) so sticky headers and
-   the fixed menu keep working. */
+/* Cara de app no celular. A página tem exatamente a largura do celular: nada
+   arrasta pro lado, e textos curtos (botões, etiquetas, linhas de lista)
+   ficam numa linha só com "..." em vez de quebrar em duas. `clip` (e não
+   `hidden`) pra cabeçalhos grudados e o menu fixo continuarem funcionando. */
 
 html {
   -webkit-text-size-adjust: 100%;
@@ -4478,8 +4477,8 @@ video {
 }
 
 @media (max-width: 720px) {
-  /* iOS zooms into any field under 16px on focus -- and once zoomed, the
-     whole page can be dragged sideways. */
+  /* O iOS dá zoom em qualquer campo menor que 16px ao focar -- e com zoom, a
+     página inteira arrasta pro lado. */
   input,
   select,
   textarea {
@@ -4495,8 +4494,8 @@ video {
     gap: 0.6rem;
   }
 
-  /* Not enough room for "categoria · pagamento" AND the Em aberto pill side
-     by side: the pill drops to its own line instead of squeezing the text. */
+  /* Não cabe "categoria · pagamento" E a etiqueta Em aberto lado a lado: a
+     etiqueta desce pra própria linha em vez de espremer o texto. */
   .transaction-meta {
     flex-wrap: wrap;
     row-gap: 0.25rem;
@@ -4574,8 +4573,8 @@ video {
   flex-shrink: 0;
 }
 
-/* "R$ X nesta fatura  ·  vence ..." -- when both don't fit, the second
-   part goes under the first, each staying whole on one line. */
+/* "R$ X nesta fatura · vence ..." -- quando os dois não cabem, o segundo
+   desce pra baixo do primeiro, cada um inteiro numa linha. */
 .goal-amounts {
   flex-wrap: wrap;
   column-gap: 0.75rem;
@@ -4590,9 +4589,9 @@ video {
 }
 
 @media (max-width: 480px) {
-  /* Phone list rows: the value sits top-right and the edit/delete icons
-     tuck under it, so the description column gets the width instead of
-     being squeezed to a few letters. */
+  /* Linhas de lista no celular: o valor fica em cima à direita e os ícones de
+     editar/excluir embaixo dele, assim a descrição ganha a largura em vez de
+     ficar com poucas letras. */
   .transaction-row:has(> .transaction-info):has(> .transaction-row-actions) {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -4654,7 +4653,7 @@ video {
 }
 
 @media (max-width: 480px) {
-  /* Big money values shrink with the screen instead of spilling out. */
+  /* Valores grandes diminuem com a tela em vez de vazar. */
   .stat-box .value-sm {
     font-size: clamp(1.1rem, 5.6vw, 1.55rem);
   }
@@ -4673,9 +4672,9 @@ video {
   }
 }
 
-/* Navigation, v2 -------------------------------------------------------------
-   Desktop: grouped sidebar. Phone: no drawer at all -- a 5-slot bottom bar
-   (Painel · Par · + · Contas · Mais) and a "Mais" sheet sliding up. */
+/* Navegação, v2. PC: menu lateral agrupado. Celular: sem menu lateral -- uma
+   barra de baixo com 5 lugares (Painel · Par · + · Contas · Mais) e uma folha
+   "Mais" que sobe. */
 
 .app-nav-group {
   display: flex;
@@ -4713,7 +4712,7 @@ video {
   height: 34px;
 }
 
-/* Contas tabs (Cartões / Dívidas / Contas fixas) */
+/* Abas de Contas (Cartões / Dívidas / Contas fixas / A receber) */
 .bills-tabs {
   display: flex;
   gap: 0.25rem;
@@ -4808,7 +4807,7 @@ video {
   border-color: var(--color-primary);
 }
 
-/* Bottom bar "+" and Mais sheet only exist on phones. */
+/* O "+" da barra de baixo e a folha Mais só existem no celular. */
 .app-bottom-nav-add,
 .more-sheet-backdrop {
   display: none;
@@ -5333,7 +5332,8 @@ video {
     align-items: flex-start;
   }
 
-  /* Two inputs side by side leave the amount 5 digits wide on a phone. */
+  /* Dois campos lado a lado deixam o valor com 5 dígitos de largura no
+     celular. */
   .modal-panel .field-row {
     flex-direction: column;
     gap: 0;
@@ -5367,7 +5367,7 @@ video {
   }
 }
 
-/* Feedback chat ("Fale com a gente") ------------------------------------------ */
+/* Chat de feedback ("Fale com a gente") */
 
 .visually-hidden {
   position: absolute;
@@ -5657,7 +5657,7 @@ video {
   }
 }
 
-/* Admin: feedback inbox + diagnostics */
+/* Admin: caixa de feedback + diagnóstico */
 .admin-feedback-filters {
   display: flex;
   gap: 0.4rem;

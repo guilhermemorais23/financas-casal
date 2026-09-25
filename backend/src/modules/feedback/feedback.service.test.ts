@@ -8,7 +8,8 @@ describe("feedback chat", () => {
     const first = await sendUserMessage(userAId, "a@test.com", { kind: "problem", text: "Não acho o vencimento", page: "/cards" });
     expect(first.messages.map((m) => m.from)).toEqual(["user", "auto"]);
 
-    // A second message right after doesn't get another automatic reply.
+    // Uma segunda mensagem logo em seguida não ganha outra resposta
+    // automática.
     const second = await sendUserMessage(userAId, "a@test.com", { kind: "problem", text: "É no cartão", page: null });
     expect(second.messages.map((m) => m.from)).toEqual(["user", "auto", "user"]);
 

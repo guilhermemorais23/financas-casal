@@ -48,8 +48,8 @@ interface TransactionListRow {
   categoryEmoji: string | null;
   splitType: "none" | "equal";
   isSettled: boolean;
-  // Transfers (cartão garantido, empréstimo) are managed from their own
-  // pages -- no edit/delete here.
+  // Transferências (cartão garantido, empréstimo) são mexidas nas próprias
+  // páginas -- sem editar/excluir aqui.
   securedCardId?: string | null;
   loanId?: string | null;
 }

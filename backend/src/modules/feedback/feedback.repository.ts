@@ -27,8 +27,8 @@ export interface FeedbackThread {
   unreadForTeam: number;
 }
 
-// One ongoing conversation per person (thread id = their user id), like a
-// support chat: everything they send and every answer lives in it.
+// Uma conversa contínua por pessoa (id da conversa = id do usuário), como um
+// chat de suporte: tudo que ela manda e todas as respostas ficam nela.
 const threadsCol = db.collection("feedbackThreads");
 
 function toThread(doc: FirebaseFirestore.DocumentSnapshot): FeedbackThread {

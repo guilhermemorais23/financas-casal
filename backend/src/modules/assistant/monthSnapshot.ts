@@ -3,10 +3,10 @@ import { listLoans, todayInBrazil } from "../loans/loans.service";
 import { getMonthlyTrendForUser } from "../transactions/transactions.service";
 import { getUpcomingForUser, type UpcomingItem } from "../upcoming/upcoming.service";
 
-// The numbers a "controle do mês" conversation keeps coming back to, in one
-// place: what's in the accounts, what came in and went out this month, how
-// much is left per day, what's due this week and who owes you. Feeds the AI
-// prompt AND the no-AI fallback answers, so both say the same thing.
+// Os números que uma conversa de "controle do mês" sempre volta a usar, num
+// lugar só: o que tem nas contas, o que entrou e saiu no mês, quanto sobra
+// por dia, o que vence na semana e quem te deve. Alimenta o prompt da IA E as
+// respostas sem IA, pra que as duas digam a mesma coisa.
 export interface MonthSnapshot {
   balanceToday: number;
   income: number;
@@ -84,8 +84,8 @@ Vence nos próximos 7 dias: ${upcomingText}.
 Empréstimos a receber: ${loansText}. Total a receber: ${brl(s.loansOutstanding)}; quando receber tudo, fica com ${brl(s.balanceToday + s.loansOutstanding)}.`;
 }
 
-// Plain-language answers straight from the numbers -- used when the AI isn't
-// configured or fails, so the assistant still helps with the month.
+// Respostas em linguagem simples direto dos números -- usadas quando a IA não
+// está configurada ou falha, pro assistente continuar ajudando com o mês.
 export function answerFromSnapshot(s: MonthSnapshot, question: string): string {
   const q = question.toLowerCase();
   const lines: string[] = [];
@@ -118,8 +118,8 @@ export function answerFromSnapshot(s: MonthSnapshot, question: string): string {
   return lines.join("\n");
 }
 
-// "gastei 50 no mercado" / "paguei R$ 120,90 de luz" / "recebi 200" -- the
-// few shapes worth catching without AI.
+// "gastei 50 no mercado" / "paguei R$ 120,90 de luz" / "recebi 200" -- os
+// poucos formatos que valem a pena pegar sem IA.
 export function parseQuickEntry(text: string): { type: "expense" | "income"; amount: number; description: string } | null {
   const match = text
     .trim()

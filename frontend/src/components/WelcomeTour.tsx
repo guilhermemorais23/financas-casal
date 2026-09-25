@@ -7,8 +7,8 @@ import { Icon, type IconName } from "./Icon";
 
 interface Slide {
   icon: IconName | "brand";
-  // Small chip above the title ("Novidade") -- marks what changed for people
-  // who already use the app.
+  // Etiqueta pequena acima do título ("Novidade") -- marca o que mudou pra
+  // quem já usa o app.
   tag?: string;
   title: string;
   text: string;
@@ -64,8 +64,9 @@ const SLIDES: Slide[] = [
 // the "Conta criada!" moment on /register) and public pages.
 const HIDDEN_ON = ["/login", "/register", "/privacidade", "/r/", "/invite/"];
 
-// Shown once per edition to every signed-in account (new or existing -- see
-// utils/welcomeTour.ts): what the app is for plus what's new, swipeable.
+// Aparece uma vez por edição pra toda conta logada (nova ou antiga -- ver
+// utils/welcomeTour.ts): pra que serve o app e o que tem de novo, dá pra
+// arrastar.
 export function WelcomeTour() {
   const { user } = useAuth();
   const location = useLocation();
