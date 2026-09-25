@@ -27,6 +27,10 @@ export interface AuthUser {
   // shows up at all. The route itself re-checks independently, so this
   // never needs to be trusted as the actual security boundary.
   isAdmin: boolean;
+  // Chaves do app (Admin): a tela Plano só aparece com a cobrança ligada;
+  // maintenance é a mensagem do modo manutenção (null = desligado).
+  billingEnabled?: boolean;
+  maintenance?: string | null;
 }
 
 interface AuthContextValue {

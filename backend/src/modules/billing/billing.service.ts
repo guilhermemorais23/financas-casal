@@ -5,6 +5,7 @@ import { findMembersByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { findUserById } from "../users/users.repository";
 import * as asaas from "./asaas.client";
+import { isBillingEnabled } from "../settings/appSettings";
 import { billingConfig, priceFor, TERMS_VERSION, type Plan } from "./billing.config";
 import {
   createTrialIfMissing,
@@ -77,12 +78,12 @@ async function loadOrStartSubscription(groupId: string): Promise<SubscriptionRow
 }
 
 export async function getEntitlementForGroup(groupId: string): Promise<Entitlement> {
-  if (!billingConfig().enabled) return { billingEnabled: false, premium: true, state: "active", endsAt: null };
+  if (!(await isBillingEnabled())) return { billingEnabled: false, premium: true, state: "active", endsAt: null };
   return describeAccess(await loadOrStartSubscription(groupId));
 }
 
 export async function isPremiumUser(userId: string): Promise<boolean> {
-  if (!billingConfig().enabled) return true;
+  if (!(await isBillingEnabled())) return true;
   const user = await findUserById(userId);
   if (!user?.groupId) return false;
   return (await getEntitlementForGroup(user.groupId)).premium;
@@ -95,8 +96,9 @@ export async function isPremiumUser(userId: string): Promise<boolean> {
 export async function getBillingForUser(userId: string) {
   const config = billingConfig();
   const groupId = await requireGroupId(userId);
-  const sub = config.enabled ? await loadOrStartSubscription(groupId) : null;
-  const entitlement = config.enabled ? describeAccess(sub) : await getEntitlementForGroup(groupId);
+  const enabled = await isBillingEnabled();
+  const sub = enabled ? await loadOrStartSubscription(groupId) : null;
+  const entitlement = enabled ? describeAccess(sub) : await getEntitlementForGroup(groupId);
   const lastPaymentAt = sub?.lastPaymentAt ?? null;
   return {
     entitlement,
@@ -123,8 +125,7 @@ export async function startCheckout(
   userId: string,
   input: { plan: unknown; cpfCnpj: unknown; acceptTerms: unknown; termsVersion: unknown }
 ): Promise<{ invoiceUrl: string }> {
-  const config = billingConfig();
-  if (!config.enabled) throw new BillingError("A cobrança ainda não está ligada.");
+  if (!(await isBillingEnabled())) throw new BillingError("A cobrança ainda não está ligada.");
   const plan: Plan = input.plan === "yearly" ? "yearly" : "monthly";
   if (input.acceptTerms !== true || input.termsVersion !== TERMS_VERSION) {
     throw new BillingError("Pra assinar, aceite os Termos de Uso e a Política de Privacidade.");
@@ -315,7 +316,7 @@ export async function getBillingAdminOverview() {
   const mrr = paying.reduce((sum, r) => sum + (r.plan === "yearly" ? config.priceYearly / 12 : config.priceMonthly), 0);
   return {
     config: {
-      enabled: config.enabled,
+      enabled: await isBillingEnabled(),
       asaasConfigured: config.asaasApiKey !== "",
       asaasEnv: config.asaasEnv,
       webhookConfigured: config.webhookToken !== "",

@@ -351,6 +351,7 @@ export function AccountPage() {
       <div className="page-stack">
         <h1>Conta</h1>
 
+        {user?.billingEnabled && (
         <Link to="/plano" className="card plan-link">
           <span>
             <span className="card-title">Plano</span>
@@ -358,6 +359,7 @@ export function AccountPage() {
           </span>
           <Icon name="chevron" className="icon plan-link-chevron" />
         </Link>
+        )}
 
         <div className="card">
           <p className="card-title">Grupo</p>

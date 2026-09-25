@@ -174,6 +174,18 @@ export function PlanPage() {
   }
 
   const { entitlement: e, subscription: sub, prices } = info;
+
+  // Cobrança desligada (Admin > Assinaturas): nada de preço nem de assinatura.
+  if (!e.billingEnabled) {
+    return (
+      <AppLayout>
+        <div className="page-stack plan-page">
+          <h1>Plano</h1>
+          <StatusCard info={info} />
+        </div>
+      </AppLayout>
+    );
+  }
   const yearlySaving = prices.monthly * 12 - prices.yearly;
   const canSubscribe = e.billingEnabled && ["trial", "free", "canceled_active"].includes(e.state);
   const paying = sub && (e.state === "active" || e.state === "past_due") && sub.status !== "canceled";

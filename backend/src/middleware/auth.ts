@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
-import { auth } from "../db/firestore";
+import { auth, db } from "../db/firestore";
+import { isAdminEmail } from "../modules/admin/admin.service";
+import { getAppSettings } from "../modules/settings/appSettings";
 import type { AuthenticatedUser } from "../types/express";
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -23,8 +25,38 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       email: decoded.email ?? "",
     };
     req.user = user;
-    next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
+    return;
   }
+
+  markSeenToday(req.user.id);
+
+  // Modo manutenção (Admin > Visão geral): dá pra ver tudo, mas gravar fica
+  // pausado pra quem não é admin. Webhooks não passam por aqui (pagamentos
+  // continuam sendo registrados).
+  if (req.method !== "GET") {
+    try {
+      const { maintenance } = await getAppSettings();
+      if (maintenance.enabled && !isAdminEmail(req.user.email)) {
+        res.status(503).json({ error: maintenance.message, code: "maintenance" });
+        return;
+      }
+    } catch {
+      // Sem conseguir ler a configuração, não trava ninguém.
+    }
+  }
+  next();
+}
+
+// "Visto por último" (users.lastSeenAt), no máximo uma gravação por pessoa
+// por dia -- é o que alimenta ativos por dia/semana/mês e retenção no Admin.
+const seenDay = new Map<string, string>();
+function markSeenToday(userId: string): void {
+  const today = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (seenDay.get(userId) === today) return;
+  seenDay.set(userId, today);
+  if (seenDay.size > 20000) seenDay.clear();
+  // update (não set): perfil que ainda não existe (primeiro login) não é criado aqui.
+  db.collection("users").doc(userId).update({ lastSeenAt: Date.now() }).catch(() => seenDay.delete(userId));
 }

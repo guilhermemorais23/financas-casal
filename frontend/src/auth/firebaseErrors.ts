@@ -14,6 +14,7 @@ const MESSAGES: Record<string, string> = {
   "auth/requires-recent-login": "Por segurança, confirme sua senha atual pra trocar o email.",
   "auth/operation-not-allowed": "Sua conta usa login do Google -- o email é gerenciado por lá.",
   "auth/email-already-exists": "Esse email já está em uso por outra conta.",
+  "auth/user-disabled": "Essa conta foi bloqueada. Se achar que foi engano, escreva pra gente.",
 };
 
 export function authErrorMessage(err: unknown, fallback: string): string {

@@ -7632,3 +7632,146 @@ select {
 .admin-billing .card {
   max-width: none;
 }
+
+/* Modo manutenção (Admin > Visão geral) */
+.maintenance-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  background: #fdf0d2;
+  color: #6b4700;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.maintenance-banner .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Admin > Visão geral: números, funil e uso do banco */
+.admin-insights .card,
+.admin-users,
+.admin-user-detail {
+  max-width: none;
+}
+
+.admin-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.usage-meter {
+  margin-top: 0.9rem;
+}
+
+.usage-meter-top,
+.funnel-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-meter-top small,
+.funnel-top small {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.usage-meter-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-bg-soft);
+  overflow: hidden;
+}
+
+.usage-meter-track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
+
+.usage-meter-track i.tone-warn {
+  background: #d99a00;
+}
+
+.usage-meter-track i.tone-bad {
+  background: #d03b3b;
+}
+
+.funnel {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+/* Admin > Usuários */
+.chip-blocked,
+.chip-admin {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.chip-blocked {
+  background: #fbe6e6;
+  color: #9b2323;
+}
+
+.chip-admin {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.admin-user-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.admin-user-facts dt {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.admin-user-facts dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.admin-user-subtitle {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.admin-user-access {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}

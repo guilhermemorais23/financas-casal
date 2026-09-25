@@ -1,14 +1,13 @@
 // Configuração da cobrança (tudo por variável de ambiente no Render).
 //
-// BILLING_ENABLED=true liga a cobrança: sem isso todo mundo tem tudo, como
-// sempre foi, e nada é gravado sobre assinatura. Dá pra deixar o código no
-// ar e só ligar quando a conta do Asaas estiver pronta.
+// Ligar/desligar a cobrança é pelo Admin > Assinaturas (settings/appSettings.ts).
+// BILLING_ENABLED=true no Render só vale enquanto ninguém mexeu no botão.
+// Desligada, todo mundo tem tudo e nada é gravado sobre assinatura.
 export const TERMS_VERSION = "2026-09-25";
 
 export function billingConfig() {
   const env = process.env;
   return {
-    enabled: env.BILLING_ENABLED === "true",
     asaasApiKey: env.ASAAS_API_KEY ?? "",
     // "sandbox" (testes, dinheiro de mentira) ou "production".
     asaasEnv: env.ASAAS_ENV === "production" ? "production" : "sandbox",
