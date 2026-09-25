@@ -7969,43 +7969,9 @@ select {
   font-size: 1rem;
 }
 
-.import-banks {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.import-banks-label {
-  width: 100%;
-  font-weight: 600;
-}
-
-.import-banks small {
-  width: 100%;
+.import-bank-note {
+  font-weight: 400;
   color: var(--color-text-muted);
-}
-
-.import-bank {
-  padding: 0.35rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-card);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.import-bank.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  font-weight: 700;
-}
-
-.import-bank:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
 }
 
 .import-question-tags {

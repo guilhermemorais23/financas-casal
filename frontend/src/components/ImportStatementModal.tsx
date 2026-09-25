@@ -481,30 +481,24 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
             </select>
           </label>
 
-          <div className="import-banks" role="radiogroup" aria-labelledby="import-bank-label">
-            <span id="import-bank-label" className="import-banks-label">
-              De qual banco?
-            </span>
-            {BANKS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={bank === option.id}
-                className={`import-bank${bank === option.id ? " active" : ""}`}
-                onClick={() => setBank(option.id)}
-              >
-                {option.name}
-              </button>
-            ))}
-            <small>
-              {bank && !(BANKS.find((b) => b.id === bank)?.own)
+          <label className="import-account" htmlFor="import-bank">
+            De qual banco?
+            <select id="import-bank" value={bank ?? ""} onChange={(event) => setBank((event.target.value || null) as BankId | null)}>
+              <option value="">Escolha o banco</option>
+              {BANKS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+            <small className="import-bank-note">
+              {bank && !BANKS.find((b) => b.id === bank)?.own
                 ? `O ${bankName(bank) === "Outro" ? "extrato" : `PDF do ${bankName(bank)}`} passa pela leitura geral e é conferido com o saldo quando ele aparece. OFX ou CSV do banco lê certinho.`
                 : bank === "caixa"
                   ? "Caixa tem leitura própria, mas ainda não foi testada com um extrato real: confira os valores."
                   : "Bradesco, Nubank e Banco do Brasil têm leitura própria, testada com extrato real e conferida com o saldo."}
             </small>
-          </div>
+          </label>
 
           {pendingPdf ? (
             <form
