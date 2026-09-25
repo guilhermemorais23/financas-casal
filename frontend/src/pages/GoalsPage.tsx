@@ -132,7 +132,7 @@ export function GoalsPage() {
               {goal.photoDataUrl && <img src={goal.photoDataUrl} alt="" className="goal-card-cover" />}
               <div className="section-header">
                 <p className="card-title">
-                  {goal.emoji ?? "🎯"} {goal.name}
+                  {goal.name}
                   {goal.achievedAt && <span className="badge goal-achieved">Concluída!</span>}
                 </p>
                 <button type="button" className="btn-icon" onClick={() => handleDelete(goal)} title="Remover meta">

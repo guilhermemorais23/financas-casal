@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { formatCurrency, parseLocalDate } from "../utils/format";
 import { Icon } from "./Icon";
 import { useToast } from "./ToastProvider";
+import { Sheet } from "./Sheet";
 
 interface PreviewRow {
   date: string;
@@ -70,14 +71,6 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       })
       .catch(() => setError("Não foi possível carregar suas contas."));
   }, [token, user?.id]);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
 
   async function readFile(file: File) {
     setError(null);
@@ -162,147 +155,140 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   }
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="modal-panel import-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
-        <div className="import-head">
-          <h1 id="import-title">Importar extrato</h1>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label="Fechar">
-            <Icon name="x" />
-          </button>
-        </div>
+    <Sheet onClose={onClose} className="import-panel" labelledBy="import-title">
+      <div className="import-head">
+        <h1 id="import-title">Importar extrato</h1>
+      </div>
 
-        {!rows && (
-          <>
-            <p className="card-subtitle">Traga o extrato do seu banco. O PAR. lê, mostra o que achou e só salva o que você confirmar.</p>
-            <div
-              className={`import-drop${isDragging ? " dragging" : ""}`}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setIsDragging(true);
+      {!rows && (
+        <>
+          <p className="card-subtitle">Traga o extrato do seu banco. O PAR. lê, mostra o que achou e só salva o que você confirmar.</p>
+          <div
+            className={`import-drop${isDragging ? " dragging" : ""}`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={onDrop}
+          >
+            <span className="import-drop-icon">
+              <Icon name="upload" />
+            </span>
+            <strong>{isReading ? `Lendo ${fileName}...` : "Solte o arquivo aqui"}</strong>
+            <small>OFX ou CSV, exportado no app ou no site do banco</small>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => inputRef.current?.click()} disabled={isReading}>
+              Escolher arquivo
+            </button>
+            <input
+              ref={inputRef}
+              id="import-file"
+              type="file"
+              accept=".ofx,.qfx,.csv,.txt,.pdf,text/csv,application/pdf"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void readFile(file);
+                event.target.value = "";
               }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={onDrop}
-            >
-              <span className="import-drop-icon">
-                <Icon name="upload" />
-              </span>
-              <strong>{isReading ? `Lendo ${fileName}...` : "Solte o arquivo aqui"}</strong>
-              <small>OFX ou CSV, exportado no app ou no site do banco</small>
-              <button type="button" className="btn btn-primary btn-sm" onClick={() => inputRef.current?.click()} disabled={isReading}>
-                Escolher arquivo
-              </button>
-              <input
-                ref={inputRef}
-                id="import-file"
-                type="file"
-                accept=".ofx,.qfx,.csv,.txt,.pdf,text/csv,application/pdf"
-                hidden
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void readFile(file);
-                  event.target.value = "";
-                }}
-              />
+            />
+          </div>
+          <div className="import-connect">
+            <span className="import-connect-icon">
+              <Icon name="bank" />
+            </span>
+            <div>
+              <strong>Conectar conta</strong>
+              <small>Os lançamentos entram sozinhos, sem baixar nada (Open Finance).</small>
             </div>
-            <div className="import-connect">
-              <span className="import-connect-icon">
-                <Icon name="bank" />
-              </span>
-              <div>
-                <strong>Conectar conta</strong>
-                <small>Os lançamentos entram sozinhos, sem baixar nada (Open Finance).</small>
-              </div>
-              <span className="pill-soon">Em breve</span>
-            </div>
-          </>
-        )}
+            <span className="pill-soon">Em breve</span>
+          </div>
+        </>
+      )}
 
-        {rows && (
-          <>
-            <div className="import-toolbar">
-              <label className="import-account" htmlFor="import-account">
-                Salvar em
-                <select id="import-account" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.emoji ? `${account.emoji} ` : ""}
-                      {account.name}
+      {rows && (
+        <>
+          <div className="import-toolbar">
+            <label className="import-account" htmlFor="import-account">
+              Salvar em
+              <select id="import-account" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="link-button" onClick={flipTypes}>
+              Inverter entradas e saídas
+            </button>
+          </div>
+          {assumedAllExpenses && (
+            <p className="import-note">
+              Todos os valores vieram positivos, então tratei tudo como saída. Se o seu banco lista as entradas assim, use
+              “Inverter”.
+            </p>
+          )}
+          <p className="import-summary">
+            <strong>{rows.length}</strong> lançamentos em {fileName}
+            {duplicateCount > 0 && <> · {duplicateCount} parecem já existir (desmarcados)</>}
+          </p>
+          <ul className="import-list">
+            {rows.map((row, index) => (
+              <li key={`${row.date}-${row.description}-${index}`} className={`import-row${row.selected ? "" : " off"}`}>
+                <input
+                  type="checkbox"
+                  id={`import-row-${index}`}
+                  checked={row.selected}
+                  onChange={(event) => updateRow(index, { selected: event.target.checked })}
+                  aria-label={`Importar ${row.description}`}
+                />
+                <label htmlFor={`import-row-${index}`} className="import-row-info">
+                  <span className="import-row-desc">{row.description}</span>
+                  <span className="import-row-meta">
+                    {parseLocalDate(row.date).toLocaleDateString("pt-BR")}
+                    {row.isDuplicate && <span className="badge">já existe?</span>}
+                  </span>
+                </label>
+                <select
+                  className="import-row-category"
+                  value={row.categoryId}
+                  onChange={(event) => updateRow(index, { categoryId: event.target.value })}
+                  aria-label={`Categoria de ${row.description}`}
+                >
+                  <option value="">Sem categoria</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
                     </option>
                   ))}
                 </select>
-              </label>
-              <button type="button" className="link-button" onClick={flipTypes}>
-                Inverter entradas e saídas
-              </button>
-            </div>
-            {assumedAllExpenses && (
-              <p className="import-note">
-                Todos os valores vieram positivos, então tratei tudo como saída. Se o seu banco lista as entradas assim, use
-                “Inverter”.
-              </p>
-            )}
-            <p className="import-summary">
-              <strong>{rows.length}</strong> lançamentos em {fileName}
-              {duplicateCount > 0 && <> · {duplicateCount} parecem já existir (desmarcados)</>}
-            </p>
-            <ul className="import-list">
-              {rows.map((row, index) => (
-                <li key={`${row.date}-${row.description}-${index}`} className={`import-row${row.selected ? "" : " off"}`}>
-                  <input
-                    type="checkbox"
-                    id={`import-row-${index}`}
-                    checked={row.selected}
-                    onChange={(event) => updateRow(index, { selected: event.target.checked })}
-                    aria-label={`Importar ${row.description}`}
-                  />
-                  <label htmlFor={`import-row-${index}`} className="import-row-info">
-                    <span className="import-row-desc">{row.description}</span>
-                    <span className="import-row-meta">
-                      {parseLocalDate(row.date).toLocaleDateString("pt-BR")}
-                      {row.isDuplicate && <span className="badge">já existe?</span>}
-                    </span>
-                  </label>
-                  <select
-                    className="import-row-category"
-                    value={row.categoryId}
-                    onChange={(event) => updateRow(index, { categoryId: event.target.value })}
-                    aria-label={`Categoria de ${row.description}`}
-                  >
-                    <option value="">Sem categoria</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.emoji ? `${category.emoji} ` : ""}
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className={`transaction-amount ${row.transactionType}`}>
-                    {row.transactionType === "income" ? "+" : "-"}
-                    {formatCurrency(Number(row.amount))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+                <span className={`transaction-amount ${row.transactionType}`}>
+                  {row.transactionType === "income" ? "+" : "-"}
+                  {formatCurrency(Number(row.amount))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
-        {error && (
-          <p className="alert" role="alert">
-            {error}
-          </p>
-        )}
+      {error && (
+        <p className="alert" role="alert">
+          {error}
+        </p>
+      )}
 
-        {rows && (
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={() => setRows(null)} disabled={isSaving}>
-              Trocar arquivo
-            </button>
-            <button type="button" className="btn btn-primary" onClick={handleSave} disabled={isSaving || selectedCount === 0}>
-              {isSaving ? "Importando..." : `Importar ${selectedCount}`}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+      {rows && (
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={() => setRows(null)} disabled={isSaving}>
+            Trocar arquivo
+          </button>
+          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={isSaving || selectedCount === 0}>
+            {isSaving ? "Importando..." : `Importar ${selectedCount}`}
+          </button>
+        </div>
+      )}
+    </Sheet>
   );
 }

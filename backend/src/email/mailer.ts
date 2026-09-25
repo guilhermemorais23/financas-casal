@@ -128,7 +128,7 @@ export async function sendOwnerEmail(subject: string, bodyHtml: string, replyTo?
 export async function sendNewSignupEmail(user: { email: string; displayName: string }): Promise<void> {
   const when = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   await sendOwnerEmail(
-    `🎉 Novo cadastro no PAR.: ${user.displayName}`,
+    `Novo cadastro no PAR.: ${user.displayName}`,
     `
       <h1 style="font-size: 20px;">Alguém novo entrou no PAR.</h1>
       <p><strong>Nome:</strong> ${escapeHtml(user.displayName)}<br />
@@ -141,10 +141,10 @@ export async function sendNewSignupEmail(user: { email: string; displayName: str
 export async function sendWelcomeEmail(to: string, displayName: string): Promise<void> {
   await sendEmail(
     to,
-    "Bem-vindo(a) ao PAR.! 🎉",
+    "Bem-vindo(a) ao PAR.",
     `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-        <h1 style="font-size: 22px;">Olá, ${displayName}! 👋</h1>
+        <h1 style="font-size: 22px;">Olá, ${displayName}!</h1>
         <p>Seja bem-vindo(a) ao <strong>PAR.</strong> — finanças em grupo, sem atrito.</p>
         <p>Você já pode criar um grupo ou aceitar um convite, lançar suas primeiras transações e acompanhar tudo em tempo real.</p>
         <p style="margin-top: 24px;">Bons controles financeiros! 💰</p>

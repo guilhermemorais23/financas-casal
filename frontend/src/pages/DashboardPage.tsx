@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AccumulatedSpendingChart, type DailyTrendPoint } from "../components/AccumulatedSpendingChart";
@@ -14,11 +14,12 @@ import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { MonthPicker } from "../components/MonthPicker";
+import { MonthCloseCard } from "../components/MonthCloseCard";
 import { RowActionsMenu } from "../components/RowActionsMenu";
+import { repeatHref } from "../utils/quickEntry";
 import { SplitStatusPill } from "../components/SplitStatusPill";
-import { TrendSparkline } from "../components/TrendSparkline";
 import { AppLayout } from "../layouts/AppLayout";
-import { categoryColor, personColor, tint } from "../utils/categoryColor";
+import { categoryColor, personColor } from "../utils/categoryColor";
 import {
   currentMonthParam,
   formatCurrency,
@@ -33,6 +34,7 @@ import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/de
 import { readCache, writeCache } from "../utils/pageCache";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
+import { initialOf } from "../utils/initial";
 
 interface AccountWithBalance {
   id: string;
@@ -226,6 +228,7 @@ function upcomingWhen(item: UpcomingItem): string {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { user, token } = useAuth();
   const confirm = useConfirm();
   const { showToast } = useToast();
@@ -283,7 +286,6 @@ export function DashboardPage() {
   const [loansOutstanding, setLoansOutstanding] = useState<number>(
     () => readCache(staticKey("loansOutstanding")) ?? 0
   );
-  const [trend6m, setTrend6m] = useState<MonthlyTrendPoint[]>(() => readCache(monthKey("trend6m")) ?? []);
   const [alerts, setAlerts] = useState<AlertRow[]>(() => readCache(monthKey("alerts")) ?? []);
   const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
@@ -321,7 +323,6 @@ export function DashboardPage() {
       setSavedInSecuredCards(data.savedInSecuredCards ?? 0);
       setLoansOutstanding(Number(data.loansSummary?.outstanding ?? 0));
       setUpcoming(data.upcoming ?? []);
-      setTrend6m(data.trend6m);
       // ?? []: a response cached by an older build has no `alerts` at all.
       setAlerts(data.alerts ?? []);
     }
@@ -342,7 +343,6 @@ export function DashboardPage() {
     writeCache(mKey("budget"), data.budget);
     writeCache(mKey("categoryBudgets"), data.categoryBudgets);
     writeCache(mKey("dailyTrend"), data.dailyTrend);
-    writeCache(mKey("trend6m"), data.trend6m);
     writeCache(mKey("alerts"), data.alerts ?? []);
     // The whole response, one key -- lets load() below check "do we already
     // have this month?" with a single readCache instead of guessing from
@@ -693,6 +693,7 @@ export function DashboardPage() {
         </div>
 
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
+        {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
         <div className="stat-card wide">
           {/* O número grande é o que sobra no mês (entrou - saiu), não o
               saldo acumulado das contas: quem lança só o salário todo mês e
@@ -739,11 +740,6 @@ export function DashboardPage() {
                 ? `${formatCurrency(lentOut)} emprestados este mês. Não é gasto, vai voltar pra você.`
                 : `${formatCurrency(-lentOut)} de empréstimos voltaram pra você este mês.`}
             </p>
-          )}
-          {trend6m.length > 1 && (
-            <div className="hero-trend">
-              <TrendSparkline points={trend6m} />
-            </div>
           )}
         </div>
 
@@ -803,7 +799,7 @@ export function DashboardPage() {
 
         <div className="stat-row wrap">
           <div className="stat-box tone-good">
-            <p className="label">Sua entrada no mês</p>
+            <p className="label">Entrou no mês</p>
             <p className="value-sm income-text">{formatCurrency(income)}</p>
             {incomeDelta !== null && (
               <p className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
@@ -813,7 +809,7 @@ export function DashboardPage() {
             )}
           </div>
           <div className="stat-box tone-warm">
-            <p className="label">Sua saída no mês</p>
+            <p className="label">Saiu no mês</p>
             <p className="value-sm">{formatCurrency(expense)}</p>
             {expenseDelta !== null && (
               <p className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
@@ -876,7 +872,7 @@ export function DashboardPage() {
                         ? "var(--status-critical)"
                         : budgetSeverity === "warning"
                           ? "var(--status-warning)"
-                          : "var(--peach)"
+                          : "var(--color-primary)"
                     }
                   >
                     <span className="budget-ring-percent">{Math.round(budgetRawPercent)}%</span>
@@ -887,10 +883,10 @@ export function DashboardPage() {
                     </span>
                     <p className={`budget-status ${budgetSeverity || "good"}`}>
                       {budgetSeverity === "over"
-                        ? "⚠️ Passou do orçamento"
+                        ? "Passou do orçamento"
                         : budgetSeverity === "warning"
-                          ? "⚠️ Perto do limite"
-                          : "✅ Tudo sob controle"}
+                          ? "Perto do limite"
+                          : "Tudo sob controle"}
                     </p>
                   </div>
                 </div>
@@ -912,7 +908,7 @@ export function DashboardPage() {
                         strokeWidth={5}
                         color="var(--color-primary)"
                       >
-                        <span className="dashboard-mini-emoji">{goalHighlight.emoji ?? "🎯"}</span>
+                        <span className="dashboard-mini-emoji">{initialOf(goalHighlight.name)}</span>
                       </CircularProgress>
                       <div className="dashboard-mini-text">
                         <p className="dashboard-mini-title">Meta</p>
@@ -953,7 +949,7 @@ export function DashboardPage() {
                 </div>
                 <p className="card-subtitle">O que vocês gastaram juntos esse mês, e quem pagou quanto.</p>
                 <p className="value-sm" style={{ marginBottom: "0.75rem" }}>
-                  {jointAccount.name}: {formatCurrency(jointAccount.balance)}
+                  {formatCurrency(jointAccount.balance)} <span className="card-subtitle">na {jointAccount.name}</span>
                 </p>
                 <div className="stat-row wrap">
                   {orderedMembers.map((member, index) => (
@@ -962,7 +958,6 @@ export function DashboardPage() {
                       key={member.id}
                       style={{
                         ["--stat-box-accent" as string]: personColor(index),
-                        background: tint(personColor(index)),
                       }}
                     >
                       <div className="stat-box-header">
@@ -1025,7 +1020,7 @@ export function DashboardPage() {
                       <div className="category-gauge-item" key={row.categoryId ?? "none"}>
                         {row.categoryId ? (
                           <CircularProgress percent={percent} size={72} strokeWidth={7} color={color}>
-                            <span className="category-gauge-emoji">{row.categoryEmoji ?? "✨"}</span>
+                            <span className="category-gauge-emoji">{initialOf(row.categoryName)}</span>
                           </CircularProgress>
                         ) : (
                           // "Sem categoria" isn't a category to track against
@@ -1033,7 +1028,7 @@ export function DashboardPage() {
                           // goal that doesn't exist. A plain dashed circle
                           // reads as "uncategorized", not as a broken gauge.
                           <div className="category-gauge-uncategorized" style={{ width: 72, height: 72 }}>
-                            <span className="category-gauge-emoji">✨</span>
+                            <span className="category-gauge-emoji">?</span>
                           </div>
                         )}
                         <span className="category-gauge-name">{row.categoryName ?? "Sem categoria"}</span>
@@ -1076,7 +1071,7 @@ export function DashboardPage() {
                 </Link>
               </div>
               {activeDebts.length === 0 ? (
-                <EmptyState icon="🎉">Nenhuma dívida pendente!</EmptyState>
+                <EmptyState>Nenhuma dívida pendente.</EmptyState>
               ) : (
                 <>
                   <p className="value-sm danger-text">{formatCurrency(totalDebtRemaining)}</p>
@@ -1089,7 +1084,7 @@ export function DashboardPage() {
                       return (
                         <li key={debt.id}>
                           <div className="category-row-header">
-                            <span>💳 {debt.name}</span>
+                            <span>{debt.name}</span>
                             <span className="value">{formatCurrency(debt.remainingAmount)}</span>
                           </div>
                           <div className="progress-track thin">
@@ -1112,7 +1107,7 @@ export function DashboardPage() {
                 {visibleAccounts.map((account) => (
                   <li key={account.id}>
                     <span>
-                      {account.emoji ?? (account.type === "joint" ? "💞" : "👤")} {account.name}
+                      {account.name}
                     </span>
                     <strong className={account.balance < 0 ? "danger-text" : ""}>{formatCurrency(account.balance)}</strong>
                   </li>
@@ -1120,7 +1115,7 @@ export function DashboardPage() {
                 {savedInSecuredCards > 0 && (
                   <li>
                     <Link to="/cards" className="link">
-                      🔒 Guardado em cartões
+                      Guardado em cartões
                     </Link>
                     <strong>{formatCurrency(savedInSecuredCards)}</strong>
                   </li>
@@ -1128,7 +1123,7 @@ export function DashboardPage() {
                 {loansOutstanding > 0 && (
                   <li>
                     <Link to="/loans" className="link">
-                      🤝 Vão te pagar
+                      Vão te pagar
                     </Link>
                     <strong>{formatCurrency(loansOutstanding)}</strong>
                   </li>
@@ -1169,14 +1164,13 @@ export function DashboardPage() {
                         <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
                           <span
                             className="transaction-icon"
-                            style={{ background: tint(categoryColor(tx.categoryId)) }}
                           >
-                            {tx.categoryEmoji ?? "💸"}
+                            {initialOf(tx.categoryName ?? tx.description)}
                           </span>
                           <div className="transaction-info">
                             <span className="transaction-desc">
                               <span className="text-truncate">{tx.description}</span>
-                              {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">🔁</span>}
+                              {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">Mensal</span>}
                             </span>
                             <span className="transaction-meta">
                               <span className="text-truncate">
@@ -1228,6 +1222,12 @@ export function DashboardPage() {
                                         },
                                       ]
                                     : []),
+                                  {
+                                    key: "repeat",
+                                    label: "Repetir (lançar de novo hoje)",
+                                    icon: "repeat" as const,
+                                    onClick: () => navigate(repeatHref(tx)),
+                                  },
                                   {
                                     key: "delete",
                                     label: "Excluir",

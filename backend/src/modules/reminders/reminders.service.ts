@@ -8,6 +8,7 @@ import { findRecurringBillsByGroupId } from "../recurringBills/recurringBills.re
 import { addMonths, daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
 import { generateDueRecurringBills } from "../recurringBills/recurringBills.service";
 import { logError } from "../../utils/errorLog";
+import { getMonthCloseForUser, previousMonthInBrazil } from "../monthClose/monthClose.service";
 import {
   claimDailyRun,
   findAllGroupIds,
@@ -79,7 +80,7 @@ async function runCardReminders(groupId: string, members: MemberWithEmail[]): Pr
       recipients,
       `Fatura do cartão "${card.name}" ${dueLabel}`,
       `
-        <h1 style="font-size: 20px;">💳 Fatura chegando</h1>
+        <h1 style="font-size: 20px;">Fatura chegando</h1>
         <p>A fatura do cartão <strong>${card.name}</strong> ${dueLabel} (${formatBRDate(dueDate)}) e ainda não foi paga.</p>
         <p>Dá uma olhada no PAR. pra conferir o valor e marcar como paga.</p>
       `
@@ -140,7 +141,7 @@ async function runDebtReminders(groupId: string, members: MemberWithEmail[]): Pr
       recipients,
       `Parcela de "${debt.name}" ${dueLabel}`,
       `
-        <h1 style="font-size: 20px;">📄 Parcela chegando</h1>
+        <h1 style="font-size: 20px;">Parcela chegando</h1>
         <p>A parcela ${nextUnpaid.installmentNumber}/${debt.installmentsCount} de <strong>${debt.name}</strong>
         (${formatBRL(Number(nextUnpaid.amount))}) ${dueLabel} (${formatBRDate(dueDate)}) e ainda não foi paga.</p>
         <p>Dá uma olhada no PAR. pra marcar como paga.</p>
@@ -177,7 +178,7 @@ async function runBudgetReminder(groupId: string, members: MemberWithEmail[]): P
     members,
     "Orçamento do mês estourado",
     `
-      <h1 style="font-size: 20px;">📊 Orçamento estourado</h1>
+      <h1 style="font-size: 20px;">Orçamento estourado</h1>
       <p>O grupo já gastou <strong>${formatBRL(spent)}</strong> este mês, passando do limite de ${formatBRL(cap)}.</p>
       <p>Vale dar uma olhada nos Relatórios pra ver onde foi o gasto.</p>
     `
@@ -219,7 +220,7 @@ async function runRecurringBillReminders(groupId: string, members: MemberWithEma
       recipients,
       `Conta fixa "${bill.description}" ${dueLabelFor(daysUntilDue)}`,
       `
-        <h1 style="font-size: 20px;">🔁 Conta fixa chegando</h1>
+        <h1 style="font-size: 20px;">Conta fixa chegando</h1>
         <p><strong>${escapeHtml(bill.description)}</strong> (${formatBRL(Number(bill.amount))}) ${dueLabelFor(daysUntilDue)} (${formatBRDate(dueDate)}).</p>
         <p>O PAR. lança sozinho no dia. Só confira se tem saldo.</p>
       `
@@ -256,7 +257,7 @@ async function runLoanReminders(groupId: string, members: MemberWithEmail[]): Pr
       [lender],
       `${loan.personName} tinha que devolver ${formatBRL(remaining)} ${when === "hoje" ? "hoje" : ""}`.trim(),
       `
-        <h1 style="font-size: 20px;">🤝 Prazo de empréstimo</h1>
+        <h1 style="font-size: 20px;">Prazo de empréstimo</h1>
         <p>O prazo de <strong>${escapeHtml(loan.personName)}</strong> devolver <strong>${formatBRL(remaining)}</strong> foi ${when} (${formatBRDate(loan.dueDate)}).</p>
         <p>Recebeu? Toque em "Recebi" em Contas &gt; A receber, no PAR.</p>
       `
@@ -264,6 +265,71 @@ async function runLoanReminders(groupId: string, members: MemberWithEmail[]): Pr
     if (sent > 0) {
       emailsSent += sent;
       await markReminderSent(key, { groupId, kind: "loan", loanId: loan.id, dueDate: loan.dueDate });
+    }
+  }
+  return emailsSent;
+}
+
+const MONTH_NAMES = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+function monthName(month: string): string {
+  return MONTH_NAMES[Number(month.slice(5, 7)) - 1];
+}
+
+// Fechamento do mês: nos primeiros dias do mês (dia 1, ou nos seguintes se o
+// servidor estava dormindo), cada pessoa recebe o resumo do mês que acabou --
+// os números dela, não os do grupo. Uma vez por pessoa por mês; quem não
+// lançou nada no mês não recebe.
+const MONTH_CLOSE_LAST_DAY = 5;
+
+async function runMonthCloseEmails(groupId: string, members: MemberWithEmail[], now = new Date()): Promise<number> {
+  const dayOfMonth = Number(todayInBrazil(now).slice(8, 10));
+  if (dayOfMonth > MONTH_CLOSE_LAST_DAY) return 0;
+  const month = previousMonthInBrazil(now);
+  let emailsSent = 0;
+
+  for (const member of members) {
+    if (!member.email) continue;
+    const key = `month-close:${member.id}:${month}`;
+    if (await wasReminderSent(key)) continue;
+    const close = await getMonthCloseForUser(member.id, month);
+    if (!close.hasActivity) continue;
+
+    const name = monthName(month);
+    const leftColor = close.left < 0 ? "#d03b3b" : "#16171d";
+    const diff = close.left - close.previousLeft;
+    const comparison =
+      close.previousIncome > 0 || close.previousExpense > 0
+        ? `<p style="color:#5b5d68;">Em ${monthName(close.previousMonth)} sobrou ${formatBRL(close.previousLeft)}. Agora foram ${
+            diff >= 0 ? `${formatBRL(diff)} a mais` : `${formatBRL(-diff)} a menos`
+          }.</p>`
+        : "";
+    const categories = close.topCategories.length
+      ? `<p style="margin-bottom:4px;"><strong>Onde mais foi dinheiro</strong></p><ul style="margin-top:0;padding-left:18px;">${close.topCategories
+          .map((row) => `<li>${escapeHtml(row.name)}: ${formatBRL(row.total)}</li>`)
+          .join("")}</ul>`
+      : "";
+    const sent = await sendToMembers(
+      [member],
+      `Fechamento de ${name}: sobrou ${formatBRL(close.left)}`,
+      `
+        <h1 style="font-size: 20px;">Fechamento de ${name}</h1>
+        <table style="border-collapse:collapse;margin:8px 0 12px;">
+          <tr><td style="padding:2px 16px 2px 0;color:#5b5d68;">Entrou</td><td style="text-align:right;"><strong>${formatBRL(close.income)}</strong></td></tr>
+          <tr><td style="padding:2px 16px 2px 0;color:#5b5d68;">Saiu</td><td style="text-align:right;"><strong>${formatBRL(close.expense)}</strong></td></tr>
+          <tr><td style="padding:2px 16px 2px 0;color:#5b5d68;">Sobrou</td><td style="text-align:right;color:${leftColor};"><strong>${formatBRL(close.left)}</strong></td></tr>
+        </table>
+        ${comparison}
+        ${categories}
+        <p>O detalhe está em Relatórios, no PAR.</p>
+      `
+    );
+    if (sent > 0) {
+      emailsSent += sent;
+      await markReminderSent(key, { groupId, kind: "month-close", userId: member.id, month });
     }
   }
   return emailsSent;
@@ -284,6 +350,7 @@ export async function runDueReminders(): Promise<{ groupsChecked: number; emails
     emailsSent += await runBudgetReminder(group.id, members);
     emailsSent += await runRecurringBillReminders(group.id, members);
     emailsSent += await runLoanReminders(group.id, members);
+    emailsSent += await runMonthCloseEmails(group.id, members);
   }
 
   return { groupsChecked: groups.length, emailsSent };

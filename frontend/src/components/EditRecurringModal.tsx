@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "./ToastProvider";
+import { Sheet } from "./Sheet";
 
 export interface EditableRecurring {
   id: string;
@@ -56,43 +57,41 @@ export function EditRecurringModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
-        <h1>Editar recorrência</h1>
-        <p className="card-subtitle">
-          Muda o valor de "{transaction.description}" a partir deste mês -- os meses que já passaram continuam com
-          o valor antigo.
-        </p>
+    <Sheet onClose={onClose}>
+      <h1>Editar recorrência</h1>
+      <p className="card-subtitle">
+        Muda o valor de "{transaction.description}" a partir deste mês -- os meses que já passaram continuam com
+        o valor antigo.
+      </p>
 
-        <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label htmlFor="edit-recurring-amount">Novo valor (R$)</label>
-            <input
-              id="edit-recurring-amount"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              autoFocus
-              required
-            />
-          </div>
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="edit-recurring-amount">Novo valor (R$)</label>
+          <input
+            id="edit-recurring-amount"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            autoFocus
+            required
+          />
+        </div>
 
-          {error && (
-            <p className="alert" role="alert">
-              {error}
-            </p>
-          )}
+        {error && (
+          <p className="alert" role="alert">
+            {error}
+          </p>
+        )}
 
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={onClose}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? "Salvando..." : "Salvar a partir daqui"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? "Salvando..." : "Salvar a partir daqui"}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }

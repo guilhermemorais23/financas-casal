@@ -1,12 +1,8 @@
-// Icon + friendly copy for an empty list -- reused everywhere instead of
-// each page hand-rolling the same emoji-span-plus-paragraph markup, so a
-// future tweak (spacing, a CTA) only needs to happen in one place.
-export function EmptyState({ icon, children }: { icon: string; children: string }) {
+// Texto de lista vazia -- reusado em todo lugar pra manter o mesmo visual.
+// Sem emoji: o app fica com cara de produto, não de gerado por IA.
+export function EmptyState({ children }: { children: string }) {
   return (
     <div className="empty-state-friendly">
-      <span className="empty-state-emoji" aria-hidden="true">
-        {icon}
-      </span>
       <p>{children}</p>
     </div>
   );

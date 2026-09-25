@@ -8,6 +8,7 @@ import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, parseLocalDate } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
+import { Sheet } from "../components/Sheet";
 
 interface Repayment {
   id: string;
@@ -502,85 +503,83 @@ function CreateLoanModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <h1>Emprestei dinheiro</h1>
-        <p className="card-subtitle">Não conta como gasto. É seu e vai voltar.</p>
-        <form onSubmit={handleSubmit}>
+    <Sheet onClose={onClose}>
+      <h1>Emprestei dinheiro</h1>
+      <p className="card-subtitle">Não conta como gasto. É seu e vai voltar.</p>
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="loan-person">Pra quem</label>
+          <input
+            id="loan-person"
+            value={personName}
+            onChange={(e) => setPersonName(e.target.value)}
+            placeholder="Mãe, João, Tia Rita..."
+            maxLength={80}
+            autoFocus
+          />
+        </div>
+        <div className="field-row">
           <div className="field">
-            <label htmlFor="loan-person">Pra quem</label>
+            <label htmlFor="loan-amount">Valor (R$)</label>
+            <input id="loan-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
+          </div>
+          <div className="field">
+            <label htmlFor="loan-date">Quando</label>
+            <input id="loan-date" type="date" value={lentAt} onChange={(e) => setLentAt(e.target.value)} />
+          </div>
+        </div>
+        <label className="checkbox-field">
+          <input type="checkbox" checked={hasDueDate} onChange={(e) => setHasDueDate(e.target.checked)} />
+          <span>Tem prazo pra devolver</span>
+        </label>
+        {hasDueDate && (
+          <div className="field">
+            <label htmlFor="loan-due">Devolve até</label>
+            <input id="loan-due" type="date" min={lentAt} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
+        )}
+        <label className="checkbox-field">
+          <input type="checkbox" checked={hasInterest} onChange={(e) => setHasInterest(e.target.checked)} />
+          <span>Cobrar juros</span>
+        </label>
+        {hasInterest && (
+          <div className="field">
+            <label htmlFor="loan-interest">Juros (% ao mês)</label>
             <input
-              id="loan-person"
-              value={personName}
-              onChange={(e) => setPersonName(e.target.value)}
-              placeholder="Mãe, João, Tia Rita..."
-              maxLength={80}
-              autoFocus
+              id="loan-interest"
+              inputMode="decimal"
+              value={interestRate}
+              onChange={(e) => setInterestRate(e.target.value)}
+              placeholder="2"
             />
+            <p className="field-hint">Juros simples, contados a cada mês cheio desde o empréstimo.</p>
           </div>
-          <div className="field-row">
-            <div className="field">
-              <label htmlFor="loan-amount">Valor (R$)</label>
-              <input id="loan-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
-            </div>
-            <div className="field">
-              <label htmlFor="loan-date">Quando</label>
-              <input id="loan-date" type="date" value={lentAt} onChange={(e) => setLentAt(e.target.value)} />
-            </div>
-          </div>
-          <label className="checkbox-field">
-            <input type="checkbox" checked={hasDueDate} onChange={(e) => setHasDueDate(e.target.checked)} />
-            <span>Tem prazo pra devolver</span>
-          </label>
-          {hasDueDate && (
-            <div className="field">
-              <label htmlFor="loan-due">Devolve até</label>
-              <input id="loan-due" type="date" min={lentAt} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </div>
-          )}
-          <label className="checkbox-field">
-            <input type="checkbox" checked={hasInterest} onChange={(e) => setHasInterest(e.target.checked)} />
-            <span>Cobrar juros</span>
-          </label>
-          {hasInterest && (
-            <div className="field">
-              <label htmlFor="loan-interest">Juros (% ao mês)</label>
-              <input
-                id="loan-interest"
-                inputMode="decimal"
-                value={interestRate}
-                onChange={(e) => setInterestRate(e.target.value)}
-                placeholder="2"
-              />
-              <p className="field-hint">Juros simples, contados a cada mês cheio desde o empréstimo.</p>
-            </div>
-          )}
-          <div className="field">
-            <label htmlFor="loan-account">Saiu de qual conta</label>
-            <AccountSelect
-              id="loan-account"
-              accounts={accounts}
-              value={accountId}
-              onChange={setAccountId}
-              noneLabel="Não tirar de conta (já saiu antes)"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="loan-note">Observação (opcional)</label>
-            <input id="loan-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Pro conserto do carro" />
-          </div>
-          {error && <p className="alert">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={onClose}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
-              {isSubmitting ? "Salvando..." : "Salvar"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        )}
+        <div className="field">
+          <label htmlFor="loan-account">Saiu de qual conta</label>
+          <AccountSelect
+            id="loan-account"
+            accounts={accounts}
+            value={accountId}
+            onChange={setAccountId}
+            noneLabel="Não tirar de conta (já saiu antes)"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="loan-note">Observação (opcional)</label>
+          <input id="loan-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Pro conserto do carro" />
+        </div>
+        {error && <p className="alert">{error}</p>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
+            {isSubmitting ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 
@@ -629,43 +628,41 @@ function ReceiveModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <h1>Recebi de {loan.personName}</h1>
-        <p className="card-subtitle">Falta {formatCurrency(remaining)}. Pode ser só uma parte.</p>
-        <form onSubmit={handleSubmit}>
-          <div className="field-row">
-            <div className="field">
-              <label htmlFor="repay-amount">Valor (R$)</label>
-              <input id="repay-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
-            </div>
-            <div className="field">
-              <label htmlFor="repay-date">Quando</label>
-              <input id="repay-date" type="date" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
-            </div>
+    <Sheet onClose={onClose}>
+      <h1>Recebi de {loan.personName}</h1>
+      <p className="card-subtitle">Falta {formatCurrency(remaining)}. Pode ser só uma parte.</p>
+      <form onSubmit={handleSubmit}>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="repay-amount">Valor (R$)</label>
+            <input id="repay-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
           </div>
           <div className="field">
-            <label htmlFor="repay-account">Entrou em qual conta</label>
-            <AccountSelect
-              id="repay-account"
-              accounts={accounts}
-              value={accountId}
-              onChange={setAccountId}
-              noneLabel="Não entrou em conta (dinheiro vivo)"
-            />
+            <label htmlFor="repay-date">Quando</label>
+            <input id="repay-date" type="date" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
           </div>
-          {error && <p className="alert">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={onClose}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
-              {isSubmitting ? "Salvando..." : "Salvar"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div className="field">
+          <label htmlFor="repay-account">Entrou em qual conta</label>
+          <AccountSelect
+            id="repay-account"
+            accounts={accounts}
+            value={accountId}
+            onChange={setAccountId}
+            noneLabel="Não entrou em conta (dinheiro vivo)"
+          />
+        </div>
+        {error && <p className="alert">{error}</p>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
+            {isSubmitting ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 
@@ -709,52 +706,50 @@ function EditLoanModal({ loan, onClose, onSaved }: { loan: Loan; onClose: () => 
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <h1>Editar empréstimo</h1>
-        <p className="card-subtitle">
-          {formatCurrency(Number(loan.amount))} emprestados em {shortDate(loan.lentAt)}.
-        </p>
-        <form onSubmit={handleSubmit}>
+    <Sheet onClose={onClose}>
+      <h1>Editar empréstimo</h1>
+      <p className="card-subtitle">
+        {formatCurrency(Number(loan.amount))} emprestados em {shortDate(loan.lentAt)}.
+      </p>
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="edit-loan-person">Pra quem</label>
+          <input id="edit-loan-person" value={personName} onChange={(e) => setPersonName(e.target.value)} maxLength={80} />
+        </div>
+        <label className="checkbox-field">
+          <input type="checkbox" checked={hasDueDate} onChange={(e) => setHasDueDate(e.target.checked)} />
+          <span>Tem prazo pra devolver</span>
+        </label>
+        {hasDueDate && (
           <div className="field">
-            <label htmlFor="edit-loan-person">Pra quem</label>
-            <input id="edit-loan-person" value={personName} onChange={(e) => setPersonName(e.target.value)} maxLength={80} />
+            <label htmlFor="edit-loan-due">Devolve até</label>
+            <input id="edit-loan-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
-          <label className="checkbox-field">
-            <input type="checkbox" checked={hasDueDate} onChange={(e) => setHasDueDate(e.target.checked)} />
-            <span>Tem prazo pra devolver</span>
-          </label>
-          {hasDueDate && (
-            <div className="field">
-              <label htmlFor="edit-loan-due">Devolve até</label>
-              <input id="edit-loan-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </div>
-          )}
-          <label className="checkbox-field">
-            <input type="checkbox" checked={hasInterest} onChange={(e) => setHasInterest(e.target.checked)} />
-            <span>Cobrar juros</span>
-          </label>
-          {hasInterest && (
-            <div className="field">
-              <label htmlFor="edit-loan-interest">Juros (% ao mês)</label>
-              <input id="edit-loan-interest" inputMode="decimal" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
-            </div>
-          )}
+        )}
+        <label className="checkbox-field">
+          <input type="checkbox" checked={hasInterest} onChange={(e) => setHasInterest(e.target.checked)} />
+          <span>Cobrar juros</span>
+        </label>
+        {hasInterest && (
           <div className="field">
-            <label htmlFor="edit-loan-note">Observação</label>
-            <input id="edit-loan-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />
+            <label htmlFor="edit-loan-interest">Juros (% ao mês)</label>
+            <input id="edit-loan-interest" inputMode="decimal" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
           </div>
-          {error && <p className="alert">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-outline" onClick={onClose}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
-              Salvar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        )}
+        <div className="field">
+          <label htmlFor="edit-loan-note">Observação</label>
+          <input id="edit-loan-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />
+        </div>
+        {error && <p className="alert">{error}</p>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-outline" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
+            Salvar
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }

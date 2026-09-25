@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { EmojiPicker } from "../components/EmojiPicker";
 import { Icon } from "../components/Icon";
 import { useSwipeDownToClose } from "../hooks/useSwipeDownToClose";
 import { useToast } from "../components/ToastProvider";
 import { saveTransactionInBackground } from "../utils/optimisticTransactions";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency } from "../utils/format";
-import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
+import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
+import { recentDescriptions, rememberEntry, suggestFor } from "../utils/quickEntry";
 
 interface AccountRow {
   id: string;
@@ -57,23 +57,47 @@ export function NewTransactionPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
 
-  // O atalho "Receita" do Painel abre isso com ?tipo=receita.
+  // O atalho "Receita" do Painel abre isso com ?tipo=receita; o "Repetir"
+  // do extrato manda o lançamento inteiro na URL (utils/quickEntry.ts).
+  const [prefill] = useState(() => new URLSearchParams(window.location.search));
+  const isRepeat = prefill.get("repetir") === "1";
   const [transactionType, setTransactionType] = useState<"expense" | "income">(() =>
-    new URLSearchParams(window.location.search).get("tipo") === "receita" ? "income" : "expense"
+    prefill.get("tipo") === "receita" ? "income" : "expense"
   );
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [accountId, setAccountId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [description, setDescription] = useState(() => prefill.get("d") ?? "");
+  const [amount, setAmount] = useState(() => (prefill.get("v") ? Number(prefill.get("v")).toFixed(2).replace(".", ",") : ""));
+  const [accountId, setAccountId] = useState(() => prefill.get("a") ?? "");
+  const [categoryId, setCategoryId] = useState(() => prefill.get("c") ?? "");
+  // Depois que a pessoa escolhe a categoria na mão, a sugestão automática
+  // não mexe mais nela.
+  const [categoryTouched, setCategoryTouched] = useState(isRepeat);
+  const [showMore, setShowMore] = useState(false);
+  const [knownDescriptions] = useState(() => recentDescriptions(user?.id ?? ""));
   const [payerId, setPayerId] = useState(user?.id ?? "");
   const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [splitType, setSplitType] = useState<"none" | "equal">("none");
   const [isPrivate, setIsPrivate] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">(() => (prefill.get("p") as PaymentMethod | null) ?? "");
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringMonths, setRecurringMonths] = useState("12");
 
   const isIncome = transactionType === "income";
+  const moreOptionsSummary = [
+    occurredAt === new Date().toISOString().slice(0, 10)
+      ? "Hoje"
+      : new Date(`${occurredAt}T00:00:00`).toLocaleDateString("pt-BR"),
+    accounts.find((a) => a.id === accountId)?.name,
+    payerId === user?.id
+      ? isIncome
+        ? "você recebeu"
+        : "você pagou"
+      : members.find((m) => m.id === payerId)?.displayName,
+    paymentMethodLabel(paymentMethod || null),
+    isRecurring ? "todo mês" : null,
+    !isIncome && splitType === "equal" ? "dividido" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   // Live preview only -- the real split (with exact-cent remainder handling)
   // is computed server-side in splitEvenly() when the transaction is saved.
   const parsedAmountPreview = Number(amount.replace(",", "."));
@@ -115,6 +139,16 @@ export function NewTransactionPage() {
     load();
   }, [token, user?.id]);
 
+  function handleDescriptionChange(value: string) {
+    setDescription(value);
+    if (categoryTouched) return;
+    const suggestion = suggestFor(user?.id ?? "", value);
+    if (!suggestion) return;
+    if (suggestion.categoryId && categories.some((c) => c.id === suggestion.categoryId)) setCategoryId(suggestion.categoryId);
+    if (suggestion.paymentMethod) setPaymentMethod(suggestion.paymentMethod);
+    if (suggestion.accountId && accounts.some((a) => a.id === suggestion.accountId)) setAccountId(suggestion.accountId);
+  }
+
   async function handleAddCategory() {
     if (!newCategoryName.trim()) return;
     setError(null);
@@ -127,6 +161,7 @@ export function NewTransactionPage() {
       });
       await loadCategories();
       setCategoryId(created.id);
+      setCategoryTouched(true);
       setNewCategoryName("");
       setNewCategoryEmoji("");
       setIsAddingCategory(false);
@@ -157,6 +192,12 @@ export function NewTransactionPage() {
     // server rejects it) -- see utils/optimisticTransactions.ts.
     const account = accounts.find((a) => a.id === accountId);
     const category = categories.find((c) => c.id === categoryId);
+    rememberEntry(user?.id ?? "", {
+      description,
+      categoryId: categoryId || null,
+      accountId,
+      paymentMethod: paymentMethod || null,
+    });
     const payload = {
       description: description.trim(),
       amount: parsedAmount,
@@ -234,47 +275,34 @@ export function NewTransactionPage() {
 
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="description">Descrição</label>
-            <input id="description" value={description} onChange={(e) => setDescription(e.target.value)} required />
-          </div>
-
-          <div className="field-row">
-            <div className="field">
-              <label htmlFor="amount">Valor (R$)</label>
-              <input
-                id="amount"
-                inputMode="decimal"
-                placeholder="0,00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="occurredAt">Data</label>
-              <input
-                id="occurredAt"
-                type="date"
-                value={occurredAt}
-                onChange={(e) => setOccurredAt(e.target.value)}
-                required
-              />
-            </div>
+            <label htmlFor="amount">Valor (R$)</label>
+            <input
+              id="amount"
+              className="amount-input"
+              inputMode="decimal"
+              placeholder="0,00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              autoFocus={!isRepeat}
+              required
+            />
           </div>
 
           <div className="field">
-            <label htmlFor="account">Conta</label>
-            <select id="account" value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
-              <option value="" disabled>
-                Selecione
-              </option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.emoji ? `${account.emoji} ` : ""}
-                  {account.name}
-                </option>
+            <label htmlFor="description">Descrição</label>
+            <input
+              id="description"
+              value={description}
+              onChange={(e) => handleDescriptionChange(e.target.value)}
+              list="known-descriptions"
+              autoComplete="off"
+              required
+            />
+            <datalist id="known-descriptions">
+              {knownDescriptions.map((text) => (
+                <option key={text} value={text} />
               ))}
-            </select>
+            </datalist>
           </div>
 
           <div className="field">
@@ -288,11 +316,13 @@ export function NewTransactionPage() {
                 {isAddingCategory ? "Cancelar" : "+ Nova categoria"}
               </button>
             </div>
-            <select id="category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <select id="category" value={categoryId} onChange={(e) => {
+                setCategoryId(e.target.value);
+                setCategoryTouched(true);
+              }}>
               <option value="">Sem categoria</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.emoji ? `${category.emoji} ` : ""}
                   {category.name}
                 </option>
               ))}
@@ -304,7 +334,6 @@ export function NewTransactionPage() {
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                 />
-                <EmojiPicker value={newCategoryEmoji} onChange={setNewCategoryEmoji} />
                 <button
                   type="button"
                   className="btn btn-outline"
@@ -317,84 +346,128 @@ export function NewTransactionPage() {
             )}
           </div>
 
-          <div className="field">
-            <label htmlFor="payer">{isIncome ? "Quem recebeu" : "Quem pagou"}</label>
-            <select id="payer" value={payerId} onChange={(e) => setPayerId(e.target.value)} required>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.id === user?.id ? "Você" : member.displayName}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* O resto já vem preenchido (hoje, sua conta, você pagou). Fica
+              escondido pra o lançamento do dia a dia caber numa tela. */}
+          <button
+            type="button"
+            className="more-options-toggle"
+            aria-expanded={showMore}
+            onClick={() => setShowMore((current) => !current)}
+          >
+            <span>
+              <strong>Mais opções</strong>
+              <small>{moreOptionsSummary}</small>
+            </span>
+            <Icon name="chevron" />
+          </button>
 
-          <div className="field">
-            <label htmlFor="payment-method">{isIncome ? "Forma de recebimento" : "Forma de pagamento"} (opcional)</label>
-            <select
-              id="payment-method"
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod | "")}
-            >
-              <option value="">Não informado</option>
-              {PAYMENT_METHOD_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.icon} {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <label className="checkbox-field">
-            <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
-            {isIncome ? "Entrada recorrente (salário)" : "Repete todo mês (assinatura)"}
-          </label>
-          {isRecurring && (
-            <div className="field">
-              <label htmlFor="recurringMonths">Repetir por quantos meses</label>
-              <input
-                id="recurringMonths"
-                type="number"
-                inputMode="numeric"
-                min={2}
-                max={36}
-                value={recurringMonths}
-                onChange={(e) => setRecurringMonths(e.target.value)}
-              />
-              <p className="field-hint">
-                Lança {description.trim() ? `"${description.trim()}"` : "esse valor"} todo mês, a partir de{" "}
-                {occurredAt ? new Date(`${occurredAt}T00:00:00`).toLocaleDateString("pt-BR") : "hoje"}, já de uma vez.
-              </p>
-            </div>
-          )}
-
-          {!isIncome && (
-            <>
+          {showMore && (
+            <div className="more-options">
               <div className="field">
-                <label htmlFor="split">Divisão</label>
-                <select
-                  id="split"
-                  value={splitType}
-                  onChange={(e) => setSplitType(e.target.value as "none" | "equal")}
-                >
-                  <option value="none">Não dividir</option>
-                  <option value="equal">Dividir igualmente entre o grupo</option>
-                </select>
-                {splitType === "equal" && (
-                  <p className="field-hint">
-                    {members.length > 1
-                      ? `${members.length} pessoas no grupo${
-                          perPersonAmount !== null ? ` — ${formatCurrency(perPersonAmount)} cada` : ""
-                        }.`
-                      : "Só tem você no grupo por enquanto — convide alguém pra dividir de verdade."}
-                  </p>
-                )}
+                <label htmlFor="occurredAt">Data</label>
+                <input
+                  id="occurredAt"
+                  type="date"
+                  value={occurredAt}
+                  onChange={(e) => setOccurredAt(e.target.value)}
+                  required
+                />
               </div>
 
-              <label className="checkbox-field">
-                <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-                Privada (só você vê o nome)
-              </label>
-            </>
+            <div className="field">
+              <label htmlFor="account">Conta</label>
+              <select id="account" value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
+                <option value="" disabled>
+                  Selecione
+                </option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="payer">{isIncome ? "Quem recebeu" : "Quem pagou"}</label>
+              <select id="payer" value={payerId} onChange={(e) => setPayerId(e.target.value)} required>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.id === user?.id ? "Você" : member.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="payment-method">{isIncome ? "Forma de recebimento" : "Forma de pagamento"} (opcional)</label>
+              <select
+                id="payment-method"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod | "")}
+              >
+                <option value="">Não informado</option>
+                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <label className="checkbox-field">
+              <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
+              {isIncome ? "Entrada recorrente (salário)" : "Repete todo mês (assinatura)"}
+            </label>
+            {isRecurring && (
+              <div className="field">
+                <label htmlFor="recurringMonths">Repetir por quantos meses</label>
+                <input
+                  id="recurringMonths"
+                  type="number"
+                  inputMode="numeric"
+                  min={2}
+                  max={36}
+                  value={recurringMonths}
+                  onChange={(e) => setRecurringMonths(e.target.value)}
+                />
+                <p className="field-hint">
+                  Lança {description.trim() ? `"${description.trim()}"` : "esse valor"} todo mês, a partir de{" "}
+                  {occurredAt ? new Date(`${occurredAt}T00:00:00`).toLocaleDateString("pt-BR") : "hoje"}, já de uma vez.
+                </p>
+              </div>
+            )}
+
+            {!isIncome && (
+              <>
+                <div className="field">
+                  <label htmlFor="split">Divisão</label>
+                  <select
+                    id="split"
+                    value={splitType}
+                    onChange={(e) => setSplitType(e.target.value as "none" | "equal")}
+                  >
+                    <option value="none">Não dividir</option>
+                    <option value="equal">Dividir igualmente entre o grupo</option>
+                  </select>
+                  {splitType === "equal" && (
+                    <p className="field-hint">
+                      {members.length > 1
+                        ? `${members.length} pessoas no grupo${
+                            perPersonAmount !== null ? ` — ${formatCurrency(perPersonAmount)} cada` : ""
+                          }.`
+                        : "Só tem você no grupo por enquanto — convide alguém pra dividir de verdade."}
+                    </p>
+                  )}
+                </div>
+
+                <label className="checkbox-field">
+                  <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+                  Privada (só você vê o nome)
+                </label>
+              </>
+            )}
+            </div>
           )}
 
           {error && (
