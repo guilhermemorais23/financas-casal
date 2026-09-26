@@ -5810,6 +5810,39 @@ video {
   background: var(--status-critical);
 }
 
+.diag-row.warn .diag-icon {
+  background: var(--status-warning);
+}
+
+.diag-row.off .diag-icon {
+  background: var(--color-text-muted);
+}
+
+.diag-level {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--color-bg-soft);
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.diag-env {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.diag-summary.bad {
+  border-color: var(--status-critical);
+}
+
+.diag-summary.warn {
+  border-color: var(--status-warning);
+}
+
 .diag-icon .icon {
   width: 14px;
   height: 14px;
