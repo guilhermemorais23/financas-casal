@@ -77,6 +77,23 @@ const BILLS_PATHS = [...BILLS_TABS.map((tab) => tab.to), "/debts", "/recurring-b
 // Cotações (Investimentos) saiu do menu mas a tela continua, pelo link em Metas.
 const MORE_PATHS = [...MORE_TILES.map((tile) => tile.to), "/investments", "/account", "/admin"];
 
+// Lista de compras é coisa de casal: quem usa sozinho não vê no menu (a tela
+// continua existindo). Guarda a resposta pra não piscar a cada troca de tela.
+const COUPLE_ONLY_PATHS = ["/shopping"];
+const coupleCache = new Map<string, boolean>();
+
+function readCoupleFlag(userId: string | undefined): boolean | null {
+  if (!userId) return null;
+  if (coupleCache.has(userId)) return coupleCache.get(userId) ?? null;
+  try {
+    const stored = localStorage.getItem(`par:is-couple:${userId}`);
+    if (stored === "1" || stored === "0") return stored === "1";
+  } catch {
+    // Sem storage: decide quando /groups/me responder.
+  }
+  return null;
+}
+
 // Último valor dos widgets da barra lateral, por mês (vive enquanto o app
 // estiver aberto).
 const sidebarCache = new Map<string, unknown>();
@@ -128,6 +145,26 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       })
       .catch(() => setDailyTrend(null));
   }, [token, sidebarMonth, user?.id]);
+
+  // Enquanto não sabe (primeiro acesso), mostra tudo -- a maioria é casal.
+  const [isCouple, setIsCouple] = useState<boolean | null>(() => readCoupleFlag(user?.id));
+  useEffect(() => {
+    if (!token || !user?.id) return;
+    const userId = user.id;
+    apiRequest<{ members: unknown[] }>("/groups/me", { token })
+      .then((group) => {
+        const couple = (group?.members?.length ?? 0) > 1;
+        coupleCache.set(userId, couple);
+        try {
+          localStorage.setItem(`par:is-couple:${userId}`, couple ? "1" : "0");
+        } catch {
+          // Sem storage: o cache em memória basta.
+        }
+        setIsCouple(couple);
+      })
+      .catch(() => undefined);
+  }, [token, user?.id]);
+  const showItem = (to: string) => isCouple !== false || !COUPLE_ONLY_PATHS.includes(to);
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
@@ -202,7 +239,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
           {NAV_GROUPS.map((group) => (
             <div key={group.label ?? "main"} className="app-nav-group">
               {group.label && <p className="app-nav-group-label">{group.label}</p>}
-              {group.items.map((item) => (
+              {group.items.filter((item) => showItem(item.to)).map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -404,7 +441,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
             </div>
 
             <div className="more-sheet-tiles">
-              {MORE_TILES.map((tile) => (
+              {MORE_TILES.filter((tile) => showItem(tile.to)).map((tile) => (
                 <Link
                   key={tile.to}
                   to={tile.to}
