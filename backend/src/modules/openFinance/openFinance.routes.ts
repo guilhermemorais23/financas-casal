@@ -4,6 +4,7 @@ import { requireAuth } from "../../middleware/auth";
 import { requirePremium } from "../../middleware/requirePremium";
 import {
   connectTokenHandler,
+  pendingHandler,
   previewHandler,
   registerItemHandler,
   removeHandler,
@@ -16,6 +17,7 @@ export const openFinanceRouter = Router();
 
 openFinanceRouter.use(requireAuth);
 openFinanceRouter.get("/status", asyncHandler(statusHandler));
+openFinanceRouter.get("/pending", asyncHandler(pendingHandler));
 openFinanceRouter.use(requirePremium);
 openFinanceRouter.post("/connect-token", asyncHandler(connectTokenHandler));
 openFinanceRouter.post("/items", asyncHandler(registerItemHandler));

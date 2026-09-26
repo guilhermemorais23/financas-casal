@@ -8889,3 +8889,62 @@ select {
 .push-on .icon { width: 16px; height: 16px; }
 .push-hint { display: flex; gap: 0.4rem; align-items: flex-start; margin: 0; }
 .push-hint .icon { width: 16px; height: 16px; flex: none; margin-top: 0.1rem; }
+
+/* Painel: avisos curtos (banco conectado, sem categoria) */
+.dashboard-nudges { display: grid; gap: 0.5rem; }
+.dashboard-nudge {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-card);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dashboard-nudge-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.dashboard-nudge-icon.warn {
+  background: color-mix(in srgb, var(--status-warning) 18%, var(--color-card));
+  color: color-mix(in srgb, var(--status-warning) 60%, var(--color-text));
+}
+.dashboard-nudge-icon .icon { width: 18px; height: 18px; }
+.dashboard-nudge-text { display: grid; gap: 0.1rem; min-width: 0; }
+.dashboard-nudge-text small { color: var(--color-text-muted); font-size: 0.8rem; }
+.dashboard-nudge-chevron { width: 16px; height: 16px; color: var(--color-text-muted); transform: rotate(-90deg); }
+.import-bank-new {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+/* Gastos sem categoria */
+.uncat-list { list-style: none; margin: 0.5rem 0; padding: 0; display: grid; gap: 0.5rem; max-height: 55vh; overflow: auto; }
+.uncat-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, 12rem); gap: 0.6rem; align-items: center; padding: 0.55rem 0; border-bottom: 1px solid var(--color-border); }
+.uncat-row-text { display: grid; gap: 0.1rem; min-width: 0; }
+.uncat-row-text strong { overflow-wrap: anywhere; }
+.uncat-row-text small { color: var(--color-text-muted); }
+.uncat-row select { width: 100%; min-width: 0; }
+.uncat-remember { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; margin: 0.25rem 0 0.5rem; }
+@media (max-width: 420px) {
+  .uncat-row { grid-template-columns: 1fr; }
+}
+.uncat-remember input { width: auto; flex: none; margin: 0; }
+.uncat-new { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.uncat-new input { flex: 1 1 12rem; min-width: 0; }

@@ -268,7 +268,7 @@ export async function getMonthlyTrendForUser(
 // Joint-account transactions are manageable by any group member (same rule
 // as joint debts); personal-account transactions stay restricted to whoever
 // created them.
-function canManageTransaction(userId: string, transaction: { accountType: string; createdBy: string }): boolean {
+export function canManageTransaction(userId: string, transaction: { accountType: string; createdBy: string }): boolean {
   return transaction.accountType === "joint" || transaction.createdBy === userId;
 }
 

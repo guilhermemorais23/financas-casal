@@ -24,6 +24,7 @@ import { maybeRunDailyJobs } from "./modules/reminders/reminders.service";
 import { maybeRunOpsChecks } from "./utils/opsAlerts";
 import { publicSharesRouter, sharesRouter } from "./modules/shares/shares.routes";
 import { openFinanceRouter } from "./modules/openFinance/openFinance.routes";
+import { webhookHandler as pluggyWebhookHandler } from "./modules/openFinance/openFinance.controller";
 import { pushRouter } from "./modules/push/push.routes";
 import { statementsRouter } from "./modules/statements/statements.routes";
 import { shoppingRouter } from "./modules/shopping/shopping.routes";
@@ -74,7 +75,7 @@ const heavyLimiter = rateLimit({
 // Webhooks (Telegram, WhatsApp, Asaas) chegam sempre dos mesmos servidores
 // e já se autenticam por segredo/assinatura: não entram no limite por IP,
 // senão com muita gente usando as mensagens começariam a ser recusadas.
-const WEBHOOK_PATHS = new Set(["/assistant/telegram/webhook", "/assistant/whatsapp/webhook", "/billing/webhook"]);
+const WEBHOOK_PATHS = new Set(["/assistant/telegram/webhook", "/assistant/whatsapp/webhook", "/billing/webhook", "/open-finance/webhook"]);
 
 // PDF/IA (custam), link público e convite (dá pra tentar adivinhar),
 // mensagem de feedback (vira e-mail pro dono).
@@ -156,6 +157,9 @@ export function createApp() {
   app.use("/api/alerts", alertsRouter);
   app.use("/api/shares", sharesRouter);
   app.use("/api/statements", statementsRouter);
+  // Aviso do Pluggy: sem login (confere o segredo do endereço), antes do
+  // roteador que exige login.
+  app.post("/api/open-finance/webhook", asyncHandler(pluggyWebhookHandler));
   app.use("/api/open-finance", openFinanceRouter);
   app.use("/api/push", pushRouter);
   app.use("/api/feedback", feedbackRouter);

@@ -43,7 +43,13 @@ export async function enablePush(token: string | null, publicKey: string): Promi
         : "Você não permitiu as notificações."
     );
   }
-  const reg = (await navigator.serviceWorker.getRegistration()) ?? (await navigator.serviceWorker.ready);
+  // O service worker do app pode ainda estar instalando; espera um pouco.
+  const reg =
+    (await navigator.serviceWorker.getRegistration()) ??
+    (await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]));
   if (!reg) throw new PushError("O app ainda está carregando. Tente de novo em alguns segundos.");
   const sub =
     (await reg.pushManager.getSubscription()) ??

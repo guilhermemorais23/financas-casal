@@ -193,6 +193,13 @@ export async function buildDiagnostics(): Promise<DiagSection[]> {
           env: "PLUGGY_ALLOWED_EMAILS",
           hint: has("PLUGGY_ALLOWED_EMAILS") ? undefined : "Sem ela, só os admins (o plano grátis do Pluggy é pra uso pessoal).",
         },
+        {
+          label: "Aviso de lançamentos novos (webhook)",
+          ok: has("PLUGGY_WEBHOOK_SECRET") && (has("API_PUBLIC_URL") || has("RENDER_EXTERNAL_URL")),
+          level: "recommended",
+          env: "PLUGGY_WEBHOOK_SECRET",
+          hint: "Um texto aleatório longo. Com ele, o Pluggy avisa quando o banco tem lançamentos novos e a pessoa recebe a notificação. No Render o endereço público já existe (RENDER_EXTERNAL_URL); fora dele, use API_PUBLIC_URL. Conexões antigas passam a avisar na próxima vez que a pessoa reconectar.",
+        },
       ],
     },
   ];

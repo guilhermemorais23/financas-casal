@@ -1,12 +1,16 @@
 import type { Request, Response } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { PluggyError } from "../../utils/pluggy";
+import { logError } from "../../utils/errorLog";
 import {
   OpenFinanceItemNotFoundError,
   OpenFinanceNotYoursError,
   OpenFinanceUnavailableError,
   createConnectToken,
   getOpenFinanceStatus,
+  getPendingSummary,
   markBankSynced,
+  processPluggyEvent,
   previewFromBank,
   registerItem,
   removeBankConnection,
@@ -42,6 +46,8 @@ const who = (req: Request) => ({ userId: req.user!.id, email: req.user!.email })
 
 export const statusHandler = (req: Request, res: Response) => handle(res, () => getOpenFinanceStatus(who(req).userId, who(req).email));
 
+export const pendingHandler = (req: Request, res: Response) => handle(res, () => getPendingSummary(who(req).userId, who(req).email));
+
 export const connectTokenHandler = (req: Request, res: Response) =>
   handle(res, () =>
     createConnectToken(who(req).userId, who(req).email, typeof req.body?.itemId === "string" ? req.body.itemId : undefined)
@@ -64,3 +70,17 @@ export const removeHandler = (req: Request, res: Response) =>
     await removeBankConnection(who(req).userId, who(req).email, String(req.params.itemId));
     return undefined;
   });
+
+// Chamado pelo Pluggy (sem login): confere o segredo do endereço, responde na
+// hora (o Pluggy espera resposta rápida) e processa depois.
+export async function webhookHandler(req: Request, res: Response) {
+  const expected = process.env.PLUGGY_WEBHOOK_SECRET?.trim();
+  const got = typeof req.query.token === "string" ? req.query.token : "";
+  const ok = !!expected && got.length === expected.length && timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+  if (!ok) {
+    res.status(expected ? 403 : 503).end();
+    return;
+  }
+  res.status(200).json({ ok: true });
+  void processPluggyEvent(req.body).catch((err) => logError("pluggy-webhook", err));
+}

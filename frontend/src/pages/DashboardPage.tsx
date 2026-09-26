@@ -14,6 +14,7 @@ import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
 import { ImportStatementModal } from "../components/ImportStatementModal";
+import { UncategorizedModal } from "../components/UncategorizedModal";
 import { MonthPicker } from "../components/MonthPicker";
 import { MonthCloseCard } from "../components/MonthCloseCard";
 import { RowActionsMenu } from "../components/RowActionsMenu";
@@ -297,6 +298,17 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isUncatOpen, setIsUncatOpen] = useState(false);
+  const nudges = useDashboardNudges(token, month, isImportOpen || isUncatOpen);
+  // A notificação do Pluggy abre o Painel com ?importar=banco.
+  useEffect(() => {
+    if (searchParams.get("importar") !== "banco") return;
+    setIsImportOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("importar");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const firstImport = useFirstImportPrompt(user?.id, token, month === currentMonthParam() && !isLoading && recent.length === 0);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   // Rows playing their exit animation (see .is-leaving in index.css) before
@@ -701,6 +713,38 @@ export function DashboardPage() {
             </div>
           </div>
         )}
+        {(nudges.bankTotal > 0 || nudges.uncategorized > 0) && (
+          <div className="dashboard-nudges">
+            {nudges.bankTotal > 0 && (
+              <button type="button" className="dashboard-nudge" onClick={() => setIsImportOpen(true)}>
+                <span className="dashboard-nudge-icon" aria-hidden="true">
+                  <Icon name="bank" />
+                </span>
+                <span className="dashboard-nudge-text">
+                  <strong>
+                    {nudges.bankTotal} {nudges.bankTotal === 1 ? "lançamento novo" : "lançamentos novos"} do banco
+                  </strong>
+                  <small>{nudges.banks.join(", ")} · toque pra revisar e importar</small>
+                </span>
+                <Icon name="chevron" className="icon dashboard-nudge-chevron" />
+              </button>
+            )}
+            {nudges.uncategorized > 0 && (
+              <button type="button" className="dashboard-nudge" onClick={() => setIsUncatOpen(true)}>
+                <span className="dashboard-nudge-icon warn" aria-hidden="true">
+                  <Icon name="alert" />
+                </span>
+                <span className="dashboard-nudge-text">
+                  <strong>
+                    {nudges.uncategorized} {nudges.uncategorized === 1 ? "gasto sem categoria" : "gastos sem categoria"}
+                  </strong>
+                  <small>Ficam de fora dos relatórios · toque pra organizar</small>
+                </span>
+                <Icon name="chevron" className="icon dashboard-nudge-chevron" />
+              </button>
+            )}
+          </div>
+        )}
         {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
         <div className="stat-card wide">
           {/* O número grande é o saldo do mês (entrou - saiu), não o
@@ -789,6 +833,13 @@ export function DashboardPage() {
           </button>
           )}
         </div>
+        {isUncatOpen && (
+          <UncategorizedModal
+            month={month}
+            onClose={() => setIsUncatOpen(false)}
+            onSaved={() => load(month, { skipCache: true, silent: true })}
+          />
+        )}
         {isImportOpen && (
           <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { skipCache: true, silent: true })} />
         )}
@@ -1301,4 +1352,22 @@ function useFirstImportPrompt(userId: string | undefined, token: string | null, 
       }
     },
   };
+}
+
+// Avisos curtos no topo do Painel: lançamentos que o banco conectado mandou
+// e ainda não foram importados, e gastos do mês sem categoria. Recarrega
+// quando uma das janelas (importar / organizar) fecha.
+function useDashboardNudges(token: string | null, month: string, paused: boolean) {
+  const [bank, setBank] = useState<{ total: number; banks: string[] }>({ total: 0, banks: [] });
+  const [uncategorized, setUncategorized] = useState(0);
+  useEffect(() => {
+    if (!token || paused) return;
+    apiRequest<{ total: number; banks: string[] }>("/open-finance/pending", { token })
+      .then(setBank)
+      .catch(() => setBank({ total: 0, banks: [] }));
+    apiRequest<{ count: number }>(`/transactions/uncategorized?month=${month}`, { token })
+      .then((res) => setUncategorized(res.count))
+      .catch(() => setUncategorized(0));
+  }, [token, month, paused]);
+  return { bankTotal: bank.total, banks: bank.banks, uncategorized };
 }
