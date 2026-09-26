@@ -13,6 +13,7 @@ import { CircularProgress } from "../components/CircularProgress";
 import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
 import { FinancialHealthBadge } from "../components/FinancialHealthBadge";
+import { ImportStatementModal } from "../components/ImportStatementModal";
 import { MonthPicker } from "../components/MonthPicker";
 import { MonthCloseCard } from "../components/MonthCloseCard";
 import { RowActionsMenu } from "../components/RowActionsMenu";
@@ -295,6 +296,7 @@ export function DashboardPage() {
   const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   // Rows playing their exit animation (see .is-leaving in index.css) before
   // they're actually dropped from `recent`.
@@ -757,7 +759,14 @@ export function DashboardPage() {
           <Link to="/transactions/new?tipo=receita" className="btn btn-outline">
             Nova receita
           </Link>
+          <button type="button" className="btn btn-outline dashboard-import" onClick={() => setIsImportOpen(true)}>
+            <Icon name="upload" />
+            Importar extrato do banco
+          </button>
         </div>
+        {isImportOpen && (
+          <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { skipCache: true, silent: true })} />
+        )}
 
         <section className="upcoming-section" aria-label="Vence em 7 dias">
           <div className="section-header">

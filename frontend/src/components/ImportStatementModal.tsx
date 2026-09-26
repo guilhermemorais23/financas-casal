@@ -16,6 +16,8 @@ interface PreviewRow {
   transactionType: TxType;
   suggestedCategoryId: string | null;
   isDuplicate: boolean;
+  kind: string | null;
+  time?: string | null;
   groupKey: string;
 }
 
@@ -23,6 +25,7 @@ interface PreviewGroup {
   key: string;
   name: string;
   transactionType: TxType;
+  kind: string | null;
   count: number;
   total: string;
   rowIndexes: number[];
@@ -35,6 +38,8 @@ interface PdfCheck {
   openingBalance: string | null;
   closingBalance: string | null;
   readBy: "ai" | "text";
+  unreadLines?: string[];
+  bank?: BankId | null;
 }
 
 interface PreviewResponse {
@@ -72,6 +77,38 @@ interface Answer {
 
 type Stage = "file" | "questions" | "summary";
 
+type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "outro";
+
+// Bancos com leitura própria (conferida com extrato real) primeiro; os
+// outros passam pela leitura geral.
+const BANKS: { id: BankId; name: string; own: boolean; match: RegExp }[] = [
+  { id: "bradesco", name: "Bradesco", own: true, match: /bradesco/i },
+  { id: "nubank", name: "Nubank", own: true, match: /nubank|\bnu\b/i },
+  { id: "bb", name: "Banco do Brasil", own: true, match: /banco do brasil|\bbb\b/i },
+  { id: "caixa", name: "Caixa", own: true, match: /caixa|\bcef\b/i },
+  { id: "itau", name: "Itaú", own: false, match: /ita[uú]/i },
+  { id: "santander", name: "Santander", own: false, match: /santander/i },
+  { id: "inter", name: "Inter", own: false, match: /\binter\b/i },
+  { id: "outro", name: "Outro", own: false, match: /$^/ },
+];
+const bankName = (id: BankId | null | undefined) => BANKS.find((bank) => bank.id === id)?.name ?? null;
+
+// O banco de cada conta fica lembrado neste aparelho.
+const bankKey = (accountId: string) => `par.importBank.${accountId}`;
+function rememberedBank(account: AccountRow | undefined): BankId | null {
+  if (!account) return null;
+  try {
+    const saved = localStorage.getItem(bankKey(account.id)) as BankId | null;
+    if (saved && BANKS.some((bank) => bank.id === saved)) return saved;
+  } catch {
+    // sem armazenamento: cai no palpite pelo nome da conta
+  }
+  return BANKS.find((bank) => bank.match.test(account.name))?.id ?? null;
+}
+
+// Quantos itens as listas do resumo mostram antes do "Ver todos".
+const LIST_PREVIEW = 5;
+
 const INCOME_HINT = /sal[aá]r|renda|receb|freel|reembol|venda|rendiment|b[oô]nus|comiss|extra/i;
 
 function blankAnswer(group: PreviewGroup): Answer {
@@ -108,12 +145,20 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [accountId, setAccountId] = useState("");
+  const [bank, setBank] = useState<BankId | null>(null);
   const [stage, setStage] = useState<Stage>("file");
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [questionIndex, setQuestionIndex] = useState(0);
   const [returnToSummary, setReturnToSummary] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
+  const [showRows, setShowRows] = useState(false);
+  // Linhas de ida e volta que a pessoa mandou não contar.
+  const [excluded, setExcluded] = useState<Set<number>>(() => new Set());
+  // Listas do resumo mostram os primeiros e abrem inteiras num toque (a
+  // janela já rola; lista com rolagem própria dentro dela fica cortada).
+  const [showAllUnmatched, setShowAllUnmatched] = useState(false);
+  const [showAllRules, setShowAllRules] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -134,7 +179,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         setAccounts(group.accounts);
         setCategories(categoryRows);
         const mine = group.accounts.find((a) => a.type === "personal" && a.ownerUserId === user?.id);
-        setAccountId((mine ?? group.accounts[0])?.id ?? "");
+        const first = mine ?? group.accounts[0];
+        setAccountId(first?.id ?? "");
+        setBank(rememberedBank(first));
       })
       .catch(() => setError("Não foi possível carregar suas contas."));
   }, [token, user?.id]);
@@ -143,13 +190,52 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   // Perguntas = nomes que o PAR. ainda não conhece (os de regra já chegam
   // respondidos, mas podem ser mudados no resumo).
-  const questions = useMemo(() => preview?.groups.filter((group) => !group.rule) ?? [], [preview]);
+  // Primeiro as entradas, depois as saídas (a ordem do servidor já vem assim;
+  // aqui garante mesmo que a lista mude).
+  const questions = useMemo(
+    () =>
+      (preview?.groups.filter((group) => !group.rule) ?? [])
+        .map((group, order) => ({ group, order }))
+        .sort((a, b) => Number(b.group.transactionType === "income") - Number(a.group.transactionType === "income") || a.order - b.order)
+        .map(({ group }) => group),
+    [preview]
+  );
+  const incomeQuestions = questions.filter((group) => group.transactionType === "income").length;
+
+  // Ida e volta: mesmo nome, mesmo valor, um entrou e o outro saiu com até 3
+  // dias de diferença (ex.: o pai mandou R$ 170 e o filho devolveu). Cada
+  // linha entra em um par só.
+  const roundTrips = useMemo(() => {
+    const pairs: [number, number][] = [];
+    if (!preview) return pairs;
+    const used = new Set<number>();
+    const day = (iso: string) => parseLocalDate(iso).getTime() / 86_400_000;
+    preview.rows.forEach((row, i) => {
+      if (row.transactionType !== "income" || row.isDuplicate || used.has(i)) return;
+      const j = preview.rows.findIndex(
+        (other, k) =>
+          !used.has(k) &&
+          other.transactionType === "expense" &&
+          !other.isDuplicate &&
+          other.groupKey === row.groupKey &&
+          other.amount === row.amount &&
+          Math.abs(day(other.date) - day(row.date)) <= 3
+      );
+      if (j >= 0) {
+        used.add(i);
+        used.add(j);
+        pairs.push([i, j]);
+      }
+    });
+    return pairs;
+  }, [preview]);
 
   function startReview(result: PreviewResponse) {
     setPreview(result);
     const initial: Record<string, Answer> = {};
     for (const group of result.groups) initial[`${group.transactionType}:${group.key}`] = blankAnswer(group);
     setAnswers(initial);
+    setExcluded(new Set());
     setQuestionIndex(0);
     setShowDescription(false);
     setStage(result.groups.some((group) => !group.rule) ? "questions" : "summary");
@@ -165,7 +251,16 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     setIsReading(true);
     setFileName(file.name);
     try {
-      const body = isPdf ? { pdfBase64: await fileToBase64(file), password: pdfPassword || undefined } : { content: await file.text() };
+      if (bank) {
+        try {
+          localStorage.setItem(bankKey(accountId), bank);
+        } catch {
+          // só conveniência
+        }
+      }
+      const body = isPdf
+        ? { pdfBase64: await fileToBase64(file), password: pdfPassword || undefined, bank: bank ?? undefined }
+        : { content: await file.text() };
       const result = await apiRequest<PreviewResponse>("/statements/preview", { method: "POST", token, body });
       setPendingPdf(null);
       setPassword("");
@@ -191,6 +286,23 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   const current = stage === "questions" ? questions[questionIndex] : undefined;
   const currentAnswer = current ? answers[groupKey(current)] : undefined;
+  // O mesmo nome no outro sentido (ex.: o filho mandou e também recebeu).
+  const mirror = current ? preview?.groups.find((g) => g.key === current.key && g.transactionType !== current.transactionType) : undefined;
+  const currentTrips = current ? roundTrips.filter(([a, b]) => current.rowIndexes.includes(a) || current.rowIndexes.includes(b)) : [];
+
+  function toggleTrip([a, b]: [number, number]) {
+    setExcluded((set) => {
+      const next = new Set(set);
+      if (next.has(a)) {
+        next.delete(a);
+        next.delete(b);
+      } else {
+        next.add(a);
+        next.add(b);
+      }
+      return next;
+    });
+  }
 
   function patchAnswer(group: PreviewGroup, patch: Partial<Answer>) {
     const key = groupKey(group);
@@ -199,6 +311,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   function goNext() {
     setShowDescription(false);
+    setShowRows(false);
     setNewCategoryName(null);
     if (returnToSummary || questionIndex >= questions.length - 1) {
       setReturnToSummary(false);
@@ -210,6 +323,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   function goBack() {
     setNewCategoryName(null);
+    setShowRows(false);
     if (questionIndex === 0 || returnToSummary) {
       if (returnToSummary) {
         setReturnToSummary(false);
@@ -283,6 +397,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     let incoming = 0;
     let outgoing = 0;
     let skippedNotExpense = 0;
+    let skippedRoundTrip = 0;
+    // Não conciliado: linhas que vão entrar sem categoria nenhuma.
+    const unmatched: { index: number; group: PreviewGroup | null; description: string }[] = [];
     const answeredByRow = new Map<number, { group: PreviewGroup; answer: Answer }>();
     for (const group of preview.groups) {
       const answer = answers[groupKey(group)];
@@ -290,6 +407,10 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     }
     preview.rows.forEach((row, index) => {
       if (row.isDuplicate && !includeDuplicates) return;
+      if (excluded.has(index)) {
+        skippedRoundTrip++;
+        return;
+      }
       const entry = answeredByRow.get(index);
       const answer = entry?.answer;
       if (answer?.status === "answered" && answer.notExpense) {
@@ -302,6 +423,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       const amount = Number(row.amount);
       if (row.transactionType === "income") incoming += amount;
       else outgoing += amount;
+      if (!categoryId) unmatched.push({ index, group: entry?.group ?? null, description: custom || row.description });
       items.push({
         description: custom || row.description,
         amount,
@@ -313,12 +435,21 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     const rules = preview.groups
       .map((group) => ({ group, answer: answers[groupKey(group)] }))
       .filter(({ answer }) => answer?.status === "answered" && !answer.fromRule && (answer.notExpense || answer.categoryId))
-      .map(({ group, answer }) => ({ key: group.key, label: group.name, categoryId: answer.categoryId, notExpense: answer.notExpense }));
-    const withoutCategory = items.filter((item) => !item.categoryId).length;
-    return { items, rules, incoming, outgoing, skippedNotExpense, withoutCategory };
-  }, [preview, answers, includeDuplicates]);
+      .map(({ group, answer }) => ({
+        key: group.key,
+        // Nome digitado pra todos (o banco corta nomes compridos) fica guardado
+        // e aparece assim nas próximas importações.
+        label: (answer.descMode === "all" && answer.description.trim()) || group.name,
+        categoryId: answer.categoryId,
+        notExpense: answer.notExpense,
+      }));
+    const withoutCategory = unmatched.length;
+    return { items, rules, incoming, outgoing, skippedNotExpense, skippedRoundTrip, withoutCategory, unmatched };
+  }, [preview, answers, includeDuplicates, excluded]);
+
 
   const duplicateCount = preview?.rows.filter((row) => row.isDuplicate).length ?? 0;
+  const unreadLines = preview?.pdf?.unreadLines ?? [];
 
   async function handleSave() {
     if (!plan || !accountId || (plan.items.length === 0 && plan.rules.length === 0)) return;
@@ -359,23 +490,36 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       ? [...categories].sort((a, b) => Number(INCOME_HINT.test(b.name)) - Number(INCOME_HINT.test(a.name)))
       : categories;
 
+  const readBank = bankName(preview?.pdf?.bank);
+  const chosenOwn = BANKS.find((b) => b.id === bank)?.own ?? false;
+  // Escolheu um banco com leitura própria mas o PDF tem cara de outro.
+  const bankMismatch = preview?.pdf && chosenOwn && preview.pdf.bank !== bank;
+  // O saldo do extrato só serve pra conferir: não aparece e não é importado.
   const pdfBanner = preview?.pdf && (
     <p className={`import-check ${preview.pdf.reconciled === false ? "warn" : preview.pdf.reconciled ? "ok" : ""}`}>
       {preview.pdf.reconciled === true && (
         <>
-          <Icon name="check" /> Conferido: a soma dos lançamentos bate com o saldo do extrato (
-          {formatCurrency(Number(preview.pdf.openingBalance))} → {formatCurrency(Number(preview.pdf.closingBalance))}).
+          <Icon name="check" /> Conferido com o extrato{readBank ? ` (${readBank})` : ""}: nenhum lançamento ficou de fora.
         </>
       )}
       {preview.pdf.reconciled === false && (
         <>
-          A soma dos lançamentos não bate com o saldo do extrato (diferença de {formatCurrency(Number(preview.pdf.difference))}).
-          Pode ter faltado alguma linha: confira no app do banco antes de importar.
+          A soma dos lançamentos não bate com o extrato (diferença de {formatCurrency(Number(preview.pdf.difference))}). O que não
+          bateu está em “Não conciliado” no final.
         </>
       )}
       {preview.pdf.reconciled === null && <>O extrato não mostra saldo inicial e final, então não deu pra conferir a soma.</>}
+      {bankMismatch && (
+        <>
+          {" "}
+          Esse PDF não tem a cara de extrato do {bankName(bank)}
+          {readBank ? `; li como ${readBank}` : "; usei a leitura geral"}. Confira os valores.
+        </>
+      )}
     </p>
   );
+
+  const repeatedGroups = preview?.groups.filter((group) => group.count > 1) ?? [];
 
   return (
     <Sheet onClose={onClose} className="import-panel" labelledBy="import-title">
@@ -383,7 +527,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         <h1 id="import-title">Importar extrato</h1>
         {stage === "questions" && questions.length > 0 && (
           <span className="import-progress">
-            {Math.min(questionIndex + 1, questions.length)} de {questions.length}
+            {questionIndex < incomeQuestions
+              ? `Entradas · ${questionIndex + 1} de ${incomeQuestions}`
+              : `Saídas · ${Math.min(questionIndex - incomeQuestions + 1, questions.length - incomeQuestions)} de ${questions.length - incomeQuestions}`}
           </span>
         )}
       </div>
@@ -395,7 +541,14 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
           </p>
           <label className="import-account" htmlFor="import-account">
             De qual conta é esse extrato?
-            <select id="import-account" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+            <select
+              id="import-account"
+              value={accountId}
+              onChange={(event) => {
+                setAccountId(event.target.value);
+                setBank(rememberedBank(accounts.find((a) => a.id === event.target.value)));
+              }}
+            >
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.emoji ? `${account.emoji} ` : ""}
@@ -403,6 +556,25 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="import-account" htmlFor="import-bank">
+            De qual banco?
+            <select id="import-bank" value={bank ?? ""} onChange={(event) => setBank((event.target.value || null) as BankId | null)}>
+              <option value="">Escolha o banco</option>
+              {BANKS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+            <small className="import-bank-note">
+              {bank && !BANKS.find((b) => b.id === bank)?.own
+                ? `O ${bankName(bank) === "Outro" ? "extrato" : `PDF do ${bankName(bank)}`} passa pela leitura geral e é conferido com o saldo quando ele aparece. OFX ou CSV do banco lê certinho.`
+                : bank === "caixa"
+                  ? "Caixa tem leitura própria, mas ainda não foi testada com um extrato real: confira os valores."
+                  : "Bradesco, Nubank e Banco do Brasil têm leitura própria, testada com extrato real e conferida com o saldo."}
+            </small>
           </label>
 
           {pendingPdf ? (
@@ -450,16 +622,16 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               <small>
                 {isReading
                   ? "Copiando data, nome e valor de cada linha e conferindo com o saldo."
-                  : "PDF do extrato, OFX ou CSV, do app ou do site do banco"}
+                  : "PDF do extrato (pode ter senha), OFX ou CSV, do app ou do site do banco"}
               </small>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => inputRef.current?.click()} disabled={isReading}>
-                Escolher arquivo
+                Escolher PDF ou arquivo
               </button>
               <input
                 ref={inputRef}
                 id="import-file"
                 type="file"
-                accept=".ofx,.qfx,.csv,.txt,.pdf,text/csv,application/pdf"
+                accept="application/pdf,.pdf,.ofx,.qfx,.csv,.txt,text/csv"
                 hidden
                 onChange={(event) => {
                   const file = event.target.files?.[0];
@@ -487,7 +659,15 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
           {questionIndex === 0 && !returnToSummary && pdfBanner}
           {questionIndex === 0 && !returnToSummary && (
             <p className="import-summary">
-              <strong>{preview!.rows.length}</strong> lançamentos em {fileName}
+              <strong>{preview!.rows.length}</strong> lançamentos em {fileName} viraram <strong>{preview!.groups.length}</strong>{" "}
+              nomes
+              {repeatedGroups.length > 0 && (
+                <>
+                  {" "}
+                  ({repeatedGroups.length} se repetem: {repeatedGroups.reduce((total, group) => total + group.count, 0)} lançamentos
+                  respondidos de uma vez)
+                </>
+              )}
               {duplicateCount > 0 && <> · {duplicateCount} já estavam no app</>}
               {preview!.groups.length > questions.length && (
                 <> · {preview!.groups.length - questions.length} nomes o PAR. já conhecia</>
@@ -495,14 +675,104 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
             </p>
           )}
           <div className="import-question">
-            <span className={`import-question-type ${current.transactionType}`}>
-              {current.transactionType === "income" ? "Entrou" : "Saiu"}
+            {questionIndex === incomeQuestions && incomeQuestions > 0 && !returnToSummary && (
+              <p className="import-phase">
+                <Icon name="check" /> Entradas prontas. Agora as saídas: {questions.length - incomeQuestions} nome
+                {questions.length - incomeQuestions === 1 ? "" : "s"}.
+              </p>
+            )}
+            <span className="import-question-tags">
+              <span className={`import-question-type ${current.transactionType}`}>
+                {current.transactionType === "income" ? "Entrou" : "Saiu"}
+              </span>
+              {current.kind && <span className="import-question-kind">{current.kind}</span>}
             </span>
             <h2 className="import-question-name">{current.name}</h2>
-            <p className="import-question-meta">
-              {current.count} {current.count === 1 ? "vez" : "vezes"} com esse nome ·{" "}
-              <strong className={`transaction-amount ${current.transactionType}`}>{formatCurrency(Number(current.total))}</strong>
-            </p>
+            {current.count > 1 ? (
+              <button
+                type="button"
+                className="import-question-meta import-rows-toggle"
+                aria-expanded={showRows}
+                onClick={() => setShowRows((open) => !open)}
+              >
+                {current.count} vezes com esse nome ·{" "}
+                <strong className={`transaction-amount ${current.transactionType}`}>{formatCurrency(Number(current.total))}</strong>
+                <span className={`import-rows-chevron${showRows ? " open" : ""}`} aria-hidden="true">
+                  <Icon name="chevron" />
+                </span>
+                <span className="sr-only">{showRows ? "Esconder" : "Ver"} cada lançamento</span>
+              </button>
+            ) : (
+              <p className="import-question-meta">
+                {parseLocalDate(preview!.rows[current.rowIndexes[0]].date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                {preview!.rows[current.rowIndexes[0]].time && ` às ${preview!.rows[current.rowIndexes[0]].time}`} · 1 vez com esse nome ·{" "}
+                <strong className={`transaction-amount ${current.transactionType}`}>{formatCurrency(Number(current.total))}</strong>
+              </p>
+            )}
+            {showRows && current.count > 1 && (
+              <ul className="import-rows-detail">
+                {current.rowIndexes.map((index) => {
+                  const row = preview!.rows[index];
+                  return (
+                    <li key={index}>
+                      <span>
+                        {parseLocalDate(row.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                        {row.time && ` às ${row.time}`}
+                        {row.kind && <small> · {row.kind}</small>}
+                        {excluded.has(index) && <small> · ida e volta, não conta</small>}
+                      </span>
+                      <strong className={`transaction-amount ${row.transactionType}`}>{formatCurrency(Number(row.amount))}</strong>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {mirror && (
+              <div className="import-mirror">
+                <p>
+                  <strong>{current.name}</strong> aparece nos dois sentidos este mês:
+                </p>
+                <ul>
+                  {(current.transactionType === "income" ? [current, mirror] : [mirror, current]).map((g) => (
+                      <li key={g.transactionType}>
+                        <span className={`import-question-type ${g.transactionType}`}>{g.transactionType === "income" ? "Entrou" : "Saiu"}</span>
+                        {g.count}× · <strong className={`transaction-amount ${g.transactionType}`}>{formatCurrency(Number(g.total))}</strong>
+                        {g === current && <small> (esta pergunta)</small>}
+                      </li>
+                  ))}
+                </ul>
+                {(() => {
+                  const inc = Number((current.transactionType === "income" ? current : mirror).total);
+                  const out = Number((current.transactionType === "expense" ? current : mirror).total);
+                  const net = inc - out;
+                  return (
+                    <p className="import-mirror-net">
+                      {net === 0
+                        ? "No mês, o que entrou e o que saiu se anulam."
+                        : net > 0
+                          ? `No mês, entrou ${formatCurrency(net)} a mais do que saiu.`
+                          : `No mês, saiu ${formatCurrency(-net)} a mais do que entrou.`}{" "}
+                      Aqui você responde só o que {current.transactionType === "income" ? "entrou" : "saiu"}; o outro lado é outra pergunta.
+                    </p>
+                  );
+                })()}
+                {currentTrips.map((trip) => {
+                  const row = preview!.rows[trip[0]];
+                  const off = excluded.has(trip[0]);
+                  return (
+                    <label key={trip.join("-")} className="import-trip">
+                      <input type="checkbox" checked={off} onChange={() => toggleTrip(trip)} />
+                      <span>
+                        {formatCurrency(Number(row.amount))} entrou e voltou (
+                        {parseLocalDate(preview!.rows[trip[0]].date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} e{" "}
+                        {parseLocalDate(preview!.rows[trip[1]].date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}).
+                        Não contar essa ida e volta
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
             <p className="import-question-ask">O que é isso?</p>
             <div className="chip-row import-chips">
               {orderedCategories(current.transactionType).map((category) => (
@@ -559,10 +829,13 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
             {!showDescription ? (
               <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
-                + Descrição (opcional)
+                + Nome completo ou descrição (opcional)
               </button>
             ) : (
               <div className="import-description">
+                <small className="import-hint">
+                  O banco às vezes corta o nome. Digite o nome inteiro e o PAR. usa ele nas próximas importações.
+                </small>
                 {current.count > 1 && (
                   <div className="segmented" role="tablist">
                     {(["all", "each"] as const).map((mode) => (
@@ -645,6 +918,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
           <p className="import-summary">
             Em <strong>{accounts.find((a) => a.id === accountId)?.name ?? "—"}</strong>
             {plan.skippedNotExpense > 0 && <> · {plan.skippedNotExpense} não entram (não é gasto)</>}
+            {plan.skippedRoundTrip > 0 && <> · {plan.skippedRoundTrip} não entram (ida e volta)</>}
             {plan.withoutCategory > 0 && <> · {plan.withoutCategory} entram sem categoria</>}
           </p>
           {duplicateCount > 0 && (
@@ -654,10 +928,57 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               mesmo assim
             </label>
           )}
+          {(plan.unmatched.length > 0 || unreadLines.length > 0) && (
+            <>
+              <h2 className="import-rules-title">
+                Não conciliado <span className="import-unmatched-count">{plan.unmatched.length + unreadLines.length}</span>
+              </h2>
+              <p className="import-hint">
+                {plan.unmatched.length > 0 && "Esses entram sem categoria. Toque pra dizer o que é."}
+                {plan.unmatched.length > 0 && unreadLines.length > 0 && " "}
+                {unreadLines.length > 0 && "As linhas marcadas “não li” estão no PDF mas não viraram lançamento: confira no app do banco."}
+              </p>
+              <ul className="import-rules import-unmatched import-flat">
+                {(showAllUnmatched ? plan.unmatched : plan.unmatched.slice(0, LIST_PREVIEW)).map(({ index, group, description }) => {
+                  const row = preview.rows[index];
+                  return (
+                    <li key={`row-${index}`}>
+                      <button type="button" onClick={() => group && editFromSummary(group)} disabled={!group}>
+                        <span className="import-rules-name">
+                          {description}
+                          <small>
+                            {parseLocalDate(row.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ·{" "}
+                            {row.transactionType === "income" ? "entrou" : "saiu"}
+                            {row.kind && ` · ${row.kind}`}
+                          </small>
+                        </span>
+                        <span className={`import-rules-answer transaction-amount ${row.transactionType}`}>
+                          {formatCurrency(Number(row.amount))}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+                {(showAllUnmatched || plan.unmatched.length < LIST_PREVIEW ? unreadLines : []).map((line, i) => (
+                  <li key={`unread-${i}`} className="import-unread">
+                    <span className="import-rules-name">
+                      {line}
+                      <small>não li</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {plan.unmatched.length + unreadLines.length > LIST_PREVIEW && (
+                <button type="button" className="link-button import-more" onClick={() => setShowAllUnmatched((all) => !all)}>
+                  {showAllUnmatched ? "Mostrar menos" : `Ver todos (${plan.unmatched.length + unreadLines.length})`}
+                </button>
+              )}
+            </>
+          )}
           <h2 className="import-rules-title">Guardado pra próxima vez</h2>
-          <p className="card-subtitle">Toque num nome pra mudar a resposta. Na próxima importação o PAR. só pergunta nomes novos.</p>
-          <ul className="import-rules">
-            {preview.groups.map((group) => {
+          <p className="import-hint">Toque num nome pra mudar a resposta. Na próxima importação o PAR. só pergunta nomes novos.</p>
+          <ul className="import-rules import-flat">
+            {(showAllRules ? preview.groups : preview.groups.slice(0, LIST_PREVIEW)).map((group) => {
               const answer = answers[groupKey(group)];
               return (
                 <li key={groupKey(group)}>
@@ -665,7 +986,8 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                     <span className="import-rules-name">
                       {group.name}
                       <small>
-                        {group.count}× · {formatCurrency(Number(group.total))}
+                        {group.transactionType === "income" ? "Entrou" : "Saiu"} · {group.count}× · {formatCurrency(Number(group.total))}
+                        {group.kind && ` · ${group.kind}`}
                         {answer?.fromRule && " · já sabia"}
                       </small>
                     </span>
@@ -677,6 +999,11 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               );
             })}
           </ul>
+          {preview.groups.length > LIST_PREVIEW && (
+            <button type="button" className="link-button import-more" onClick={() => setShowAllRules((all) => !all)}>
+              {showAllRules ? "Mostrar menos" : `Ver todos (${preview.groups.length})`}
+            </button>
+          )}
         </>
       )}
 

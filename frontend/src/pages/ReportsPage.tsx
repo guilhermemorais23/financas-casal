@@ -590,7 +590,7 @@ export function ReportsPage() {
         {isLoading && <p className="refresh-note">Atualizando...</p>}
         <div className="section-header">
           <h1>Relatórios</h1>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
             <MonthPicker value={month} onChange={setMonth} />
             <ExportMenu
               monthLabel={monthLongName(month)}
@@ -600,8 +600,11 @@ export function ReportsPage() {
               onCsvMonth={handleExport}
               onCsvAll={handleExportAll}
               onShare={handleShare}
-              onImport={() => setIsImportOpen(true)}
             />
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setIsImportOpen(true)}>
+              <Icon name="upload" />
+              Importar
+            </button>
           </div>
         </div>
 

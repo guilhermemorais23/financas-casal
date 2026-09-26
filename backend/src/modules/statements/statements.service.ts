@@ -1,6 +1,6 @@
 import { fromCents } from "../../utils/money";
-import { parsePdfStatement } from "../../utils/pdfStatement";
-import { StatementParseError, parseDate, parseStatement, type ParsedStatementRow } from "../../utils/statementParser";
+import { BANKS, parsePdfStatement, type Bank } from "../../utils/pdfStatement";
+import { StatementParseError, cleanStatementDescription, parseDate, parseStatement, type ParsedStatementRow } from "../../utils/statementParser";
 import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { deleteRule, findRulesByGroup, normalizeStatementName, upsertRules } from "./importRules.repository";
 import { requireGroupId } from "../groups/groups.service";
@@ -23,17 +23,22 @@ export interface PreviewRow {
   transactionType: "expense" | "income";
   suggestedCategoryId: string | null;
   isDuplicate: boolean;
+  // "Pix enviado", "Compra no débito"... (null quando o extrato não separa).
+  kind: string | null;
+  time: string | null;
   // Nome normalizado: os lançamentos com o mesmo nome viram uma pergunta só.
   groupKey: string;
 }
 
 // Uma pergunta da importação: todos os lançamentos (novos) com o mesmo nome e
-// o mesmo sentido. Vem do maior valor pro menor -- responder as primeiras já
+// o mesmo sentido. Vêm primeiro as entradas, depois as saídas, cada parte do
+// maior valor pro menor -- responder as primeiras já
 // cobre quase todo o dinheiro.
 export interface PreviewGroup {
   key: string;
   name: string;
   transactionType: "expense" | "income";
+  kind: string | null;
   count: number;
   total: string;
   rowIndexes: number[];
@@ -47,12 +52,16 @@ export interface PdfCheck {
   openingBalance: string | null;
   closingBalance: string | null;
   readBy: "ai" | "text";
+  unreadLines: string[];
+  bank: Bank | null;
 }
 
 export interface StatementInput {
   content?: unknown;
   pdfBase64?: unknown;
   password?: unknown;
+  // Banco escolhido na tela (o leitor dele é tentado primeiro).
+  bank?: unknown;
 }
 
 function normalizeDescription(value: string): string {
@@ -69,7 +78,8 @@ const duplicateKey = (date: string, cents: number, type: string) => `${date}|${c
 async function readInput(input: StatementInput): Promise<{ format: "ofx" | "csv" | "pdf"; rows: ParsedStatementRow[]; pdf: PdfCheck | null }> {
   if (typeof input.pdfBase64 === "string" && input.pdfBase64) {
     const data = new Uint8Array(Buffer.from(input.pdfBase64, "base64"));
-    const read = await parsePdfStatement(data, typeof input.password === "string" ? input.password : undefined);
+    const chosen = BANKS.includes(input.bank as Bank) ? (input.bank as Bank) : null;
+    const read = await parsePdfStatement(data, typeof input.password === "string" ? input.password : undefined, chosen);
     return {
       format: "pdf",
       rows: read.rows,
@@ -79,6 +89,8 @@ async function readInput(input: StatementInput): Promise<{ format: "ofx" | "csv"
         openingBalance: read.openingBalanceCents === null ? null : (read.openingBalanceCents / 100).toFixed(2),
         closingBalance: read.closingBalanceCents === null ? null : (read.closingBalanceCents / 100).toFixed(2),
         readBy: read.readBy,
+        unreadLines: read.unreadLines,
+        bank: read.bank,
       },
     };
   }
@@ -125,14 +137,21 @@ export async function previewStatement(userId: string, input: StatementInput) {
   const preview: PreviewRow[] = rows.map((row) => {
     const transactionType = assumedAllExpenses || row.amountCents < 0 ? "expense" : "income";
     const cents = Math.abs(row.amountCents);
-    const groupKey = normalizeStatementName(row.description);
+    const cleaned = cleanStatementDescription(row.description);
+    const groupKey = normalizeStatementName(cleaned);
     const rule = rules.get(groupKey);
+    // O nome guardado na resposta (a pessoa pode ter digitado o nome inteiro
+    // que o banco corta) vale pras próximas importações.
+    const renamed = rule?.label?.trim() && normalizeStatementName(rule.label) !== rule.key;
+    const description = renamed ? rule!.label.trim() : cleaned;
     return {
       date: row.date,
-      description: row.description,
+      description,
+      kind: row.kind ?? null,
+      time: row.time ?? null,
       amount: fromCents(cents),
       transactionType,
-      suggestedCategoryId: rule ? rule.categoryId : (categoryHints.get(normalizeDescription(row.description)) ?? null),
+      suggestedCategoryId: rule ? rule.categoryId : (categoryHints.get(normalizeDescription(description)) ?? null),
       isDuplicate: existingKeys.has(duplicateKey(row.date, cents, transactionType)),
       groupKey,
     };
@@ -152,6 +171,7 @@ export async function previewStatement(userId: string, input: StatementInput) {
           key: row.groupKey,
           name: row.description,
           transactionType: row.transactionType,
+          kind: row.kind,
           count: 0,
           total: "0.00",
           rowIndexes: [],
@@ -166,7 +186,9 @@ export async function previewStatement(userId: string, input: StatementInput) {
   });
   const groups = [...byKey.values()]
     .map(({ group, cents }) => ({ ...group, total: fromCents(cents), cents }))
-    .sort((a, b) => b.cents - a.cents)
+    // Primeiro tudo que entrou, depois o que saiu; em cada parte, do maior
+    // valor pro menor.
+    .sort((a, b) => Number(b.transactionType === "income") - Number(a.transactionType === "income") || b.cents - a.cents)
     .map(({ cents: _cents, ...group }) => group);
 
   return { format, assumedAllExpenses, rows: preview, groups, pdf };

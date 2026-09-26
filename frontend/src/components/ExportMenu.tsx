@@ -9,7 +9,6 @@ interface ExportMenuProps {
   onCsvMonth: () => void;
   onCsvAll: () => void;
   onShare: () => void;
-  onImport: () => void;
 }
 
 interface Item {
@@ -22,8 +21,9 @@ interface Item {
 }
 
 // One "Exportar" button instead of a growing row of "⬇ CSV", "⬇ Tudo"...:
-// every way of getting data out (or in) lives in one menu, each with a
-// verb and a one-line hint.
+// every way of getting data out lives in one menu, each with a verb and a
+// one-line hint. Importar tem botão próprio ao lado deste (Relatórios) e na
+// tela inicial.
 export function ExportMenu(props: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -107,22 +107,6 @@ export function ExportMenu(props: ExportMenuProps) {
               </span>
             </button>
           ))}
-          <div className="export-menu-sep" />
-          <button
-            type="button"
-            role="menuitem"
-            className="export-menu-item"
-            onClick={() => {
-              setOpen(false);
-              props.onImport();
-            }}
-          >
-            <Icon name="upload" />
-            <span>
-              <strong>Importar extrato do banco</strong>
-              <small>Arquivo OFX ou CSV</small>
-            </span>
-          </button>
         </div>
       )}
     </div>

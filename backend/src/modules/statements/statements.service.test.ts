@@ -112,6 +112,23 @@ describe("perguntas por nome e regras", () => {
     expect(result.groups.every((g) => g.rule === null)).toBe(true);
   });
 
+  it("o nome inteiro digitado vale nas próximas importações", async () => {
+    const { groupId, userAId, personalAccountId } = await createTestGroup();
+    const familia = await insertCategory({ groupId, name: "Família", emoji: null });
+    await commitStatement(userAId, personalAccountId, [], [
+      { key: "maria de lourdes silv", label: "Maria de Lourdes Silva", categoryId: familia.id, notExpense: false },
+      { key: "PAO DE ACUCAR 1204", label: "PAO DE ACUCAR 1204", categoryId: familia.id, notExpense: false },
+    ]);
+    const next = await previewStatement(userAId, {
+      content: csvFor("20/09/2026", [
+        ["Maria de Lourdes Silv", "-80,00"],
+        ["PAO DE ACUCAR 0877", "-10,00"],
+      ]),
+    });
+    expect(next.rows.map((r) => r.description)).toEqual(["Maria de Lourdes Silva", "PAO DE ACUCAR"]);
+    expect(next.groups.find((g) => g.key === "maria de lourdes silv")?.name).toBe("Maria de Lourdes Silva");
+  });
+
   it("guarda as respostas e na próxima importação o nome já chega respondido", async () => {
     const { groupId, userAId, userBId, personalAccountId } = await createTestGroup();
     const mercado = await insertCategory({ groupId, name: "Mercado", emoji: null });

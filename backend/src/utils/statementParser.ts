@@ -7,6 +7,12 @@ export interface ParsedStatementRow {
   description: string;
   amountCents: number; // signed: negative = expense
   externalId: string | null; // OFX FITID, when the file has one
+  // O tipo que o banco escreve ("Pix enviado", "Compra cartão"), quando o
+  // extrato separa isso do nome. A descrição fica só com o nome.
+  kind?: string | null;
+  // Horário (HH:MM), quando o extrato traz (Banco do Brasil traz; Bradesco e
+  // Nubank não).
+  time?: string | null;
 }
 
 export type StatementFormat = "ofx" | "csv";
@@ -174,7 +180,9 @@ function normalizeHeader(value: string): string {
 
 interface CsvColumns {
   date: number;
-  description: number;
+  // Colunas de texto na ordem de preferência: a linha usa a primeira que
+  // tiver um nome de verdade (não só número).
+  description: number[];
   amount: number;
   debit: number;
   credit: number;
@@ -182,15 +190,38 @@ interface CsvColumns {
 
 function findColumns(header: string[]): CsvColumns | null {
   const names = header.map(normalizeHeader);
-  const find = (patterns: RegExp[]) => names.findIndex((name) => patterns.some((p) => p.test(name)));
+  const taken = new Set<number>();
+  // Padrão por padrão (não coluna por coluna): "Data Lançamento" não pode
+  // virar a descrição só porque vem antes de "Descrição".
+  const find = (patterns: RegExp[]) => {
+    for (const pattern of patterns) {
+      const index = names.findIndex((name, i) => !taken.has(i) && pattern.test(name));
+      if (index >= 0) {
+        taken.add(index);
+        return index;
+      }
+    }
+    return -1;
+  };
   const date = find([/^data/, /^date/]);
-  const description = find([/descri/, /historico/, /lancamento/, /memo/, /estabelecimento/, /title/, /titulo/, /nome/]);
   const amount = find([/^valor/, /^amount/, /^quantia/]);
   const debit = find([/^debito/, /^saida/, /^debit/]);
   const credit = find([/^credito/, /^entrada/, /^credit/]);
-  if (date < 0 || description < 0) return null;
+  find([/^saldo/, /^balance/]);
+  const description: number[] = [];
+  for (const pattern of [/descri/, /estabelecimento/, /favorecido/, /^nome/, /title/, /titulo/, /memo/, /historico/, /lancamento/]) {
+    const index = find([pattern]);
+    if (index >= 0) description.push(index);
+  }
+  if (date < 0 || description.length === 0) return null;
   if (amount < 0 && debit < 0 && credit < 0) return null;
   return { date, description, amount, debit, credit };
+}
+
+// Pega o primeiro texto com letra; número de documento sozinho não é nome.
+function pickDescription(fields: string[], columns: number[]): string {
+  const values = columns.map((index) => (fields[index] ?? "").trim()).filter(Boolean);
+  return values.find((value) => /\p{L}/u.test(value)) ?? values[0] ?? "";
 }
 
 export function parseCsv(text: string): ParsedStatementRow[] {
@@ -237,10 +268,30 @@ export function parseCsv(text: string): ParsedStatementRow[] {
 
     rows.push({
       date,
-      description: (fields[columns.description] ?? "").trim() || "Lançamento importado",
+      description: pickDescription(fields, columns.description) || "Lançamento importado",
       amountCents,
       externalId: null,
     });
   }
   return rows;
+}
+
+// Nome limpo pra mostrar e agrupar: sem número de documento, CPF/CNPJ
+// mascarado, agência/conta, data e horário que os bancos grudam no nome.
+// "PIX ENVIADO 0012345 MARIA SILVA - •••.123.456-•• - Agência: 1 Conta: 2-3"
+// vira "PIX ENVIADO MARIA SILVA". Se sobrar nada, fica o original.
+export function cleanStatementDescription(raw: string): string {
+  const cleaned = raw
+    .replace(/[•*x.\d]{3,}\.[•*x\d]{3}\.[•*x\d]{3}-[•*x\d]{2}/gi, " ")
+    .replace(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g, " ")
+    .replace(/\b(ag[eê]ncia|ag|conta|cc|c\/c|doc(?:to)?|documento|n[ºo°]|aut(?:enticac[aã]o)?)\.?\s*:?\s*[\d.\-\/]+/gi, " ")
+    .replace(/\(\d{3,4}\)/g, " ")
+    .replace(/\b\d{2}\/\d{2}(?:\/\d{2,4})?\b/g, " ")
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, " ")
+    .replace(/\b\d{4,}\b/g, " ")
+    .replace(/(\s*-\s*)+/g, " - ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s\-:*]+|[\s\-:*]+$/g, "")
+    .trim();
+  return /\p{L}/u.test(cleaned) ? cleaned : raw.trim();
 }
