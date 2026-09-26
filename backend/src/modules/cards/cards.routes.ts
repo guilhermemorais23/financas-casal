@@ -9,6 +9,7 @@ import {
   deletePurchaseHandler,
   getStatementHandler,
   listCardsHandler,
+  setSecuredSourceHandler,
   setStatementPaidHandler,
   updateCardHandler,
 } from "./cards.controller";
@@ -22,6 +23,7 @@ cardsRouter.get("/", asyncHandler(listCardsHandler));
 cardsRouter.patch("/:id", asyncHandler(updateCardHandler));
 cardsRouter.delete("/:id", asyncHandler(deleteCardHandler));
 cardsRouter.post("/:id/secured-limit", asyncHandler(adjustSecuredLimitHandler));
+cardsRouter.patch("/:id/secured-source", asyncHandler(setSecuredSourceHandler));
 cardsRouter.get("/:id/statement", asyncHandler(getStatementHandler));
 cardsRouter.post("/:id/purchases", asyncHandler(addPurchaseHandler));
 cardsRouter.delete("/:id/purchases/:purchaseId", asyncHandler(deletePurchaseHandler));

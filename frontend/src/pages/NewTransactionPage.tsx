@@ -10,6 +10,11 @@ import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency } from "../utils/format";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { recentDescriptions, rememberEntry, suggestFor } from "../utils/quickEntry";
+import {
+  readCreditCardPreference,
+  resolveCreditCardPreference,
+  saveCreditCardPreference,
+} from "../utils/creditCardPreference";
 
 interface AccountRow {
   id: string;
@@ -23,6 +28,14 @@ interface MemberRow {
   id: string;
   displayName: string;
 }
+
+interface CardOption {
+  id: string;
+  name: string;
+}
+
+// Mesmas opções de parcelas que a tela de Cartões aceita.
+const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 6, 12];
 
 interface CategoryRow {
   id: string;
@@ -79,9 +92,21 @@ export function NewTransactionPage() {
   const [isPrivate, setIsPrivate] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">(() => (prefill.get("p") as PaymentMethod | null) ?? "");
   const [isRecurring, setIsRecurring] = useState(false);
+
+  // Crédito -> cartão: na primeira compra no crédito pergunta em qual
+  // cartão lançar (ou se é pra não lançar em nenhum); a resposta vira o
+  // padrão das próximas, e sempre dá pra trocar aqui mesmo.
+  const [cards, setCards] = useState<CardOption[]>([]);
+  // null = ainda não respondeu; "none" = não lançar em cartão; senão, o id.
+  const [cardChoice, setCardChoice] = useState<string | null>(null);
+  const [isPickingCard, setIsPickingCard] = useState(false);
+  const [installments, setInstallments] = useState("1");
+  const [isSaving, setIsSaving] = useState(false);
   const [recurringMonths, setRecurringMonths] = useState("12");
 
   const isIncome = transactionType === "income";
+  const asksForCard = !isIncome && paymentMethod === "credit" && cards.length > 0;
+  const selectedCard = asksForCard ? cards.find((card) => card.id === cardChoice) ?? null : null;
   const moreOptionsSummary = [
     occurredAt === new Date().toISOString().slice(0, 10)
       ? "Hoje"
@@ -92,7 +117,7 @@ export function NewTransactionPage() {
         ? "você recebeu"
         : "você pagou"
       : members.find((m) => m.id === payerId)?.displayName,
-    paymentMethodLabel(paymentMethod || null),
+    selectedCard ? `cartão ${selectedCard.name}` : paymentMethodLabel(paymentMethod || null),
     isRecurring ? "todo mês" : null,
     !isIncome && splitType === "equal" ? "dividido" : null,
   ]
@@ -137,6 +162,18 @@ export function NewTransactionPage() {
       setPayerId((current) => current || user?.id || "");
     }
     load();
+    apiRequest<CardOption[]>("/cards", { token })
+      .then((result) => {
+        const options = result.map((card) => ({ id: card.id, name: card.name }));
+        setCards(options);
+        setCardChoice(
+          resolveCreditCardPreference(
+            readCreditCardPreference(user?.id ?? ""),
+            options.map((card) => card.id)
+          )
+        );
+      })
+      .catch(() => setCards([]));
   }, [token, user?.id]);
 
   function handleDescriptionChange(value: string) {
@@ -172,6 +209,44 @@ export function NewTransactionPage() {
     }
   }
 
+  function chooseCard(value: string) {
+    setCardChoice(value);
+    setIsPickingCard(false);
+    saveCreditCardPreference(user?.id ?? "", value);
+  }
+
+  async function saveCardPurchase(card: CardOption, parsedAmount: number) {
+    setIsSaving(true);
+    try {
+      await apiRequest(`/cards/${card.id}/purchases`, {
+        method: "POST",
+        token,
+        body: {
+          description: description.trim(),
+          amount: parsedAmount,
+          categoryId: categoryId || null,
+          buyerId: payerId,
+          purchaseDate: occurredAt,
+          installments: Number(installments),
+        },
+      });
+      showToast(`Compra lançada no cartão ${card.name}`, {
+        description: Number(installments) > 1 ? `Em ${installments}x, uma parcela por fatura` : "Entra na fatura do cartão",
+      });
+      navigate("/dashboard");
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 409
+          ? "A fatura desse mês já foi paga. Mude a data ou reabra a fatura em Cartões."
+          : err instanceof ApiError
+            ? err.message
+            : "Não foi possível lançar no cartão"
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -184,6 +259,21 @@ export function NewTransactionPage() {
     }
     if (isRecurring && (!Number.isInteger(parsedMonths) || parsedMonths < 2 || parsedMonths > 36)) {
       setError("A repetição precisa ser entre 2 e 36 meses.");
+      return;
+    }
+
+    if (asksForCard && cardChoice === null) {
+      setError("Escolha se a compra vai pra algum cartão.");
+      return;
+    }
+    if (selectedCard) {
+      rememberEntry(user?.id ?? "", {
+        description,
+        categoryId: categoryId || null,
+        accountId,
+        paymentMethod: paymentMethod || null,
+      });
+      await saveCardPurchase(selectedCard, parsedAmount);
       return;
     }
 
@@ -415,11 +505,13 @@ export function NewTransactionPage() {
               </select>
             </div>
 
+            {!selectedCard && (
             <label className="checkbox-field">
               <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
               {isIncome ? "Entrada recorrente (salário)" : "Repete todo mês (assinatura)"}
             </label>
-            {isRecurring && (
+            )}
+            {isRecurring && !selectedCard && (
               <div className="field">
                 <label htmlFor="recurringMonths">Repetir por quantos meses</label>
                 <input
@@ -438,7 +530,7 @@ export function NewTransactionPage() {
               </div>
             )}
 
-            {!isIncome && (
+            {!isIncome && !selectedCard && (
               <>
                 <div className="field">
                   <label htmlFor="split">Divisão</label>
@@ -470,14 +562,81 @@ export function NewTransactionPage() {
             </div>
           )}
 
+          {asksForCard && (
+            <div className="credit-card-link">
+              {cardChoice === null ? (
+                <>
+                  <p className="credit-card-link-question">Quer lançar essa compra num cartão?</p>
+                  <div className="chip-row">
+                    {cards.map((card) => (
+                      <button key={card.id} type="button" className="filter-chip" onClick={() => chooseCard(card.id)}>
+                        {cards.length === 1 ? `Sim, no ${card.name}` : card.name}
+                      </button>
+                    ))}
+                    <button type="button" className="filter-chip" onClick={() => chooseCard("none")}>
+                      Não, só registrar
+                    </button>
+                  </div>
+                  <p className="field-hint">A gente lembra a resposta pras próximas compras no crédito.</p>
+                </>
+              ) : (
+                <>
+                  <div className="credit-card-link-row">
+                    <span>
+                      {selectedCard ? (
+                        <>
+                          Vai pro cartão <strong>{selectedCard.name}</strong>
+                        </>
+                      ) : (
+                        "Não vai pra nenhum cartão"
+                      )}
+                    </span>
+                    <button type="button" className="link-button" onClick={() => setIsPickingCard((current) => !current)}>
+                      {isPickingCard ? "Fechar" : "Trocar"}
+                    </button>
+                  </div>
+                  {isPickingCard && (
+                    <div className="field">
+                      <label htmlFor="credit-card">Cartão das compras no crédito</label>
+                      <select id="credit-card" value={cardChoice} onChange={(e) => chooseCard(e.target.value)}>
+                        {cards.map((card) => (
+                          <option key={card.id} value={card.id}>
+                            {card.name}
+                          </option>
+                        ))}
+                        <option value="none">Não lançar em cartão</option>
+                      </select>
+                      <p className="field-hint">Vira o padrão das próximas compras no crédito.</p>
+                    </div>
+                  )}
+                  {selectedCard && (
+                    <div className="field">
+                      <label htmlFor="installments">Parcelas</label>
+                      <select id="installments" value={installments} onChange={(e) => setInstallments(e.target.value)}>
+                        {INSTALLMENT_OPTIONS.map((count) => (
+                          <option key={count} value={count}>
+                            {count === 1 ? "À vista" : `${count}x`}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="field-hint">
+                        Entra na fatura do cartão, não no saldo da conta agora: sai da conta quando você pagar a fatura.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {error && (
             <p className="alert" role="alert">
               {error}
             </p>
           )}
 
-          <button type="submit" className="btn btn-primary">
-            {isIncome ? "Salvar entrada" : "Salvar despesa"}
+          <button type="submit" className="btn btn-primary" disabled={isSaving}>
+            {isSaving ? "Salvando..." : selectedCard ? "Lançar no cartão" : isIncome ? "Salvar entrada" : "Salvar despesa"}
           </button>
         </form>
       </div>

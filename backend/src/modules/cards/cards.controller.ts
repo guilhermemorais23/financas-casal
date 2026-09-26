@@ -20,6 +20,7 @@ import {
   listCards,
   removeCard,
   removePurchase,
+  setSecuredSourceForUser,
   setStatementPaidForUser,
   updateCardForUser,
   type CardScope,
@@ -44,7 +45,7 @@ function isValidDate(value: unknown): value is string {
 }
 
 export async function createCardHandler(req: Request, res: Response) {
-  const { name, closingDay, dueDay, scope, limit, limitType } = req.body ?? {};
+  const { name, closingDay, dueDay, scope, limit, limitType, securedFromAccount } = req.body ?? {};
 
   if (
     !isNonEmptyString(name) ||
@@ -52,7 +53,8 @@ export async function createCardHandler(req: Request, res: Response) {
     !isValidDay(dueDay) ||
     (scope !== undefined && scope !== "personal" && scope !== "joint") ||
     !isValidLimit(limit) ||
-    (limitType !== undefined && limitType !== "normal" && limitType !== "secured")
+    (limitType !== undefined && limitType !== "normal" && limitType !== "secured") ||
+    (securedFromAccount !== undefined && typeof securedFromAccount !== "boolean")
   ) {
     res.status(400).json({
       error:
@@ -69,6 +71,7 @@ export async function createCardHandler(req: Request, res: Response) {
       scope: (scope as CardScope) ?? "joint",
       limit: limit ?? null,
       limitType: limitType ?? "normal",
+      securedFromAccount: securedFromAccount ?? true,
     });
     res.status(201).json(card);
   } catch (err) {
@@ -135,6 +138,33 @@ export async function updateCardHandler(req: Request, res: Response) {
     }
     if (err instanceof NotSecuredCardError) {
       res.status(400).json({ error: "a secured card's limit only changes by depositing or withdrawing" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function setSecuredSourceHandler(req: Request, res: Response) {
+  const { fromAccount } = req.body ?? {};
+  if (typeof fromAccount !== "boolean") {
+    res.status(400).json({ error: "fromAccount (boolean) is required" });
+    return;
+  }
+
+  try {
+    const card = await setSecuredSourceForUser(req.user!.id, req.params.id, fromAccount);
+    res.status(200).json(card);
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof CardNotFoundError) {
+      res.status(404).json({ error: "card not found" });
+      return;
+    }
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: "not allowed to manage this card" });
+      return;
+    }
+    if (err instanceof NotSecuredCardError) {
+      res.status(400).json({ error: "this card doesn't have a secured limit" });
       return;
     }
     throw err;

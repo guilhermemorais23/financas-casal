@@ -19,6 +19,7 @@ import {
   findPurchasesByCardAndStatement,
   findStatement,
   incrementCardLimit,
+  setCardSecuredFromAccount,
   insertCard,
   insertPurchaseSeries,
   setStatementPaid,
@@ -55,6 +56,10 @@ export interface CreateCardInput {
   scope: CardScope;
   limit: number | null;
   limitType: LimitType;
+  // Cartão garantido: true = the money leaves the account today (booked as
+  // a transfer); false = it was already set aside outside the app, so the
+  // limit is extra room and the account isn't touched. Defaults to true.
+  securedFromAccount?: boolean;
 }
 
 export interface CardStatementSummary {
@@ -207,8 +212,9 @@ export async function createCard(userId: string, input: CreateCardInput) {
     dueDay: input.dueDay,
     limit: input.limit,
     limitType: input.limitType,
+    securedFromAccount: input.securedFromAccount !== false,
   });
-  if (card.limitType === "secured" && input.limit !== null) {
+  if (card.limitType === "secured" && card.securedFromAccount && input.limit !== null) {
     await recordSecuredTransfer(userId, groupId, card, "deposit", input.limit);
   }
   return card;
@@ -496,8 +502,32 @@ export async function adjustSecuredLimit(
     }
   }
   const updated = await incrementCardLimit(cardId, input.direction === "deposit" ? amountCents : -amountCents);
-  await recordSecuredTransfer(userId, groupId, card, input.direction, amountCents / 100);
+  if (card.securedFromAccount) {
+    await recordSecuredTransfer(userId, groupId, card, input.direction, amountCents / 100);
+  }
   return updated;
+}
+
+// "Esse dinheiro saiu da minha conta?" -- fixable after the fact. Turning it
+// off drops every guardar/resgatar entry from the extrato (the account goes
+// back to what it was, the limit stays); turning it on books the money
+// currently parked in the card as one guardar today.
+export async function setSecuredSourceForUser(userId: string, cardId: string, fromAccount: boolean) {
+  const { groupId, card } = await requireManageableCard(userId, cardId);
+  if (card.limitType !== "secured") {
+    throw new NotSecuredCardError();
+  }
+  if (card.securedFromAccount === fromAccount) return card;
+
+  if (fromAccount) {
+    const parked = Number(card.limit ?? 0);
+    if (parked > 0) {
+      await recordSecuredTransfer(userId, groupId, card, "deposit", parked);
+    }
+  } else {
+    await deleteTransactionsBatch(await findSecuredCardTransferIds(cardId));
+  }
+  return setCardSecuredFromAccount(cardId, fromAccount);
 }
 
 export async function removeCard(userId: string, cardId: string) {
