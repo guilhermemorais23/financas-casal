@@ -10,6 +10,9 @@ export interface OpenFinanceItem {
   createdAt: number;
   // accountId do Pluggy -> última data (AAAA-MM-DD) já importada.
   syncedUntil: Record<string, string>;
+  // Lançamentos no banco depois do syncedUntil, contados quando o Pluggy
+  // avisa (webhook). notified = total que já virou notificação.
+  pending?: { accounts: Record<string, number>; total: number; notified: number; updatedAt: number };
 }
 
 const col = db.collection("openFinanceItems");
@@ -35,4 +38,8 @@ export async function markSynced(itemId: string, accountId: string, until: strin
 
 export async function deleteItem(itemId: string): Promise<void> {
   await col.doc(itemId).delete();
+}
+
+export async function savePending(itemId: string, pending: NonNullable<OpenFinanceItem["pending"]>): Promise<void> {
+  await col.doc(itemId).set({ pending }, { merge: true });
 }

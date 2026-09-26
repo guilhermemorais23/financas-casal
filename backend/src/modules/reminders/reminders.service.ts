@@ -8,6 +8,7 @@ import { findRecurringBillsByGroupId } from "../recurringBills/recurringBills.re
 import { addMonths, daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
 import { generateDueRecurringBills } from "../recurringBills/recurringBills.service";
 import { logError } from "../../utils/errorLog";
+import { htmlToText, sendPushToUser } from "../push/push.service";
 import { invalidateAllReads } from "../../utils/readCache";
 import { getMonthCloseForUser, previousMonthInBrazil } from "../monthClose/monthClose.service";
 import {
@@ -33,12 +34,17 @@ function formatBRL(amount: number): string {
   return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-// Conta só os emails que saíram de verdade -- um lembrete só é marcado como
-// enviado (e nunca reenviado) quando alguém realmente recebeu.
-async function sendToMembers(members: MemberWithEmail[], subject: string, bodyHtml: string): Promise<number> {
+// Conta só os avisos que saíram de verdade (email ou notificação no
+// celular) -- um lembrete só é marcado como enviado (e nunca reenviado)
+// quando alguém realmente recebeu.
+async function sendToMembers(members: MemberWithEmail[], subject: string, bodyHtml: string, url = "/contas"): Promise<number> {
   const withEmail = members.filter((member) => member.email);
-  const results = await Promise.all(withEmail.map((member) => sendReminderEmail(member.email!, subject, bodyHtml)));
-  return results.filter((result) => result.ok).length;
+  const text = htmlToText(bodyHtml.replace(/<h1[^>]*>.*?<\/h1>/i, ""));
+  const [emails, pushes] = await Promise.all([
+    Promise.all(withEmail.map((member) => sendReminderEmail(member.email!, subject, bodyHtml))),
+    Promise.all(members.map((member) => sendPushToUser(member.id, { title: subject, body: text, url }))),
+  ]);
+  return emails.filter((result) => result.ok).length + pushes.filter((count) => count > 0).length;
 }
 
 function dueLabelFor(daysUntilDue: number): string {
@@ -182,7 +188,8 @@ async function runBudgetReminder(groupId: string, members: MemberWithEmail[]): P
       <h1 style="font-size: 20px;">Orçamento estourado</h1>
       <p>O grupo já gastou <strong>${formatBRL(spent)}</strong> este mês, passando do limite de ${formatBRL(cap)}.</p>
       <p>Vale dar uma olhada nos Relatórios pra ver onde foi o gasto.</p>
-    `
+    `,
+    "/reports"
   );
   if (sent > 0) {
     await markReminderSent(key, { groupId, kind: "budget", periodMonth, spent, cap });
@@ -263,7 +270,8 @@ async function runLoanReminders(groupId: string, members: MemberWithEmail[]): Pr
         <h1 style="font-size: 20px;">Prazo de empréstimo</h1>
         <p>O prazo que você combinou pra devolver <strong>${formatBRL(remaining)}</strong> pra <strong>${escapeHtml(loan.personName)}</strong> foi ${when} (${formatBRDate(loan.dueDate)}).</p>
         <p>Já pagou? Toque em "Paguei" em Contas &gt; Empréstimos &gt; Eu devo, no PAR.</p>
-      `
+      `,
+          "/loans?lado=devo"
         )
       : await sendToMembers(
       [lender],
@@ -272,7 +280,8 @@ async function runLoanReminders(groupId: string, members: MemberWithEmail[]): Pr
         <h1 style="font-size: 20px;">Prazo de empréstimo</h1>
         <p>O prazo de <strong>${escapeHtml(loan.personName)}</strong> devolver <strong>${formatBRL(remaining)}</strong> foi ${when} (${formatBRDate(loan.dueDate)}).</p>
         <p>Recebeu? Toque em "Recebi" em Contas &gt; Empréstimos, no PAR.</p>
-      `
+      `,
+      "/loans"
     );
     if (sent > 0) {
       emailsSent += sent;
@@ -337,7 +346,8 @@ async function runMonthCloseEmails(groupId: string, members: MemberWithEmail[], 
         ${comparison}
         ${categories}
         <p>O detalhe está em Relatórios, no PAR.</p>
-      `
+      `,
+      "/reports"
     );
     if (sent > 0) {
       emailsSent += sent;

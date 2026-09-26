@@ -10,6 +10,7 @@ import { Icon } from "../components/Icon";
 import { DEFAULT_GROUP_EMOJI, DEFAULT_GROUP_NAME, groupLabel, useMyGroups } from "../components/GroupSwitcher";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ImportRulesCard } from "../components/ImportRulesCard";
+import { PushSettingsCard } from "../components/PushSettingsCard";
 import { ImportStatementModal } from "../components/ImportStatementModal";
 import { initialOf } from "../utils/initial";
 
@@ -159,6 +160,14 @@ export function AccountPage() {
 
   useEffect(() => {
     load();
+  }, [token]);
+
+  // Conectar conta (Pluggy) liberado no servidor: o botão perde o "Em breve".
+  const [bankReady, setBankReady] = useState(false);
+  useEffect(() => {
+    apiRequest<{ configured: boolean; allowed: boolean }>("/open-finance/status", { token })
+      .then((status) => setBankReady(status.configured && status.allowed))
+      .catch(() => setBankReady(false));
   }, [token]);
 
   // "Convidar meu par" no menu abre aqui já no convite.
@@ -527,8 +536,9 @@ export function AccountPage() {
         <div className="card">
           <p className="card-title">Contas conectadas</p>
           <p className="card-subtitle">
-            Traga os lançamentos do seu banco sem digitar. Hoje pelo arquivo do extrato; conectando a conta, eles entram
-            sozinhos.
+            {bankReady
+              ? "Traga os lançamentos do seu banco sem digitar: pelo arquivo do extrato ou conectando a conta, que avisa quando chegam lançamentos novos."
+              : "Traga os lançamentos do seu banco sem digitar. Hoje pelo arquivo do extrato; conectando a conta, eles entram sozinhos."}
           </p>
           <div className="connect-actions">
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsImportOpen(true)}>
@@ -542,10 +552,12 @@ export function AccountPage() {
             >
               <Icon name="bank" />
               Conectar conta
-              <span className="pill-soon">Em breve</span>
+              {!bankReady && <span className="pill-soon">Em breve</span>}
             </button>
           </div>
         </div>
+
+        <PushSettingsCard />
 
         <ImportRulesCard categories={categories ?? []} reloadKey={importsDone} />
 

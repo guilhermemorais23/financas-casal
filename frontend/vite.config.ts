@@ -34,6 +34,8 @@ export default defineConfig({
         // .github/workflows/ci.yml) takes effect on next navigation
         // instead of someone getting stuck on a stale bundle indefinitely.
         cleanupOutdatedCaches: true,
+        // Notificações no celular: push + clique (public/push-sw.js).
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

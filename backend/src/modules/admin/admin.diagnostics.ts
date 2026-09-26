@@ -123,6 +123,20 @@ export async function buildDiagnostics(): Promise<DiagSection[]> {
       ],
     },
     {
+      id: "push",
+      title: "Notificação no celular",
+      summary: has("VAPID_PUBLIC_KEY") && has("VAPID_PRIVATE_KEY") ? "Ligada" : "Desligada",
+      items: [
+        {
+          label: "Chaves de notificação (VAPID)",
+          ok: has("VAPID_PUBLIC_KEY") && has("VAPID_PRIVATE_KEY"),
+          level: "recommended",
+          env: "VAPID_PUBLIC_KEY",
+          hint: "Gere uma vez com: npx web-push generate-vapid-keys. Coloque a pública em VAPID_PUBLIC_KEY e a privada em VAPID_PRIVATE_KEY. Trocar depois desliga os avisos de quem já tinha ligado.",
+        },
+      ],
+    },
+    {
       id: "telegram",
       title: "Assistente no Telegram",
       summary: telegramOn ? "Ligado" : "Desligado",
@@ -178,6 +192,13 @@ export async function buildDiagnostics(): Promise<DiagSection[]> {
           level: "optional",
           env: "PLUGGY_ALLOWED_EMAILS",
           hint: has("PLUGGY_ALLOWED_EMAILS") ? undefined : "Sem ela, só os admins (o plano grátis do Pluggy é pra uso pessoal).",
+        },
+        {
+          label: "Aviso de lançamentos novos (webhook)",
+          ok: has("PLUGGY_WEBHOOK_SECRET") && (has("API_PUBLIC_URL") || has("RENDER_EXTERNAL_URL")),
+          level: "recommended",
+          env: "PLUGGY_WEBHOOK_SECRET",
+          hint: "Um texto aleatório longo. Com ele, o Pluggy avisa quando o banco tem lançamentos novos e a pessoa recebe a notificação. No Render o endereço público já existe (RENDER_EXTERNAL_URL); fora dele, use API_PUBLIC_URL. Conexões antigas passam a avisar na próxima vez que a pessoa reconectar.",
         },
       ],
     },

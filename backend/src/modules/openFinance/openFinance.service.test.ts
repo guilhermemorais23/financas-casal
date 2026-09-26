@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Request, Response } from "express";
+import { webhookHandler } from "./openFinance.controller";
+import * as push from "../push/push.service";
 import { createTestGroup } from "../../test-helpers";
 import { setPluggyFetch, type PluggyTransaction } from "../../utils/pluggy";
 import {
@@ -8,14 +11,16 @@ import {
   canUseOpenFinance,
   createConnectToken,
   markBankSynced,
+  pluggyWebhookUrl,
   previewFromBank,
+  processPluggyEvent,
   registerItem,
   removeBankConnection,
   toStatementRows,
 } from "./openFinance.service";
 import { findItem } from "./openFinance.repository";
 
-const ENV = ["PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET", "PLUGGY_ALLOWED_EMAILS", "ADMIN_EMAILS"];
+const ENV = ["PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET", "PLUGGY_ALLOWED_EMAILS", "ADMIN_EMAILS", "PLUGGY_WEBHOOK_SECRET", "API_PUBLIC_URL", "RENDER_EXTERNAL_URL"];
 const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
 
 // Pluggy de mentira: itens por id (com o clientUserId de quem conectou),
@@ -150,5 +155,60 @@ describe("Conectar conta (Pluggy)", () => {
 
     await markBankSynced(userAId, "dono@test.com", "item-b", "acc-1", "2026-09-26");
     expect((await findItem("item-b"))?.syncedUntil).toEqual({ "acc-1": "2026-09-26" });
+  });
+
+  it("aviso do Pluggy: conta o que falta importar, notifica uma vez e zera ao importar", async () => {
+    const { userAId } = await createTestGroup();
+    fake.items.set("item-w", { clientUserId: userAId });
+    await registerItem(userAId, "dono@test.com", "item-w");
+    await markBankSynced(userAId, "dono@test.com", "item-w", "acc-1", "2026-09-10");
+    fake.transactions = [
+      { id: "a", accountId: "acc-1", date: "2026-09-09T03:00:00.000Z", description: "Antigo", type: "DEBIT", amount: 10 },
+      { id: "b", accountId: "acc-1", date: "2026-09-12T03:00:00.000Z", description: "Mercado", type: "DEBIT", amount: 50 },
+      { id: "c", accountId: "acc-1", date: "2026-09-13T03:00:00.000Z", description: "PIX", type: "CREDIT", amount: 80 },
+    ];
+    const sent = vi.spyOn(push, "sendPushToUser").mockResolvedValue(1);
+
+    await processPluggyEvent({ event: "transactions/created", itemId: "item-w" });
+    const after = await findItem("item-w");
+    expect(after?.pending?.accounts["acc-1"]).toBe(2);
+    expect(sent).toHaveBeenCalledTimes(1);
+    expect(sent.mock.calls[0][0]).toBe(userAId);
+    expect(sent.mock.calls[0][1].url).toBe("/dashboard?importar=banco");
+
+    // O mesmo aviso de novo, sem nada novo: não notifica outra vez.
+    await processPluggyEvent({ event: "item/updated", itemId: "item-w" });
+    const calls = sent.mock.calls.filter(([id]) => id === userAId).length;
+    // (o cartão não conta crédito; os dois débitos/créditos da conta são os mesmos)
+    expect(calls).toBe(1);
+
+    // Evento estranho ou item de ninguém: ignora.
+    await processPluggyEvent({ event: "item/deleted", itemId: "item-w" });
+    await processPluggyEvent({ event: "transactions/created", itemId: "nao-existe" });
+    expect(sent.mock.calls.filter(([id]) => id === userAId).length).toBe(1);
+
+    await markBankSynced(userAId, "dono@test.com", "item-w", "acc-1", "2026-09-13");
+    expect((await findItem("item-w"))?.pending?.accounts["acc-1"]).toBe(0);
+    sent.mockRestore();
+  });
+
+  it("endereço do aviso só com https e segredo; a rota recusa sem o segredo certo", async () => {
+    expect(pluggyWebhookUrl()).toBeNull();
+    process.env.PLUGGY_WEBHOOK_SECRET = "s3gr3do";
+    process.env.RENDER_EXTERNAL_URL = "http://inseguro.test";
+    expect(pluggyWebhookUrl()).toBeNull();
+    process.env.RENDER_EXTERNAL_URL = "https://par.onrender.com/";
+    expect(pluggyWebhookUrl()).toBe("https://par.onrender.com/api/open-finance/webhook?token=s3gr3do");
+
+    const call = async (token: string | undefined) => {
+      const res = { statusCode: 0, status(code: number) { res.statusCode = code; return res; }, end() { return res; }, json() { return res; } };
+      await webhookHandler({ query: token === undefined ? {} : { token }, body: { event: "item/updated", itemId: "nao-existe" } } as unknown as Request, res as unknown as Response);
+      return res.statusCode;
+    };
+    expect(await call("errado")).toBe(403);
+    expect(await call(undefined)).toBe(403);
+    expect(await call("s3gr3do")).toBe(200);
+    delete process.env.PLUGGY_WEBHOOK_SECRET;
+    expect(await call("s3gr3do")).toBe(503);
   });
 });
