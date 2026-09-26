@@ -45,7 +45,9 @@ interface PdfCheck {
 }
 
 interface PreviewResponse {
-  format: "ofx" | "csv" | "pdf";
+  format: "ofx" | "csv" | "pdf" | "bank";
+  // Quando veio do banco conectado (Open Finance).
+  source?: { itemId: string; accountId: string; label: string; from: string; until: string };
   assumedAllExpenses: boolean;
   rows: PreviewRow[];
   groups: PreviewGroup[];
@@ -79,6 +81,17 @@ interface Answer {
 }
 
 type Stage = "file" | "questions" | "summary";
+
+interface OpenFinanceStatus {
+  configured: boolean;
+  allowed: boolean;
+  items: {
+    itemId: string;
+    connectorName: string;
+    status: string;
+    accounts: { id: string; label: string; type: "BANK" | "CREDIT"; syncedUntil: string | null }[];
+  }[];
+}
 
 type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "outro";
 
@@ -175,6 +188,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Conectar conta (Pluggy): só aparece pra quem o servidor liberar.
+  const [bankLink, setBankStatus] = useState<OpenFinanceStatus | null>(null);
+  const [bankBusy, setBankBusy] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -190,6 +206,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         setBank(rememberedBank(first));
       })
       .catch(() => setError("Não foi possível carregar suas contas."));
+    void loadBankStatus();
   }, [token, user?.id]);
 
   const groupKey = (group: PreviewGroup) => `${group.transactionType}:${group.key}`;
@@ -475,6 +492,80 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const duplicateCount = preview?.rows.filter((row) => row.isDuplicate).length ?? 0;
   const unreadLines = preview?.pdf?.unreadLines ?? [];
 
+  async function loadBankStatus() {
+    try {
+      setBankStatus(await apiRequest<OpenFinanceStatus>("/open-finance/status", { token }));
+    } catch {
+      setBankStatus(null);
+    }
+  }
+
+  // Abre a janela do Pluggy com um token de 30 min gerado no servidor (a chave
+  // secreta nunca vem pro navegador). No fim, o servidor confere que a conexão
+  // é mesmo desta pessoa antes de guardar.
+  async function connectBank() {
+    setError(null);
+    setBankBusy("connect");
+    try {
+      const { accessToken } = await apiRequest<{ accessToken: string }>("/open-finance/connect-token", { method: "POST", token, body: {} });
+      const { PluggyConnect } = await import("pluggy-connect-sdk");
+      const widget = new PluggyConnect({
+        connectToken: accessToken,
+        includeSandbox: import.meta.env.DEV,
+        language: "pt",
+        onSuccess: async ({ item }) => {
+          try {
+            await apiRequest("/open-finance/items", { method: "POST", token, body: { itemId: item.id } });
+            showToast("Conta conectada", { description: "Agora é só buscar os lançamentos." });
+            await loadBankStatus();
+          } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Não foi possível guardar a conexão.");
+          }
+        },
+        onError: ({ message }) => setError(`A conexão não terminou: ${message}`),
+      });
+      await widget.init();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível abrir a conexão com o banco.");
+    } finally {
+      setBankBusy(null);
+    }
+  }
+
+  async function fetchFromBank(itemId: string, accountId: string, label: string) {
+    setError(null);
+    setBankBusy(accountId);
+    setFileName(label);
+    try {
+      const result = await apiRequest<PreviewResponse>(`/open-finance/items/${encodeURIComponent(itemId)}/preview`, {
+        method: "POST",
+        token,
+        body: { accountId },
+      });
+      if (result.rows.length === 0) {
+        showToast("Nada novo nessa conta", { variant: "info", description: "Não há lançamentos desde a última busca." });
+        return;
+      }
+      startReview(result);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível buscar os lançamentos.");
+    } finally {
+      setBankBusy(null);
+    }
+  }
+
+  async function disconnectBank(itemId: string) {
+    setBankBusy(itemId);
+    try {
+      await apiRequest(`/open-finance/items/${encodeURIComponent(itemId)}`, { method: "DELETE", token });
+      await loadBankStatus();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível desconectar.");
+    } finally {
+      setBankBusy(null);
+    }
+  }
+
   async function handleSave() {
     if (!plan || !accountId || (plan.items.length === 0 && plan.rules.length === 0)) return;
     setIsSaving(true);
@@ -490,6 +581,14 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         `${n} lançamento${n === 1 ? "" : "s"} importado${n === 1 ? "" : "s"}` +
           (result.rulesSaved > 0 ? ` · ${result.rulesSaved} nome${result.rulesSaved === 1 ? "" : "s"} guardado${result.rulesSaved === 1 ? "" : "s"}` : "")
       );
+      // Veio do banco conectado: a próxima busca começa daqui.
+      if (preview?.source) {
+        await apiRequest(`/open-finance/items/${encodeURIComponent(preview.source.itemId)}/synced`, {
+          method: "POST",
+          token,
+          body: { accountId: preview.source.accountId, until: preview.source.until },
+        }).catch(() => undefined);
+      }
       onImported();
       onClose();
     } catch (err) {
@@ -665,16 +764,58 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               />
             </div>
           )}
-          <div className="import-connect">
-            <span className="import-connect-icon">
-              <Icon name="bank" />
-            </span>
-            <div>
-              <strong>Conectar conta</strong>
-              <small>Os lançamentos entram sozinhos, sem baixar nada (Open Finance).</small>
+          {bankLink?.allowed ? (
+            <div className="import-connect is-live">
+              <div className="import-connect-head">
+                <span className="import-connect-icon">
+                  <Icon name="bank" />
+                </span>
+                <div>
+                  <strong>Conta conectada (Open Finance)</strong>
+                  <small>Busca os lançamentos direto do banco, sem baixar arquivo. Passam pelas mesmas perguntas.</small>
+                </div>
+              </div>
+              {bankLink.items.map((item) => (
+                <div key={item.itemId} className="import-bank-item">
+                  <div className="import-bank-item-head">
+                    <strong>{item.connectorName}</strong>
+                    {item.status !== "UPDATED" && <small className="import-bank-status">{item.status === "UNAVAILABLE" ? "sem resposta do banco" : item.status.toLowerCase()}</small>}
+                    <button type="button" className="link-button" disabled={bankBusy !== null} onClick={() => void disconnectBank(item.itemId)}>
+                      Desconectar
+                    </button>
+                  </div>
+                  {item.accounts.map((account) => (
+                    <button
+                      key={account.id}
+                      type="button"
+                      className="btn btn-outline btn-sm import-bank-account"
+                      disabled={bankBusy !== null || isReading}
+                      onClick={() => void fetchFromBank(item.itemId, account.id, account.label)}
+                    >
+                      {bankBusy === account.id ? "Buscando..." : `Buscar lançamentos · ${account.label}`}
+                      {account.syncedUntil && (
+                        <small> (até {parseLocalDate(account.syncedUntil).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })})</small>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ))}
+              <button type="button" className="btn btn-primary btn-sm" disabled={bankBusy !== null} onClick={() => void connectBank()}>
+                {bankBusy === "connect" ? "Abrindo..." : bankLink.items.length > 0 ? "Conectar outra conta" : "Conectar conta"}
+              </button>
             </div>
-            <span className="pill-soon">Em breve</span>
-          </div>
+          ) : (
+            <div className="import-connect">
+              <span className="import-connect-icon">
+                <Icon name="bank" />
+              </span>
+              <div>
+                <strong>Conectar conta</strong>
+                <small>Os lançamentos entram sozinhos, sem baixar nada (Open Finance).</small>
+              </div>
+              <span className="pill-soon">Em breve</span>
+            </div>
+          )}
         </>
       )}
 

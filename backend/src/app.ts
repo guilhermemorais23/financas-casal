@@ -21,6 +21,7 @@ import { recurringBillsRouter } from "./modules/recurringBills/recurringBills.ro
 import { remindersRouter } from "./modules/reminders/reminders.routes";
 import { maybeRunDailyJobs } from "./modules/reminders/reminders.service";
 import { publicSharesRouter, sharesRouter } from "./modules/shares/shares.routes";
+import { openFinanceRouter } from "./modules/openFinance/openFinance.routes";
 import { statementsRouter } from "./modules/statements/statements.routes";
 import { shoppingRouter } from "./modules/shopping/shopping.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
@@ -75,6 +76,7 @@ const WEBHOOK_PATHS = new Set(["/assistant/telegram/webhook", "/assistant/whatsa
 // mensagem de feedback (vira e-mail pro dono).
 export function isHeavyRequest(method: string, path: string): boolean {
   if (method === "POST" && ["/statements/preview", "/assistant/chat", "/groups/accept", "/feedback"].includes(path)) return true;
+  if (method === "POST" && /^\/open-finance\/(connect-token|items\/[^/]+\/preview)$/.test(path)) return true;
   return method === "GET" && path.startsWith("/public/shares/");
 }
 
@@ -147,6 +149,7 @@ export function createApp() {
   app.use("/api/alerts", alertsRouter);
   app.use("/api/shares", sharesRouter);
   app.use("/api/statements", statementsRouter);
+  app.use("/api/open-finance", openFinanceRouter);
   app.use("/api/feedback", feedbackRouter);
   app.use("/api/announcements", announcementsRouter);
   app.use("/api/billing", billingRouter);
