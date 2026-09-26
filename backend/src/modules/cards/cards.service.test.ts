@@ -19,6 +19,7 @@ import {
   listCards,
   removeCard,
   removePurchase,
+  setSecuredSourceForUser,
   setStatementPaidForUser,
   updateCardForUser,
 } from "./cards.service";
@@ -239,6 +240,37 @@ describe("cards: limite garantido", () => {
     expect(await balance()).toBe(-60);
 
     await removeCard(userAId, card.id);
+    expect(await balance()).toBe(0);
+  });
+
+  it("dinheiro que já estava guardado fora do app vira limite a mais, sem mexer na conta", async () => {
+    const { userAId, personalAccountId } = await createTestGroup();
+    const balance = async () =>
+      (await getGroupForUser(userAId))!.accounts.find((account) => account.id === personalAccountId)!.balance;
+
+    const card = await createCard(userAId, {
+      name: "Poupança garantida",
+      closingDay: 31,
+      dueDay: 5,
+      scope: "personal",
+      limit: 292,
+      limitType: "secured",
+      securedFromAccount: false,
+    });
+    expect(card.securedFromAccount).toBe(false);
+    expect(await balance()).toBe(0);
+
+    await adjustSecuredLimit(userAId, card.id, { direction: "deposit", amount: 8 });
+    expect(await balance()).toBe(0);
+    const [row] = await listCards(userAId);
+    expect(row.limit).toBe("300.00");
+
+    // Fixing it after the fact goes both ways.
+    await setSecuredSourceForUser(userAId, card.id, true);
+    expect(await balance()).toBe(-300);
+    const fixed = await setSecuredSourceForUser(userAId, card.id, false);
+    expect(fixed.securedFromAccount).toBe(false);
+    expect(fixed.limit).toBe("300.00");
     expect(await balance()).toBe(0);
   });
 });

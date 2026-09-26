@@ -20,6 +20,12 @@ export interface CardRow {
   // typed in directly). Cards created before this existed have no field and
   // read back as "normal".
   limitType: LimitType;
+  // Only matters for "secured": whether guardar/resgatar move money out of
+  // (and back into) the owner's account. false = the money was already
+  // parked somewhere the app doesn't track (a poupança/caixinha), so the
+  // limit is extra room and the account balance is left alone. Cards from
+  // before this existed always booked the transfer, so they read as true.
+  securedFromAccount: boolean;
 }
 
 export type LimitType = "normal" | "secured";
@@ -63,6 +69,7 @@ function toCardRow(doc: FirebaseFirestore.DocumentSnapshot): CardRow {
     dueDay: data.dueDay,
     limit: typeof data.limitCents === "number" ? fromCents(data.limitCents) : null,
     limitType: data.limitType === "secured" ? "secured" : "normal",
+    securedFromAccount: data.securedFromAccount !== false,
   };
 }
 
@@ -103,6 +110,7 @@ export async function insertCard(input: {
   dueDay: number;
   limit: number | null;
   limitType: LimitType;
+  securedFromAccount: boolean;
 }): Promise<CardRow> {
   const ref = await cardsCol.add({
     groupId: input.groupId,
@@ -113,6 +121,7 @@ export async function insertCard(input: {
     dueDay: input.dueDay,
     limitCents: input.limit !== null ? toCents(input.limit) : null,
     limitType: input.limitType,
+    securedFromAccount: input.securedFromAccount,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -178,6 +187,13 @@ export async function updateCard(
 export async function incrementCardLimit(cardId: string, deltaCents: number): Promise<CardRow> {
   const ref = cardsCol.doc(cardId);
   await ref.update({ limitCents: FieldValue.increment(deltaCents), updatedAt: FieldValue.serverTimestamp() });
+  const doc = await ref.get();
+  return toCardRow(doc);
+}
+
+export async function setCardSecuredFromAccount(cardId: string, securedFromAccount: boolean): Promise<CardRow> {
+  const ref = cardsCol.doc(cardId);
+  await ref.update({ securedFromAccount, updatedAt: FieldValue.serverTimestamp() });
   const doc = await ref.get();
   return toCardRow(doc);
 }
