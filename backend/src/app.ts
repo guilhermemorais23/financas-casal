@@ -10,6 +10,7 @@ import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { cardsRouter } from "./modules/cards/cards.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
+import { billsRouter } from "./modules/upcoming/upcoming.routes";
 import { debtsRouter } from "./modules/debts/debts.routes";
 import { feedbackRouter } from "./modules/feedback/feedback.routes";
 import { monthCloseRouter } from "./modules/monthClose/monthClose.routes";
@@ -136,6 +137,7 @@ export function createApp() {
   app.post("/api/me/revoke-sessions", requireAuth, asyncHandler(revokeSessionsHandler));
   app.use("/api/groups", groupsRouter);
   app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/bills", billsRouter);
   app.use("/api/categories", categoriesRouter);
   app.use("/api/transactions", transactionsRouter);
   app.use("/api/goals", goalsRouter);

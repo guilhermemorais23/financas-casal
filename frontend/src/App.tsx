@@ -62,6 +62,7 @@ const DashboardPage = namedLazy(() => import("./pages/DashboardPage"), "Dashboar
 const ParPage = namedLazy(() => import("./pages/ParPage"), "ParPage");
 const NewTransactionPage = namedLazy(() => import("./pages/NewTransactionPage"), "NewTransactionPage");
 const PayablesPage = namedLazy(() => import("./pages/PayablesPage"), "PayablesPage");
+const BillsPage = namedLazy(() => import("./pages/BillsPage"), "BillsPage");
 const CardsPage = namedLazy(() => import("./pages/CardsPage"), "CardsPage");
 const GoalsPage = namedLazy(() => import("./pages/GoalsPage"), "GoalsPage");
 const ReportsPage = namedLazy(() => import("./pages/ReportsPage"), "ReportsPage");
@@ -121,6 +122,14 @@ function App() {
             />
             {/* Dívidas e Contas fixas agora ficam juntas em "A pagar"; os
                 endereços antigos continuam valendo. */}
+            <Route
+              path="/contas"
+              element={
+                <ProtectedRoute requireGroup>
+                  <BillsPage />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/a-pagar"
               element={

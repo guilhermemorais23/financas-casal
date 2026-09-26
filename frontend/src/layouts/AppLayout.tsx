@@ -27,30 +27,18 @@ interface NavItem {
 
 // Menu lateral do PC, agrupado pra 10 links virarem 4 listas curtas. "Nova
 // despesa" não está aqui -- o + flutuante já faz isso em toda tela.
-const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
-  {
-    label: null,
-    items: [
-      { to: "/dashboard", label: "Painel", icon: "home" },
-      { to: "/par", label: "Par", icon: "heart" },
-      { to: "/reports", label: "Relatórios", icon: "chart" },
-    ],
-  },
-  {
-    label: "Contas",
-    items: BILLS_TABS,
-  },
-  {
-    label: "Planejar",
-    items: [
-      { to: "/goals", label: "Metas", icon: "target" },
-      { to: "/shopping", label: "Lista de compras", icon: "cart" },
-    ],
-  },
-  {
-    label: "Você",
-    items: [{ to: "/account", label: "Conta e grupo", icon: "sliders" }],
-  },
+// Menu do computador: uma lista só, na ordem de uso (sem títulos de grupo).
+// Contas é uma entrada só -- Cartões, A pagar e Empréstimos ficam nas abas
+// dentro dela. couple = só aparece pra quem está com o par no grupo; solo =
+// só pra quem está sozinho.
+const NAV_ITEMS: (NavItem & { couple?: boolean; solo?: boolean })[] = [
+  { to: "/dashboard", label: "Painel", icon: "home" },
+  { to: "/par", label: "Par", icon: "heart", couple: true },
+  { to: "/reports", label: "Relatórios", icon: "chart" },
+  { to: "/contas", label: "Contas", icon: "receipt" },
+  { to: "/goals", label: "Metas", icon: "target" },
+  { to: "/shopping", label: "Lista de compras", icon: "cart", couple: true },
+  { to: "/account", label: "Conta e grupo", icon: "sliders" },
 ];
 
 // Admin isn't a plain link -- it expands into a submenu (handled separately
@@ -67,19 +55,20 @@ const ADMIN_SUBLINKS = [
 
 // Celular: Painel · Par · [+] · Contas · Mais. Todo o resto fica na folha
 // "Mais", então qualquer tela está a no máximo dois toques.
-const MORE_TILES: NavItem[] = [
-  { to: "/reports", label: "Relatórios", icon: "chart" },
+const MORE_TILES: (NavItem & { couple?: boolean })[] = [
+  { to: "/reports", label: "Relatórios", icon: "chart", couple: true },
   { to: "/goals", label: "Metas", icon: "target" },
-  { to: "/shopping", label: "Compras", icon: "cart" },
+  { to: "/shopping", label: "Compras", icon: "cart", couple: true },
 ];
 
 const BILLS_PATHS = [...BILLS_TABS.map((tab) => tab.to), "/debts", "/recurring-bills"];
+const INVITE_PATH = "/account#convite";
 // Cotações (Investimentos) saiu do menu mas a tela continua, pelo link em Metas.
 const MORE_PATHS = [...MORE_TILES.map((tile) => tile.to), "/investments", "/account", "/admin"];
 
-// Lista de compras é coisa de casal: quem usa sozinho não vê no menu (a tela
-// continua existindo). Guarda a resposta pra não piscar a cada troca de tela.
-const COUPLE_ONLY_PATHS = ["/shopping"];
+// Par e Lista de compras são coisa de casal: quem usa sozinho não vê no menu
+// (as telas continuam existindo) e vê "Convidar meu par" no lugar. Guarda a
+// resposta pra não piscar a cada troca de tela.
 const coupleCache = new Map<string, boolean>();
 
 function readCoupleFlag(userId: string | undefined): boolean | null {
@@ -164,7 +153,9 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       })
       .catch(() => undefined);
   }, [token, user?.id]);
-  const showItem = (to: string) => isCouple !== false || !COUPLE_ONLY_PATHS.includes(to);
+  // Enquanto não sabe, mostra o menu do casal (a maioria).
+  const isSolo = isCouple === false;
+  const showItem = (item: { couple?: boolean; solo?: boolean }) => (item.couple ? !isSolo : item.solo ? isSolo : true);
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
@@ -209,7 +200,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   }, [location.pathname]);
 
   const isOnBills = BILLS_PATHS.includes(location.pathname);
-  const isOnMore = MORE_PATHS.includes(location.pathname);
+  const isOnMore = MORE_PATHS.includes(location.pathname) && !(isSolo && location.pathname === "/reports");
 
   function fromSheet(action: () => void) {
     setIsMoreOpen(false);
@@ -236,21 +227,24 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         </div>
         <div className="app-sidebar-scroll">
         <nav className="app-nav">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label ?? "main"} className="app-nav-group">
-              {group.label && <p className="app-nav-group-label">{group.label}</p>}
-              {group.items.filter((item) => showItem(item.to)).map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) => `app-nav-link${isActive ? " active" : ""}`}
-                >
-                  <span className="app-nav-icon"><Icon name={item.icon} /></span>
-                  {item.label}
-                </NavLink>
-              ))}
-            </div>
+          {NAV_ITEMS.filter(showItem).map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `app-nav-link${isActive || (item.to === "/contas" && isOnBills) ? " active" : ""}`
+              }
+            >
+              <span className="app-nav-icon"><Icon name={item.icon} /></span>
+              {item.label}
+            </NavLink>
           ))}
+          {isSolo && (
+            <Link to={INVITE_PATH} className="app-nav-link app-nav-invite">
+              <span className="app-nav-icon"><Icon name="user" /></span>
+              Convidar meu par
+            </Link>
+          )}
 
           {user?.isAdmin && (
             <>
@@ -392,10 +386,17 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
           <span className="app-bottom-nav-icon"><Icon name="home" /></span>
           Painel
         </NavLink>
-        <NavLink to="/par" className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>
-          <span className="app-bottom-nav-icon"><Icon name="heart" /></span>
-          Par
-        </NavLink>
+        {isSolo ? (
+          <NavLink to="/reports" className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>
+            <span className="app-bottom-nav-icon"><Icon name="chart" /></span>
+            Relatórios
+          </NavLink>
+        ) : (
+          <NavLink to="/par" className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>
+            <span className="app-bottom-nav-icon"><Icon name="heart" /></span>
+            Par
+          </NavLink>
+        )}
         <Link
           to="/transactions/new"
           className={`app-bottom-nav-add${isOnNewTransaction ? " active" : ""}`}
@@ -403,7 +404,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         >
           <Icon name="plus" />
         </Link>
-        <Link to="/cards" className={`app-bottom-nav-link${isOnBills ? " active" : ""}`}>
+        <Link to="/contas" className={`app-bottom-nav-link${isOnBills ? " active" : ""}`}>
           <span className="app-bottom-nav-icon"><Icon name="receipt" /></span>
           Contas
         </Link>
@@ -441,7 +442,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
             </div>
 
             <div className="more-sheet-tiles">
-              {MORE_TILES.filter((tile) => showItem(tile.to)).map((tile) => (
+              {MORE_TILES.filter(showItem).map((tile) => (
                 <Link
                   key={tile.to}
                   to={tile.to}
@@ -451,6 +452,12 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
                   {tile.label}
                 </Link>
               ))}
+              {isSolo && (
+                <Link to={INVITE_PATH} className="more-sheet-tile">
+                  <span className="more-sheet-tile-icon"><Icon name="user" /></span>
+                  Convidar par
+                </Link>
+              )}
             </div>
 
             <div className="more-sheet-list">
