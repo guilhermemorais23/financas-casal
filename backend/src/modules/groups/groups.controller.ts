@@ -87,11 +87,11 @@ export async function listMyGroupsHandler(req: Request, res: Response) {
 export async function updateGroupIdentityHandler(req: Request, res: Response) {
   const { name, emoji } = req.body ?? {};
   if (name !== undefined && name !== null && typeof name !== "string") {
-    res.status(400).json({ error: "name must be a string" });
+    res.status(400).json({ error: "O nome do grupo precisa ser um texto." });
     return;
   }
   if (emoji !== undefined && emoji !== null && typeof emoji !== "string") {
-    res.status(400).json({ error: "emoji must be a string" });
+    res.status(400).json({ error: "O ícone do grupo precisa ser um texto." });
     return;
   }
   try {
@@ -99,7 +99,7 @@ export async function updateGroupIdentityHandler(req: Request, res: Response) {
     res.status(200).json(group);
   } catch (err) {
     if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
+      res.status(404).json({ error: "Você ainda não está num grupo." });
       return;
     }
     throw err;

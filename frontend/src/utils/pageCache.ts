@@ -1,9 +1,9 @@
 // Stale-while-revalidate cache for page data: pages hydrate instantly from the
 // last-seen value (survives closing the app, via localStorage) while a fresh
 // fetch runs in the background and overwrites it. Keys are caller-scoped
-// (include the user id) so switching accounts never shows another user's data,
-// and prefixed here with the open group, so switching groups never shows the
-// other group's numbers either.
+// (include the user id) so switching accounts never shows another user's data.
+// Aqui cada chave ganha também o grupo aberto: trocar de grupo nunca mostra
+// os números do outro grupo.
 import { getActiveGroupId } from "../api/activeGroup";
 
 const memoryCache = new Map<string, unknown>();
