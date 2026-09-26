@@ -111,8 +111,11 @@ export async function listPendingFor(userId: string): Promise<Announcement[]> {
   // Casal ou sozinho: só busca o grupo se tiver algum pop-up com esse público.
   let isCouple: boolean | null = null;
   if (active.some((a) => a.audience === "couples" || a.audience === "solo")) {
+    // Casal = está em algum grupo com mais alguém (a pessoa pode ter vários).
     const user = await findUserById(userId);
-    isCouple = user?.groupId ? (await findMembersByGroupId(user.groupId)).length > 1 : false;
+    const groupIds = user?.groupIds.length ? user.groupIds : user?.groupId ? [user.groupId] : [];
+    const sizes = await Promise.all(groupIds.map(async (id) => (await findMembersByGroupId(id)).length));
+    isCouple = sizes.some((size) => size > 1);
   }
   const hadAccount = (a: Announcement) => userCreatedAt === null || a.createdAt >= userCreatedAt;
   const mine = active.filter((a) => {

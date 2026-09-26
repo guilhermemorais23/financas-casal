@@ -1,4 +1,20 @@
+import { getActiveGroupId, setActiveGroupId } from "./activeGroup";
+
 const API_URL = import.meta.env.VITE_API_URL;
+
+function groupHeader(): Record<string, string> {
+  const groupId = getActiveGroupId();
+  return groupId ? { "X-Group-Id": groupId } : {};
+}
+
+// O backend recusou o grupo aberto (a pessoa saiu dele ou foi removida em
+// outro aparelho): volta pro grupo padrão e avisa o app pra reler o perfil.
+function isGroupLost(status: number, data: { code?: unknown } | null): boolean {
+  if (status !== 403 || data?.code !== "group_access" || !getActiveGroupId()) return false;
+  setActiveGroupId(null);
+  window.dispatchEvent(new CustomEvent("par:group-lost"));
+  return true;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -24,7 +40,7 @@ export async function apiRequest<T>(
   options: { method?: string; body?: unknown; token?: string | null } = {}
 ): Promise<T> {
   const doFetch = async (token?: string | null) => {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = { "Content-Type": "application/json", ...groupHeader() };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -49,7 +65,12 @@ export async function apiRequest<T>(
     }
   }
 
-  const data = await response.json().catch(() => null);
+  let data = await response.json().catch(() => null);
+
+  if (isGroupLost(response.status, data)) {
+    response = await doFetch(options.token);
+    data = await response.json().catch(() => null);
+  }
 
   if (!response.ok) {
     // Recurso do Premium: avisa o app (components/PremiumPrompt abre a janela
@@ -68,7 +89,7 @@ export async function apiRequest<T>(
 // header, then hands the browser a real file via a throwaway <a download>.
 export async function apiDownload(path: string, token: string | null, filename: string): Promise<void> {
   const fetchWith = (t: string | null) =>
-    fetch(`${API_URL}${path}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+    fetch(`${API_URL}${path}`, { headers: { ...groupHeader(), ...(t ? { Authorization: `Bearer ${t}` } : {}) } });
 
   let response = await fetchWith(token);
   if (response.status === 401 && token && refreshToken) {

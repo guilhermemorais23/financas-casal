@@ -16,7 +16,8 @@ import { findVisibleCategories } from "../categories/categories.repository";
 import { listDebts } from "../debts/debts.service";
 import { listGoals } from "../goals/goals.service";
 import { findAccountsByGroupId, findGroupById, updateGroupFinancialProfile } from "../groups/groups.repository";
-import { requireGroupId } from "../groups/groups.service";
+import { GroupAccessError, requireGroupId } from "../groups/groups.service";
+import { runWithActiveGroup } from "../../utils/activeGroup";
 import { getMonthlySummary } from "../transactions/transactions.repository";
 import { createTransaction } from "../transactions/transactions.service";
 import { currentMonthParam, parseMonthRange } from "../../utils/month";
@@ -234,6 +235,9 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
   return (parsed.reply || "Prontinho.") + quotaNote;
 }
 
+const UNLINKED_GROUP_MESSAGE =
+  "Você não faz mais parte do grupo ligado a este chat. No app PAR., abra o grupo certo, vá em Conta → assistente e gere um código novo.";
+
 async function handleTelegramLinking(chatId: string, text: string | undefined): Promise<void> {
   const code = text?.trim().toUpperCase();
   const redeemed = code ? await consumeLinkCode(code) : null;
@@ -265,9 +269,17 @@ export async function handleTelegramMessage(
   }
 
   try {
-    const reply = await processAssistantMessage(link.userId, link.groupId, text, audio);
+    // O bot fala sempre com o grupo que estava aberto quando o código foi
+    // gerado, mesmo que a pessoa tenha outros grupos.
+    const reply = await runWithActiveGroup(link.groupId, () =>
+      processAssistantMessage(link.userId, link.groupId, text, audio)
+    );
     await sendTelegramMessage(chatId, reply);
   } catch (err) {
+    if (err instanceof GroupAccessError) {
+      await sendTelegramMessage(chatId, UNLINKED_GROUP_MESSAGE);
+      return;
+    }
     if (err instanceof AssistantNotConfiguredError) {
       await sendTelegramMessage(chatId, "O assistente de IA ainda não foi configurado no servidor.");
       return;
@@ -311,9 +323,17 @@ export async function handleWhatsappMessage(
   }
 
   try {
-    const reply = await processAssistantMessage(link.userId, link.groupId, text, audio);
+    // O bot fala sempre com o grupo que estava aberto quando o código foi
+    // gerado, mesmo que a pessoa tenha outros grupos.
+    const reply = await runWithActiveGroup(link.groupId, () =>
+      processAssistantMessage(link.userId, link.groupId, text, audio)
+    );
     await sendWhatsappMessage(waId, reply);
   } catch (err) {
+    if (err instanceof GroupAccessError) {
+      await sendWhatsappMessage(waId, UNLINKED_GROUP_MESSAGE);
+      return;
+    }
     if (err instanceof AssistantNotConfiguredError) {
       await sendWhatsappMessage(waId, "O assistente de IA ainda não foi configurado no servidor.");
       return;

@@ -1,4 +1,5 @@
 import type { PaymentMethod } from "./paymentMethod";
+import { groupSuffix } from "../api/activeGroup";
 
 // Memória do lançamento rápido: pra cada descrição já usada, guarda a
 // categoria, a conta e a forma de pagamento da última vez. Assim, digitar
@@ -15,7 +16,8 @@ export interface RememberedEntry {
 }
 
 const MAX_ENTRIES = 200;
-const key = (userId: string) => `par:quick-entry:${userId}`;
+// Contas e categorias são de um grupo: cada grupo lembra as suas.
+const key = (userId: string) => `par:quick-entry:${userId}${groupSuffix()}`;
 
 export function normalizeDescription(text: string): string {
   return text

@@ -3,7 +3,7 @@
 // scratch verification script all along, just kept around permanently and
 // run through vitest instead of a throwaway .mjs file.
 import { db } from "./db/firestore";
-import { createAccount, createGroup, setUserGroup } from "./modules/groups/groups.repository";
+import { addUserToGroup, createAccount, createGroup } from "./modules/groups/groups.repository";
 
 const usersCol = db.collection("users");
 
@@ -25,8 +25,8 @@ export async function createTestGroup(): Promise<TestGroup> {
 
   await usersCol.doc(userAId).set({ email: `a-${suffix}@test.com`, displayName: "A", groupId: group.id });
   await usersCol.doc(userBId).set({ email: `b-${suffix}@test.com`, displayName: "B", groupId: group.id });
-  await setUserGroup(userAId, group.id);
-  await setUserGroup(userBId, group.id);
+  await addUserToGroup({ id: userAId, groupIds: [] }, group.id);
+  await addUserToGroup({ id: userBId, groupIds: [] }, group.id);
 
   const personalAccount = await createAccount({
     groupId: group.id,

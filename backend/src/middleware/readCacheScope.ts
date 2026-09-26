@@ -25,7 +25,9 @@ export function readCacheScope(req: Request, res: Response, next: NextFunction) 
       }
       runWithReadScope(false, () => findUserById(userId))
         .then((user) => {
-          invalidateScopes([`user:${userId}`, family, ...(user?.groupId ? [`group:${user.groupId}`] : [])]);
+          // Todos os grupos da pessoa: barato, e não depende de saber qual
+          // estava aberto nesta gravação.
+          invalidateScopes([`user:${userId}`, family, ...(user?.groupIds ?? []).map((id) => `group:${id}`)]);
         })
         .catch(() => invalidateAllReads());
     });

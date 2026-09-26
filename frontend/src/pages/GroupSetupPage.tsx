@@ -5,37 +5,64 @@ import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { useToast } from "../components/ToastProvider";
 
-type Mode = "choose" | "create" | "accept";
+type Mode = "choose" | "name" | "create" | "accept";
 
 interface CreateGroupResponse {
   group: { id: string };
   inviteToken: string;
 }
 
+const EMOJI_OPTIONS = ["💜", "🏠", "👨‍👩‍👧", "🏖️", "🍻", "🐶", "💼", "✈️"];
+
+function initialMode(params: URLSearchParams): Mode {
+  if (params.get("convidar")) return "create";
+  if (params.get("token") || params.get("convite")) return "accept";
+  if (params.get("novo")) return "name";
+  return "choose";
+}
+
 export function GroupSetupPage() {
-  const { token, refreshUser } = useAuth();
+  const { user, token, refreshUser, switchGroup } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // Quem já tem grupo chega aqui pelo seletor de grupo, pra criar ou entrar
+  // em mais um; "Voltar" leva de volta pro app em vez da tela de boas-vindas.
+  const hasGroup = Boolean(user?.groupId);
 
-  const [mode, setMode] = useState<Mode>(searchParams.get("token") ? "accept" : "choose");
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [chosenMode, setMode] = useState<Mode>(() => initialMode(searchParams));
+  const createdInvite = searchParams.get("convidar");
+  // Lido da URL a cada render (e não só no início): trocar pro grupo novo
+  // remonta a tela, às vezes antes da URL com o convite chegar.
+  const mode: Mode = createdInvite ? "create" : chosenMode;
+  const inviteLink = createdInvite ? `${window.location.origin}/invite/${createdInvite}` : null;
   const [acceptToken, setAcceptToken] = useState(searchParams.get("token") ?? "");
+  const [groupName, setGroupName] = useState("");
+  const [groupEmoji, setGroupEmoji] = useState(EMOJI_OPTIONS[0]);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function handleCreate() {
+  function goBack() {
+    if (hasGroup) navigate("/dashboard");
+    else setMode("choose");
+  }
+
+  async function handleCreate(event?: FormEvent) {
+    event?.preventDefault();
     setError(null);
     setIsSubmitting(true);
     try {
       const response = await apiRequest<CreateGroupResponse>("/groups", {
         method: "POST",
         token,
+        body: { name: groupName, emoji: groupEmoji },
       });
-      setInviteLink(`${window.location.origin}/invite/${response.inviteToken}`);
-      setMode("create");
       showToast("Grupo criado", { description: "Agora é só mandar o link do convite" });
       await refreshUser();
+      // Trocar de grupo recarrega as telas; o link do convite vai na URL pra
+      // continuar aparecendo depois disso.
+      navigate(`/group-setup?convidar=${encodeURIComponent(response.inviteToken)}`, { replace: true });
+      switchGroup(response.group.id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar o grupo");
     } finally {
@@ -48,14 +75,15 @@ export function GroupSetupPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await apiRequest("/groups/accept", {
+      const response = await apiRequest<{ group: { id: string } | null }>("/groups/accept", {
         method: "POST",
         token,
-        body: { token: acceptToken },
+        body: { token: acceptToken.trim() },
       });
       await refreshUser();
       showToast("Você entrou no grupo");
       navigate("/dashboard");
+      if (response.group) switchGroup(response.group.id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível aceitar o convite");
     } finally {
@@ -88,6 +116,59 @@ export function GroupSetupPage() {
     );
   }
 
+  if (mode === "name") {
+    return (
+      <div className="page-center">
+        <Brand />
+        <div className="card">
+          <h1>Novo grupo</h1>
+          <p className="card-subtitle">
+            {hasGroup
+              ? "Um grupo separado dos que você já tem: quem entrar nele não vê os outros, e vice-versa."
+              : "Dê um nome pro grupo. Dá pra mudar depois na tela Conta."}
+          </p>
+          <form onSubmit={handleCreate}>
+            <div className="field">
+              <label htmlFor="group-name">Nome do grupo</label>
+              <input
+                id="group-name"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="Ex.: Eu & Ana, Casa da família"
+                maxLength={40}
+                autoFocus
+              />
+            </div>
+            <div className="field">
+              <span className="field-label" id="group-emoji-label">Ícone</span>
+              <div className="group-emoji-options" role="radiogroup" aria-labelledby="group-emoji-label">
+                {EMOJI_OPTIONS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    role="radio"
+                    aria-checked={groupEmoji === emoji}
+                    className={`group-emoji-option${groupEmoji === emoji ? " active" : ""}`}
+                    onClick={() => setGroupEmoji(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {error && <p className="alert" role="alert">{error}</p>}
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+              {isSubmitting ? "Criando..." : "Criar grupo"}
+            </button>
+          </form>
+          <button type="button" className="btn btn-ghost" onClick={goBack}>
+            Voltar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (mode === "accept") {
     return (
       <div className="page-center">
@@ -110,7 +191,7 @@ export function GroupSetupPage() {
               {isSubmitting ? "Entrando..." : "Entrar no grupo"}
             </button>
           </form>
-          <button type="button" className="btn btn-ghost" onClick={() => setMode("choose")}>
+          <button type="button" className="btn btn-ghost" onClick={goBack}>
             Voltar
           </button>
         </div>
@@ -128,7 +209,7 @@ export function GroupSetupPage() {
       <p className="onboarding-subtitle">Finanças em grupo, sem atrito.</p>
       {error && <p className="alert" role="alert">{error}</p>}
       <div className="onboarding-actions">
-        <button type="button" className="btn btn-white" onClick={handleCreate} disabled={isSubmitting}>
+        <button type="button" className="btn btn-white" onClick={() => setMode("name")} disabled={isSubmitting}>
           Criar grupo
         </button>
         <button type="button" className="btn btn-outline-light" onClick={() => setMode("accept")}>

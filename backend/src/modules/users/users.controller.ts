@@ -28,6 +28,7 @@ async function toPublicUser(user: UserRow) {
     email: user.email,
     displayName: user.displayName,
     groupId: user.groupId,
+    groupIds: user.groupIds,
     photoDataUrl: user.photoDataUrl,
     phone: user.phone,
     isAdmin: isAdminEmail(user.email),

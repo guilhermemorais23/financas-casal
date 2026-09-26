@@ -52,17 +52,18 @@ async function deletePersonalData(groupId: string, userId: string): Promise<void
 
 export async function deleteAccountForUser(userId: string): Promise<void> {
   const user = await findUserById(userId);
-  const groupId = user?.groupId ?? null;
 
-  if (groupId) {
+  // Cada grupo da pessoa (casal, família...) segue a mesma regra: sozinha
+  // nele, apaga tudo; com mais gente, só o que era dela.
+  for (const groupId of user?.groupIds ?? []) {
     const members = await findMembersByGroupId(groupId);
     if (members.every((member) => member.id === userId)) {
       await deleteWholeGroup(groupId);
     } else {
       await deletePersonalData(groupId, userId);
     }
-    invalidateTransactionReads();
   }
+  if (user?.groupIds.length) invalidateTransactionReads();
 
   await Promise.all([
     deleteDocs(db.collection("shares").where("ownerId", "==", userId)),

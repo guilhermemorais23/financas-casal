@@ -12,7 +12,8 @@ import {
   type User,
 } from "firebase/auth";
 import { FirebaseError } from "firebase/app";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { getActiveGroupId, setActiveGroupId, subscribeActiveGroup } from "../api/activeGroup";
 import { ApiError, apiRequest, setTokenRefresher, warmUpApi } from "../api/client";
 import { firebaseAuth } from "../firebase";
 
@@ -20,7 +21,10 @@ export interface AuthUser {
   id: string;
   email: string;
   displayName: string;
+  // Grupo padrão (o último em que a pessoa entrou) e todos os grupos dela.
   groupId: string | null;
+  // Perfis guardados no aparelho antes dos vários grupos não têm a lista.
+  groupIds?: string[];
   photoDataUrl: string | null;
   phone: string | null;
   // Backend-decided (ADMIN_EMAILS) -- drives whether the Admin nav item
@@ -49,6 +53,10 @@ interface AuthContextValue {
   refreshUser: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   revokeAllSessions: () => Promise<void>;
+  // Grupo aberto no app (casal, família...). Trocar recarrega as telas com
+  // os dados do outro grupo.
+  activeGroupId: string | null;
+  switchGroup: (groupId: string) => void;
 }
 
 export type SocialProvider = "google" | "apple";
@@ -165,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onIdTokenChanged(firebaseAuth, async (firebaseUser) => {
       if (!firebaseUser) {
         clearCachedProfiles();
+        setActiveGroupId(null);
         setUser(null);
         setToken(null);
         setIsLoading(false);
@@ -241,6 +250,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await fetchProfile(token);
     setUser(profile);
   }, [token]);
+
+  const activeGroupId = useSyncExternalStore(subscribeActiveGroup, getActiveGroupId);
+
+  // O grupo guardado no aparelho precisa ser um dos grupos da pessoa (outra
+  // conta no mesmo celular, ou saiu do grupo em outro aparelho); se não for,
+  // abre o grupo padrão.
+  useEffect(() => {
+    if (!user) return;
+    const groupIds = user.groupIds ?? (user.groupId ? [user.groupId] : []);
+    const current = getActiveGroupId();
+    if (!current || !groupIds.includes(current)) setActiveGroupId(user.groupId);
+  }, [user, activeGroupId]);
+
+  // O backend recusou o grupo aberto (ver api/client.ts): relê o perfil pra
+  // lista de grupos ficar certa.
+  useEffect(() => {
+    function onGroupLost() {
+      refreshUser().catch(() => {});
+    }
+    window.addEventListener("par:group-lost", onGroupLost);
+    return () => window.removeEventListener("par:group-lost", onGroupLost);
+  }, [refreshUser]);
+
+  const switchGroup = useCallback((groupId: string) => setActiveGroupId(groupId), []);
 
   // login/loginWithProvider/register set user+token themselves, synchronously
   // within their own promise, rather than relying solely on onIdTokenChanged
@@ -330,8 +363,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       revokeAllSessions,
       deleteAccount,
+      activeGroupId,
+      switchGroup,
     }),
-    [user, token, isLoading, login, loginWithProvider, register, logout, refreshUser, resetPassword, revokeAllSessions, deleteAccount]
+    [user, token, isLoading, login, loginWithProvider, register, logout, refreshUser, resetPassword, revokeAllSessions, deleteAccount, activeGroupId, switchGroup]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
