@@ -123,6 +123,20 @@ export async function buildDiagnostics(): Promise<DiagSection[]> {
       ],
     },
     {
+      id: "push",
+      title: "Notificação no celular",
+      summary: has("VAPID_PUBLIC_KEY") && has("VAPID_PRIVATE_KEY") ? "Ligada" : "Desligada",
+      items: [
+        {
+          label: "Chaves de notificação (VAPID)",
+          ok: has("VAPID_PUBLIC_KEY") && has("VAPID_PRIVATE_KEY"),
+          level: "recommended",
+          env: "VAPID_PUBLIC_KEY",
+          hint: "Gere uma vez com: npx web-push generate-vapid-keys. Coloque a pública em VAPID_PUBLIC_KEY e a privada em VAPID_PRIVATE_KEY. Trocar depois desliga os avisos de quem já tinha ligado.",
+        },
+      ],
+    },
+    {
       id: "telegram",
       title: "Assistente no Telegram",
       summary: telegramOn ? "Ligado" : "Desligado",

@@ -8880,3 +8880,12 @@ select {
   display: flex;
   gap: 0.5rem;
 }
+
+/* Conta e grupo > Avisos no celular */
+.push-card { display: grid; gap: 0.6rem; }
+.push-card .btn { justify-self: start; }
+.push-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.push-on { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--success-text); font-weight: 700; font-size: 0.9rem; }
+.push-on .icon { width: 16px; height: 16px; }
+.push-hint { display: flex; gap: 0.4rem; align-items: flex-start; margin: 0; }
+.push-hint .icon { width: 16px; height: 16px; flex: none; margin-top: 0.1rem; }

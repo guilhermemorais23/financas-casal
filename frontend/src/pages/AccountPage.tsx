@@ -10,6 +10,7 @@ import { Icon } from "../components/Icon";
 import { DEFAULT_GROUP_EMOJI, DEFAULT_GROUP_NAME, groupLabel, useMyGroups } from "../components/GroupSwitcher";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ImportRulesCard } from "../components/ImportRulesCard";
+import { PushSettingsCard } from "../components/PushSettingsCard";
 import { ImportStatementModal } from "../components/ImportStatementModal";
 import { initialOf } from "../utils/initial";
 
@@ -555,6 +556,8 @@ export function AccountPage() {
             </button>
           </div>
         </div>
+
+        <PushSettingsCard />
 
         <ImportRulesCard categories={categories ?? []} reloadKey={importsDone} />
 
