@@ -22,7 +22,8 @@ interface Item {
 
 // One "Exportar" button instead of a growing row of "⬇ CSV", "⬇ Tudo"...:
 // every way of getting data out lives in one menu, each with a verb and a
-// one-line hint. Importar tem botão próprio (ImportButton), fora daqui.
+// one-line hint. Importar tem botão próprio ao lado deste (Relatórios) e na
+// tela inicial.
 export function ExportMenu(props: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
