@@ -4,6 +4,7 @@ import { toCsv } from "../../utils/csv";
 import {
   InvalidAccountError,
   InvalidCategoryError,
+  InvalidCategorySplitError,
   InvalidMonthError,
   InvalidPayerError,
   InvalidRecurrenceError,
@@ -24,6 +25,7 @@ import {
   getMonthlySummaryForUser,
   listTransactions,
   setSplitSettledForUser,
+  splitTransactionByCategoryForUser,
   updateRecurringForUser,
   updateTransactionForUser,
 } from "./transactions.service";
@@ -398,6 +400,52 @@ export async function setSplitSettledHandler(req: Request, res: Response) {
     }
     if (err instanceof InvalidSettlementAmountError) {
       res.status(400).json({ error: "invalid amount" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function splitByCategoryHandler(req: Request, res: Response) {
+  const { parts } = req.body ?? {};
+  if (
+    !Array.isArray(parts) ||
+    !parts.every(
+      (part) =>
+        part &&
+        typeof part.amount === "number" &&
+        part.amount > 0 &&
+        (part.categoryId === null || part.categoryId === undefined || isNonEmptyString(part.categoryId))
+    )
+  ) {
+    res.status(400).json({ error: "parts: [{ amount, categoryId }] is required" });
+    return;
+  }
+  try {
+    const transactions = await splitTransactionByCategoryForUser(
+      req.user!.id,
+      req.params.id,
+      parts.map((part: { amount: number; categoryId?: string | null }) => ({
+        amount: part.amount,
+        categoryId: part.categoryId ?? null,
+      }))
+    );
+    res.status(200).json(transactions);
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
+      res.status(404).json({ error: "transaction not found" });
+      return;
+    }
+    if (err instanceof SecuredCardTransferError) {
+      res.status(409).json({ error: transferLockedMessage(err) });
+      return;
+    }
+    if (err instanceof InvalidCategorySplitError) {
+      res.status(400).json({ error: "As partes precisam ser de 2 a 10, maiores que zero e somar o valor do lançamento." });
+      return;
+    }
+    if (err instanceof InvalidCategoryError) {
+      res.status(400).json({ error: "InvalidCategoryError" });
       return;
     }
     throw err;

@@ -26,6 +26,16 @@ export interface CardRow {
   // limit is extra room and the account balance is left alone. Cards from
   // before this existed always booked the transfer, so they read as true.
   securedFromAccount: boolean;
+  // "Guardar todo mês" (só no garantido): quanto e em que dia. Vira um
+  // lembrete no Painel até a pessoa guardar naquele mês.
+  savingsPlan: SavingsPlan | null;
+  // Mês (YYYY-MM) do último "Guardar mais" -- o lembrete some quando é o mês atual.
+  lastDepositMonth: string | null;
+}
+
+export interface SavingsPlan {
+  amount: string;
+  day: number;
 }
 
 export type LimitType = "normal" | "secured";
@@ -70,6 +80,11 @@ function toCardRow(doc: FirebaseFirestore.DocumentSnapshot): CardRow {
     limit: typeof data.limitCents === "number" ? fromCents(data.limitCents) : null,
     limitType: data.limitType === "secured" ? "secured" : "normal",
     securedFromAccount: data.securedFromAccount !== false,
+    savingsPlan:
+      data.savingsPlan && typeof data.savingsPlan.amountCents === "number"
+        ? { amount: fromCents(data.savingsPlan.amountCents), day: data.savingsPlan.day }
+        : null,
+    lastDepositMonth: data.lastDepositMonth ?? null,
   };
 }
 
@@ -184,9 +199,13 @@ export async function updateCard(
 // an increment, so two people moving money at once don't overwrite each
 // other. The "can't withdraw more than what's free" check lives in the
 // service, which knows how much of the limit purchases are holding.
-export async function incrementCardLimit(cardId: string, deltaCents: number): Promise<CardRow> {
+export async function incrementCardLimit(cardId: string, deltaCents: number, depositMonth?: string): Promise<CardRow> {
   const ref = cardsCol.doc(cardId);
-  await ref.update({ limitCents: FieldValue.increment(deltaCents), updatedAt: FieldValue.serverTimestamp() });
+  await ref.update({
+    limitCents: FieldValue.increment(deltaCents),
+    ...(depositMonth ? { lastDepositMonth: depositMonth } : {}),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
   const doc = await ref.get();
   return toCardRow(doc);
 }
@@ -196,6 +215,37 @@ export async function setCardSecuredFromAccount(cardId: string, securedFromAccou
   await ref.update({ securedFromAccount, updatedAt: FieldValue.serverTimestamp() });
   const doc = await ref.get();
   return toCardRow(doc);
+}
+
+export async function setCardSavingsPlan(cardId: string, plan: { amount: number; day: number } | null): Promise<CardRow> {
+  const ref = cardsCol.doc(cardId);
+  await ref.update({
+    savingsPlan: plan ? { amountCents: toCents(plan.amount), day: plan.day } : null,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  const doc = await ref.get();
+  return toCardRow(doc);
+}
+
+// Descrição/categoria/quem comprou de várias parcelas de uma vez (editar uma
+// compra parcelada muda todas as parcelas dela).
+export async function updatePurchasesFields(
+  cardId: string,
+  purchaseIds: string[],
+  fields: { description: string; categoryId: string | null; buyerId: string }
+): Promise<void> {
+  const col = cardsCol.doc(cardId).collection("purchases");
+  const batch = db.batch();
+  purchaseIds.forEach((id) => batch.update(col.doc(id), fields));
+  await batch.commit();
+}
+
+export async function deletePurchasesBatch(cardId: string, purchaseIds: string[]): Promise<void> {
+  if (purchaseIds.length === 0) return;
+  const col = cardsCol.doc(cardId).collection("purchases");
+  const batch = db.batch();
+  purchaseIds.forEach((id) => batch.delete(col.doc(id)));
+  await batch.commit();
 }
 
 export async function deleteCard(cardId: string): Promise<string[]> {

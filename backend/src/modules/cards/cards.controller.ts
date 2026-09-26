@@ -8,6 +8,8 @@ import {
   InvalidBuyerError,
   InvalidCategoryError,
   InsufficientAvailableLimitError,
+  InvalidSavingsPlanError,
+  TransactionNotMovableError,
   InvalidInstallmentsError,
   InvalidLimitError,
   NotSecuredCardError,
@@ -15,6 +17,11 @@ import {
   StatementAlreadyPaidError,
   addPurchase,
   adjustSecuredLimit,
+  getCreditCardPreferenceForUser,
+  moveTransactionToCard,
+  setCreditCardPreferenceForUser,
+  setSavingsPlanForUser,
+  updatePurchase,
   createCard,
   getStatement,
   listCards,
@@ -340,6 +347,143 @@ export async function setStatementPaidHandler(req: Request, res: Response) {
     }
     if (err instanceof PurchaseNotFoundError) {
       res.status(400).json({ error: "no purchases in this statement yet" });
+      return;
+    }
+    throw err;
+  }
+}
+
+function purchaseErrorResponse(err: unknown, res: Response): boolean {
+  if (err instanceof NoGroupError || err instanceof CardNotFoundError) {
+    res.status(404).json({ error: "card not found" });
+    return true;
+  }
+  if (err instanceof PurchaseNotFoundError) {
+    res.status(404).json({ error: "purchase not found" });
+    return true;
+  }
+  if (err instanceof ForbiddenError) {
+    res.status(403).json({ error: "not allowed to manage this card" });
+    return true;
+  }
+  if (err instanceof InvalidBuyerError || err instanceof InvalidCategoryError || err instanceof InvalidInstallmentsError) {
+    res.status(400).json({ error: err.constructor.name });
+    return true;
+  }
+  if (err instanceof StatementAlreadyPaidError) {
+    res.status(409).json({ error: "Uma fatura dessa compra já foi paga. Dá pra mudar só nome, categoria e quem comprou." });
+    return true;
+  }
+  return false;
+}
+
+export async function updatePurchaseHandler(req: Request, res: Response) {
+  const { description, amount, categoryId, buyerId, purchaseDate, installments } = req.body ?? {};
+  if (
+    !isNonEmptyString(description) ||
+    typeof amount !== "number" ||
+    amount <= 0 ||
+    !isNonEmptyString(buyerId) ||
+    !isValidDate(purchaseDate) ||
+    (installments !== undefined && !ALLOWED_INSTALLMENT_COUNTS.includes(installments))
+  ) {
+    res.status(400).json({ error: "description, amount, buyerId and purchaseDate (YYYY-MM-DD) are required" });
+    return;
+  }
+  try {
+    const purchases = await updatePurchase(req.user!.id, req.params.id, req.params.purchaseId, {
+      description: description.trim(),
+      amount,
+      categoryId: isNonEmptyString(categoryId) ? categoryId : null,
+      buyerId,
+      purchaseDate,
+      installments: installments ?? 1,
+    });
+    res.status(200).json(purchases);
+  } catch (err) {
+    if (purchaseErrorResponse(err, res)) return;
+    throw err;
+  }
+}
+
+export async function moveTransactionToCardHandler(req: Request, res: Response) {
+  const { transactionId, installments } = req.body ?? {};
+  if (!isNonEmptyString(transactionId) || (installments !== undefined && !ALLOWED_INSTALLMENT_COUNTS.includes(installments))) {
+    res.status(400).json({ error: "transactionId is required; installments must be an allowed count" });
+    return;
+  }
+  try {
+    const purchases = await moveTransactionToCard(req.user!.id, req.params.id, { transactionId, installments: installments ?? 1 });
+    res.status(201).json(purchases);
+  } catch (err) {
+    if (err instanceof TransactionNotMovableError) {
+      const messages: Record<string, string> = {
+        not_found: "Lançamento não encontrado.",
+        not_expense: "Só despesas comuns podem ir pro cartão.",
+        settled: "Essa despesa dividida já foi acertada. Reabra o acerto antes de mover.",
+      };
+      res.status(err.message === "not_found" ? 404 : 409).json({ error: messages[err.message] ?? "Não dá pra mover esse lançamento." });
+      return;
+    }
+    if (purchaseErrorResponse(err, res)) return;
+    throw err;
+  }
+}
+
+export async function getCreditCardPreferenceHandler(req: Request, res: Response) {
+  try {
+    res.status(200).json({ value: await getCreditCardPreferenceForUser(req.user!.id) });
+  } catch (err) {
+    if (err instanceof NoGroupError) {
+      res.status(200).json({ value: null });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function setCreditCardPreferenceHandler(req: Request, res: Response) {
+  const { value } = req.body ?? {};
+  if (value !== null && !isNonEmptyString(value)) {
+    res.status(400).json({ error: "value must be a card id, \"none\" or null" });
+    return;
+  }
+  try {
+    res.status(200).json({ value: await setCreditCardPreferenceForUser(req.user!.id, value) });
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof CardNotFoundError) {
+      res.status(404).json({ error: "card not found" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function setSavingsPlanHandler(req: Request, res: Response) {
+  const { amount, day } = req.body ?? {};
+  const clearing = amount === null;
+  if (!clearing && (typeof amount !== "number" || !(amount > 0) || !isValidDay(day))) {
+    res.status(400).json({ error: "amount (positive) and day (1-31) are required, or amount: null to remove" });
+    return;
+  }
+  try {
+    const card = await setSavingsPlanForUser(req.user!.id, req.params.id, clearing ? null : { amount, day });
+    res.status(200).json(card);
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof CardNotFoundError) {
+      res.status(404).json({ error: "card not found" });
+      return;
+    }
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: "not allowed to manage this card" });
+      return;
+    }
+    if (err instanceof NotSecuredCardError) {
+      res.status(400).json({ error: "this card doesn't have a secured limit" });
+      return;
+    }
+    if (err instanceof InvalidSavingsPlanError) {
+      res.status(400).json({ error: "invalid savings plan" });
       return;
     }
     throw err;

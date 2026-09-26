@@ -1,9 +1,12 @@
 import { getCurrentBudget } from "../budgets/budgets.service";
 import { listCards } from "../cards/cards.service";
 import { listDebts } from "../debts/debts.service";
-import { requireGroupId } from "../groups/groups.service";
+import { getGroupForUser, requireGroupId } from "../groups/groups.service";
+import { todayInBrazil } from "../loans/loans.service";
+import { listRecurringBillsForUser } from "../recurringBills/recurringBills.service";
+import { findTransactionsVisibleTo } from "../transactions/transactions.repository";
 import { getMonthlySummaryForUser } from "../transactions/transactions.service";
-import { addMonths, daysBetween } from "../../utils/month";
+import { addMonths, dateForDayInMonth, daysBetween } from "../../utils/month";
 
 export type AlertSeverity = "info" | "warning" | "critical";
 
@@ -112,6 +115,87 @@ function categorySpikeAlerts(
   return alerts;
 }
 
+// Quantos dias antes do vencimento o aviso "vence antes do salário" aparece.
+const SALARY_GAP_WINDOW_DAYS = 10;
+
+function formatDayMonth(isoDate: string): string {
+  const [, month, day] = isoDate.split("-");
+  return `${day}/${month}`;
+}
+
+function addDaysISO(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+// Próxima entrada que se repete (salário): uma conta fixa de receita ou uma
+// ocorrência futura de uma receita recorrente. null = o app não sabe.
+function nextSalaryDate(
+  bills: Awaited<ReturnType<typeof listRecurringBillsForUser>>,
+  future: Awaited<ReturnType<typeof findTransactionsVisibleTo>>,
+  today: string
+): string | null {
+  const thisMonth = today.slice(0, 7);
+  const dates: string[] = [];
+  for (const bill of bills) {
+    if (!bill.isActive || bill.transactionType !== "income") continue;
+    let date = dateForDayInMonth(bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth, bill.dayOfMonth);
+    if (date <= today) date = dateForDayInMonth(addMonths(thisMonth, 1), bill.dayOfMonth);
+    dates.push(date);
+  }
+  for (const transaction of future) {
+    if (transaction.transactionType === "income" && transaction.recurringGroupId) dates.push(transaction.occurredAt);
+  }
+  return dates.sort()[0] ?? null;
+}
+
+// Fatura que vence antes do salário cair, sem dinheiro nas contas pra pagar.
+// No garantido, lembra que quem cobre é o dinheiro guardado.
+async function salaryGapAlerts(
+  userId: string,
+  groupId: string,
+  cards: Awaited<ReturnType<typeof listCards>>
+): Promise<AlertItem[]> {
+  const today = todayInBrazil();
+  const due = cards.filter((card) => {
+    const statement = card.currentStatement;
+    if (statement.isPaid || Number(statement.total) <= 0) return false;
+    const daysUntil = daysBetween(today, statement.dueDate);
+    return daysUntil >= 0 && daysUntil <= SALARY_GAP_WINDOW_DAYS;
+  });
+  if (due.length === 0) return [];
+
+  // Até 3 anos pra frente: uma série recorrente é criada inteira de uma vez.
+  const [bills, future, group] = await Promise.all([
+    listRecurringBillsForUser(userId),
+    findTransactionsVisibleTo(groupId, userId, 2000, { monthStart: addDaysISO(today, 1), monthEnd: addDaysISO(today, 1100) }),
+    getGroupForUser(userId),
+  ]);
+  const salary = nextSalaryDate(bills, future, today);
+  if (!salary) return [];
+
+  // O saldo das contas soma tudo que foi lançado, inclusive o que tem data
+  // futura (os próximos salários de uma série). Aqui conta só o que já está lá hoje.
+  const myAccounts = (group?.accounts ?? []).filter((account) => account.type === "joint" || account.ownerUserId === userId);
+  const accountIds = new Set(myAccounts.map((account) => account.id));
+  const futureNet = future
+    .filter((transaction) => accountIds.has(transaction.accountId))
+    .reduce((sum, transaction) => sum + (transaction.transactionType === "income" ? 1 : -1) * Number(transaction.amount), 0);
+  const inAccounts = myAccounts.reduce((sum, account) => sum + account.balance, 0) - futureNet;
+
+  return due
+    .filter((card) => card.currentStatement.dueDate < salary && inAccounts < Number(card.currentStatement.total))
+    .map((card) => ({
+      id: `card-before-salary-${card.id}`,
+      severity: "warning" as const,
+      message:
+        `Fatura do cartão "${card.name}" (${formatBRL(Number(card.currentStatement.total))}) vence ${formatDayMonth(card.currentStatement.dueDate)}, ` +
+        `antes do salário (${formatDayMonth(salary)}). Nas contas hoje: ${formatBRL(inAccounts)}.` +
+        (card.limitType === "secured" ? " Se não pagar, o banco usa o dinheiro guardado no cartão." : ""),
+    }));
+}
+
 // includeDue: false no Painel, que já lista os vencimentos no próprio card
 // "Vence logo" (upcoming.service.ts) -- não precisa dizer duas vezes.
 export async function getAlertsForUser(userId: string, options: { includeDue?: boolean } = {}): Promise<AlertItem[]> {
@@ -120,7 +204,7 @@ export async function getAlertsForUser(userId: string, options: { includeDue?: b
   // getMonthlySummaryForUser each call requireGroupId themselves anyway, but
   // this one throws NoGroupError up front instead of waiting for whichever
   // of those five parallel calls happens to resolve first.
-  await requireGroupId(userId);
+  const groupId = await requireGroupId(userId);
 
   const today = new Date();
   const month = today.toISOString().slice(0, 7);
@@ -167,6 +251,9 @@ export async function getAlertsForUser(userId: string, options: { includeDue?: b
       message: `Parcela ${nextUnpaid.installmentNumber}/${debt.installmentsCount} de "${debt.name}" ${dueLabel(daysUntil)} (${formatBRL(Number(nextUnpaid.amount))}).`,
     });
   }
+
+  // Vale também no Painel: o "Vence logo" mostra a data, mas não compara com o salário.
+  alerts.push(...(await salaryGapAlerts(userId, groupId, cards)));
 
   const severityRank: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
   return alerts.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);

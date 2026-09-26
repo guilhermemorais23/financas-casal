@@ -187,7 +187,7 @@ interface DashboardResponse {
 
 interface UpcomingItem {
   id: string;
-  kind: "card" | "debt" | "recurring" | "loan";
+  kind: "card" | "debt" | "recurring" | "loan" | "savings";
   direction: "pay" | "receive";
   title: string;
   detail: string;
@@ -221,6 +221,11 @@ const MONTH_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SE
 
 function upcomingWhen(item: UpcomingItem): string {
   const d = item.daysUntil;
+  if (item.kind === "savings") {
+    if (d < 0) return `Era pra guardar há ${-d} ${-d === 1 ? "dia" : "dias"}`;
+    if (d === 0) return "Guardar hoje";
+    return d === 1 ? "Guardar amanhã" : `Guardar em ${d} dias`;
+  }
   if (item.direction === "receive") {
     if (d < 0) return `Atrasado ${-d} ${-d === 1 ? "dia" : "dias"}`;
     if (d === 0) return "Prazo hoje";

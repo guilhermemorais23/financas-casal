@@ -78,3 +78,17 @@ export async function updateUserProfile(
   const doc = await ref.get();
   return toUserRow(doc.id, doc.data()!);
 }
+
+// Cartão padrão das compras no crédito: o id do cartão, "none" (a pessoa
+// disse que não quer lançar em cartão) ou null (ainda não respondeu). Fica no
+// perfil pra valer em qualquer aparelho. Sem memo: é uma leitura pequena e
+// muda por tela, não por requisição.
+export async function getCreditCardPreference(userId: string): Promise<string | null> {
+  const doc = await usersCol.doc(userId).get();
+  const value = doc.data()?.creditCardPreference;
+  return typeof value === "string" && value ? value : null;
+}
+
+export async function setCreditCardPreference(userId: string, value: string | null): Promise<void> {
+  await usersCol.doc(userId).update({ creditCardPreference: value, updatedAt: FieldValue.serverTimestamp() });
+}

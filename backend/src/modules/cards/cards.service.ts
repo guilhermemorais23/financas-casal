@@ -5,13 +5,17 @@ import {
   deleteTransaction,
   deleteTransactionsBatch,
   findSecuredCardTransferIds,
+  findTransactionById,
   insertSplits,
   insertTransaction,
 } from "../transactions/transactions.repository";
+import { getCreditCardPreference, setCreditCardPreference } from "../users/users.repository";
+import { todayInBrazil } from "../loans/loans.service";
 import { addMonths, dateForDayInMonth } from "../../utils/month";
 import {
   deleteCard,
   deletePurchase,
+  deletePurchasesBatch,
   findAllPurchasesByCardId,
   findCardById,
   findCardsVisibleTo,
@@ -19,7 +23,9 @@ import {
   findPurchasesByCardAndStatement,
   findStatement,
   incrementCardLimit,
+  setCardSavingsPlan,
   setCardSecuredFromAccount,
+  updatePurchasesFields,
   insertCard,
   insertPurchaseSeries,
   setStatementPaid,
@@ -39,6 +45,8 @@ export class InvalidLimitError extends Error {}
 export class InvalidInstallmentsError extends Error {}
 export class NotSecuredCardError extends Error {}
 export class InsufficientAvailableLimitError extends Error {}
+export class InvalidSavingsPlanError extends Error {}
+export class TransactionNotMovableError extends Error {}
 
 export type CardScope = "personal" | "joint";
 
@@ -501,7 +509,11 @@ export async function adjustSecuredLimit(
       throw new InsufficientAvailableLimitError();
     }
   }
-  const updated = await incrementCardLimit(cardId, input.direction === "deposit" ? amountCents : -amountCents);
+  const updated = await incrementCardLimit(
+    cardId,
+    input.direction === "deposit" ? amountCents : -amountCents,
+    input.direction === "deposit" ? todayInBrazil().slice(0, 7) : undefined
+  );
   if (card.securedFromAccount) {
     await recordSecuredTransfer(userId, groupId, card, input.direction, amountCents / 100);
   }
@@ -538,4 +550,128 @@ export async function removeCard(userId: string, cardId: string) {
   const linkedTransactionIds = await deleteCard(cardId);
   await Promise.all(linkedTransactionIds.map((transactionId) => deleteTransaction(transactionId)));
   await deleteTransactionsBatch(transferIds);
+}
+
+// Editar uma compra: descrição, categoria e quem comprou valem pra todas as
+// parcelas dela. Valor, data e parcelas refazem a compra inteira -- só dá
+// enquanto nenhuma fatura com parcela dela foi paga.
+export async function updatePurchase(userId: string, cardId: string, purchaseId: string, input: AddPurchaseInput) {
+  const { groupId, card } = await requireManageableCard(userId, cardId);
+  const purchase = await findPurchaseById(cardId, purchaseId);
+  if (!purchase) {
+    throw new PurchaseNotFoundError();
+  }
+  if (!ALLOWED_INSTALLMENT_COUNTS.includes(input.installments)) {
+    throw new InvalidInstallmentsError();
+  }
+  const members = await findMembersByGroupId(groupId);
+  if (!members.some((member) => member.id === input.buyerId)) {
+    throw new InvalidBuyerError();
+  }
+  if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {
+    throw new InvalidCategoryError();
+  }
+
+  const series = (await findAllPurchasesByCardId(cardId)).filter((p) => p.purchaseGroupId === purchase.purchaseGroupId);
+  const seriesTotalCents = series.reduce((sum, p) => sum + Math.round(Number(p.amount) * 100), 0);
+  const moneyChanged =
+    Math.round(input.amount * 100) !== seriesTotalCents ||
+    input.purchaseDate !== purchase.purchaseDate ||
+    input.installments !== purchase.installmentsCount;
+
+  if (!moneyChanged) {
+    await updatePurchasesFields(
+      cardId,
+      series.map((p) => p.id),
+      { description: input.description, categoryId: input.categoryId, buyerId: input.buyerId }
+    );
+    return (await findAllPurchasesByCardId(cardId)).filter((p) => p.purchaseGroupId === purchase.purchaseGroupId);
+  }
+
+  const statements = await Promise.all(series.map((p) => findStatement(cardId, p.statementMonth)));
+  const newFirstMonth = statementMonthFor(input.purchaseDate, card.closingDay);
+  const newFirstStatement = await findStatement(cardId, newFirstMonth);
+  if (statements.some((statement) => statement?.isPaid) || newFirstStatement?.isPaid) {
+    throw new StatementAlreadyPaidError();
+  }
+  await deletePurchasesBatch(
+    cardId,
+    series.map((p) => p.id)
+  );
+  return addPurchase(userId, cardId, input);
+}
+
+// "Mover pro cartão": uma despesa que foi no crédito mas entrou como gasto
+// normal na conta vira compra do cartão (sai da conta só quando a fatura for
+// paga). A despesa original some.
+export async function moveTransactionToCard(
+  userId: string,
+  cardId: string,
+  input: { transactionId: string; installments: number }
+) {
+  const { groupId } = await requireManageableCard(userId, cardId);
+  const transaction = await findTransactionById(input.transactionId);
+  const canManage = transaction && (transaction.accountType === "joint" || transaction.createdBy === userId);
+  if (!transaction || transaction.groupId !== groupId || !canManage) {
+    throw new TransactionNotMovableError("not_found");
+  }
+  if (transaction.transactionType !== "expense" || transaction.securedCardId || transaction.loanId) {
+    throw new TransactionNotMovableError("not_expense");
+  }
+  if (transaction.isSettled) {
+    throw new TransactionNotMovableError("settled");
+  }
+
+  const purchases = await addPurchase(userId, cardId, {
+    description: transaction.description,
+    amount: Number(transaction.amount),
+    categoryId: transaction.categoryId,
+    buyerId: transaction.payerId,
+    purchaseDate: transaction.occurredAt,
+    installments: input.installments,
+  });
+  await deleteTransactionsBatch([transaction.id]);
+  return purchases;
+}
+
+export async function getCreditCardPreferenceForUser(userId: string): Promise<string | null> {
+  const [preference, cards] = await Promise.all([getCreditCardPreference(userId), listCardsLite(userId)]);
+  if (preference === "none") return "none";
+  return preference && cards.some((card) => card.id === preference) ? preference : null;
+}
+
+export async function setCreditCardPreferenceForUser(userId: string, value: string | null) {
+  if (value !== null && value !== "none") {
+    const cards = await listCardsLite(userId);
+    if (!cards.some((card) => card.id === value)) {
+      throw new CardNotFoundError();
+    }
+  }
+  await setCreditCardPreference(userId, value);
+  return value;
+}
+
+async function listCardsLite(userId: string) {
+  const groupId = await requireGroupId(userId);
+  return findCardsVisibleTo(groupId, userId);
+}
+
+// "Guardar todo mês" num cartão garantido. null tira o plano.
+export async function setSavingsPlanForUser(userId: string, cardId: string, plan: { amount: number; day: number } | null) {
+  const { card } = await requireManageableCard(userId, cardId);
+  if (card.limitType !== "secured") {
+    throw new NotSecuredCardError();
+  }
+  if (plan && (!(plan.amount > 0) || !Number.isInteger(plan.day) || plan.day < 1 || plan.day > 31)) {
+    throw new InvalidSavingsPlanError();
+  }
+  return setCardSavingsPlan(cardId, plan);
+}
+
+// Próxima vez de guardar: neste mês, se ainda não guardou; senão no próximo.
+export function nextSavingsDate(card: CardRow, today: string): string | null {
+  if (card.limitType !== "secured" || !card.savingsPlan) return null;
+  const thisMonth = today.slice(0, 7);
+  const month = card.lastDepositMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
+  return dateForDayInMonth(month, card.savingsPlan.day);
 }

@@ -13,6 +13,7 @@ import {
   getYearlySummaryHandler,
   listTransactionsHandler,
   setSplitSettledHandler,
+  splitByCategoryHandler,
   updateRecurringHandler,
   updateTransactionHandler,
 } from "./transactions.controller";
@@ -30,6 +31,7 @@ transactionsRouter.get("/daily-series", asyncHandler(getDailySeriesHandler));
 // Exportar (CSV) é do Premium.
 transactionsRouter.get("/export", requirePremium, asyncHandler(exportTransactionsHandler));
 transactionsRouter.patch("/:id/settle", asyncHandler(setSplitSettledHandler));
+transactionsRouter.post("/:id/split-category", asyncHandler(splitByCategoryHandler));
 transactionsRouter.patch("/:id/recurring", asyncHandler(updateRecurringHandler));
 transactionsRouter.patch("/:id", asyncHandler(updateTransactionHandler));
 transactionsRouter.delete("/:id/recurring", asyncHandler(cancelRecurringHandler));

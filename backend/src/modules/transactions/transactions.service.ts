@@ -500,3 +500,63 @@ export async function updateTransactionForUser(
 
   return updated;
 }
+
+export class InvalidCategorySplitError extends Error {}
+
+// "Dividir por categoria": uma compra de R$ 200 no mercado vira R$ 150 em
+// Alimentação e R$ 50 em Casa. A primeira parte fica no lançamento original;
+// as outras viram lançamentos novos com a mesma data, conta, pagador e forma
+// de pagamento. Numa série recorrente, só esta ocorrência é dividida.
+export async function splitTransactionByCategoryForUser(
+  userId: string,
+  transactionId: string,
+  parts: { amount: number; categoryId: string | null }[]
+) {
+  const groupId = await requireGroupId(userId);
+  const transaction = await findTransactionById(transactionId);
+  if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
+    throw new TransactionNotFoundError();
+  }
+  if (transaction.securedCardId || transaction.loanId) {
+    throw new SecuredCardTransferError(transaction.loanId ? "loan" : "card");
+  }
+  const totalCents = Math.round(Number(transaction.amount) * 100);
+  const partCents = parts.map((part) => Math.round(part.amount * 100));
+  if (
+    parts.length < 2 ||
+    parts.length > 10 ||
+    partCents.some((cents) => !(cents > 0)) ||
+    partCents.reduce((sum, cents) => sum + cents, 0) !== totalCents ||
+    transaction.isSettled
+  ) {
+    throw new InvalidCategorySplitError();
+  }
+  for (const part of parts) {
+    if (part.categoryId && !(await categoryIsVisibleTo(part.categoryId, groupId))) {
+      throw new InvalidCategoryError();
+    }
+  }
+
+  const first = await updateTransactionForUser(userId, transactionId, {
+    amount: partCents[0] / 100,
+    categoryId: parts[0].categoryId,
+  });
+  const created = [];
+  for (let index = 1; index < parts.length; index++) {
+    created.push(
+      await createTransaction(userId, {
+        accountId: transaction.accountId,
+        categoryId: parts[index].categoryId,
+        payerId: transaction.payerId,
+        description: transaction.description,
+        amount: partCents[index] / 100,
+        transactionType: transaction.transactionType,
+        occurredAt: transaction.occurredAt,
+        isPrivate: transaction.isPrivate,
+        splitType: transaction.splitType,
+        paymentMethod: transaction.paymentMethod,
+      })
+    );
+  }
+  return [first, ...created];
+}

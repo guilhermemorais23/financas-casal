@@ -1,4 +1,4 @@
-import { listCards } from "../cards/cards.service";
+import { listCards, nextSavingsDate } from "../cards/cards.service";
 import { listDebts } from "../debts/debts.service";
 import { listLoans, todayInBrazil } from "../loans/loans.service";
 import { listRecurringBillsForUser } from "../recurringBills/recurringBills.service";
@@ -10,7 +10,7 @@ import { addMonths, dateForDayInMonth, daysBetween } from "../../utils/month";
 // O Painel mostra, o assistente lê.
 export const UPCOMING_WINDOW_DAYS = 7;
 
-export type UpcomingKind = "card" | "debt" | "recurring" | "loan";
+export type UpcomingKind = "card" | "debt" | "recurring" | "loan" | "savings";
 
 export interface UpcomingItem {
   id: string;
@@ -49,6 +49,23 @@ export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_W
       amount: Number(statement.total),
       dueDate: statement.dueDate,
       daysUntil: daysBetween(today, statement.dueDate),
+      link: "/cards",
+    });
+  }
+
+  // "Guardar todo mês" no cartão garantido: lembrete até guardar no mês.
+  for (const card of cards) {
+    const date = nextSavingsDate(card, today);
+    if (!date || !card.savingsPlan || !within(date)) continue;
+    items.push({
+      id: `savings-${card.id}-${date.slice(0, 7)}`,
+      kind: "savings",
+      direction: "pay",
+      title: `Guardar no ${card.name}`,
+      detail: "Todo mês",
+      amount: Number(card.savingsPlan.amount),
+      dueDate: date,
+      daysUntil: daysBetween(today, date),
       link: "/cards",
     });
   }
