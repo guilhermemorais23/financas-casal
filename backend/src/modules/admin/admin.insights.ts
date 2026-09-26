@@ -3,6 +3,8 @@ import { listSubscriptions } from "../billing/billing.repository";
 import { describeAccess } from "../billing/billing.service";
 import { getAppSettings, isBillingEnabled } from "../settings/appSettings";
 import { getFirestoreUsage } from "../../utils/firestoreUsage";
+import { getAiUsageSummary } from "../aiUsage/aiUsage";
+import { GEMINI_MODEL } from "../../utils/gemini";
 
 const DAY = 24 * 60 * 60 * 1000;
 const usersCol = db.collection("users");
@@ -18,10 +20,11 @@ function millis(value: unknown): number | null {
 // só quando o admin abre a tela.
 export async function getAdminInsights() {
   const now = Date.now();
-  const [usersSnap, settings, billingOn] = await Promise.all([
+  const [usersSnap, settings, billingOn, aiUsage] = await Promise.all([
     usersCol.select("groupId", "createdAt", "lastSeenAt").get(),
     getAppSettings(),
     isBillingEnabled(),
+    getAiUsageSummary(),
   ]);
   const users = usersSnap.docs.map((doc) => ({
     groupId: (doc.data().groupId as string | null) ?? null,
@@ -69,6 +72,7 @@ export async function getAdminInsights() {
       payingGroups,
     },
     firestore: getFirestoreUsage(),
+    ai: { ...aiUsage, model: GEMINI_MODEL, configured: !!process.env.GEMINI_API_KEY },
     settings: { ...settings, billingEnabled: billingOn },
   };
 }

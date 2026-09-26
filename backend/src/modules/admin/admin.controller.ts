@@ -3,6 +3,7 @@ import { emailProvider, sendEmail } from "../../email/mailer";
 import { checkAssistant } from "../assistant/assistant.service";
 import { getAdminOverview, NotAdminError, requireAdminEmail } from "./admin.service";
 import { getAdminInsights } from "./admin.insights";
+import { buildDiagnostics } from "./admin.diagnostics";
 import { AdminUserError, getUserDetailForAdmin, listUsersForAdmin, setUserBlocked } from "./admin.users";
 import { billingConfig } from "../billing/billing.config";
 import { recordAdminAction } from "../billing/billing.repository";
@@ -40,17 +41,7 @@ function ensureAdmin(req: Request, res: Response): boolean {
 // o Render. Nunca devolve valores secretos, só se existem.
 export async function getDiagnosticsHandler(req: Request, res: Response) {
   if (!ensureAdmin(req, res)) return;
-  res.json({
-    email: {
-      provider: emailProvider(),
-      brevoKey: Boolean(process.env.BREVO_API_KEY),
-      from: Boolean(process.env.EMAIL_FROM || process.env.GMAIL_USER),
-      gmailSmtp: Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD),
-      ownerEmail: Boolean(process.env.OWNER_EMAIL || process.env.ADMIN_EMAILS),
-    },
-    ai: { geminiKey: Boolean(process.env.GEMINI_API_KEY) },
-    reminders: { cronSecret: Boolean(process.env.CRON_SECRET) },
-  });
+  res.json({ sections: await buildDiagnostics() });
 }
 
 export async function testEmailHandler(req: Request, res: Response) {

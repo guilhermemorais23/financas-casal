@@ -1,4 +1,5 @@
-import { GoogleGenerativeAI, type Part } from "@google/generative-ai";
+import { randomInt } from "node:crypto";
+import type { Part } from "@google/generative-ai";
 import {
   consumeLinkCode,
   findLinkByChatId,
@@ -22,12 +23,17 @@ import { currentMonthParam, parseMonthRange } from "../../utils/month";
 import { todayInBrazil } from "../loans/loans.service";
 import { logError } from "../../utils/errorLog";
 import { isPremiumUser } from "../billing/billing.service";
+import { hasAiLeft, recordAiTokens, reserveAi } from "../aiUsage/aiUsage";
+import { geminiModel, tokensOf } from "../../utils/gemini";
 import { answerFromSnapshot, brl, buildMonthSnapshot, parseQuickEntry, snapshotAsText, type MonthSnapshot } from "./monthSnapshot";
 
 export class AssistantNotConfiguredError extends Error {}
 
+// Código de vincular Telegram/WhatsApp: 8 letras/números sem os que se
+// confundem (0/O, 1/I), sorteados com crypto (Math.random é previsível).
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function randomCode(): string {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
+  return Array.from({ length: 8 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
 }
 
 // Codes expire quickly -- they only need to survive the few seconds between
@@ -105,16 +111,15 @@ ${snapshotAsText(snapshot)}`;
   return { text, financialGoal, savingsAmount, snapshot };
 }
 
-async function askGemini(prompt: string, audio?: AudioPayload): Promise<string> {
+async function askGemini(prompt: string, audio?: AudioPayload, userId?: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new AssistantNotConfiguredError();
 
   const parts: Part[] = [{ text: prompt }];
   if (audio) parts.push({ inlineData: { mimeType: audio.mimeType, data: audio.base64 } });
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-  const result = await model.generateContent(parts);
+  const result = await geminiModel(apiKey).generateContent(parts);
+  if (userId) await recordAiTokens(userId, tokensOf(result));
   return result.response.text().trim();
 }
 
@@ -172,9 +177,20 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
     return `${answer}\n\nCom o Premium eu entendo qualquer mensagem e áudio e faço análises do mês.`;
   }
 
+  // Cota do mês: passou do limite, responde com os números (sem IA), como
+  // quem não tem Premium, e diz quando volta.
+  const quota = await reserveAi(userId, "message");
+  if (!quota.allowed) {
+    const answer = await basicAnswer(userId, personalAccount?.id ?? null, text, audio !== undefined, financeContext.snapshot);
+    return `${answer}\n\nVocê usou as ${quota.limit} mensagens com IA deste mês. No dia 1º elas voltam; até lá eu sigo lançando e respondendo com os números.`;
+  }
+  const nearLimit = quota.limit - quota.used;
+  const quotaNote =
+    nearLimit > 0 && nearLimit <= 10 ? `\n\n(Restam ${nearLimit} mensagens com IA este mês.)` : nearLimit === 0 ? "\n\n(Esta foi a última mensagem com IA do mês.)" : "";
+
   let raw: string;
   try {
-    raw = await askGemini(prompt, audio);
+    raw = await askGemini(prompt, audio, userId);
   } catch (err) {
     // Sem chave, sem cota, sem rede: responde mesmo assim com os números, em
     // vez de deixar a pessoa com um erro.
@@ -183,7 +199,7 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
   }
   const parsed = parseAssistantReply(raw);
   if (!parsed) {
-    return raw || "Não entendi, pode repetir?";
+    return (raw || "Não entendi, pode repetir?") + quotaNote;
   }
 
   if ((parsed.intent === "log_expense" || parsed.intent === "log_income") && personalAccount && parsed.amount) {
@@ -202,20 +218,20 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
       splitType: "none",
     });
     const emoji = parsed.intent === "log_expense" ? "💸" : "💰";
-    return `${emoji} Registrado: ${transaction.description} — R$ ${parsed.amount.toFixed(2)}${category ? ` (${category.name})` : ""}.`;
+    return `${emoji} Registrado: ${transaction.description} — R$ ${parsed.amount.toFixed(2)}${category ? ` (${category.name})` : ""}.` + quotaNote;
   }
 
   if (parsed.intent === "set_financial_goal" && parsed.goalText) {
     await updateGroupFinancialProfile(groupId, { financialGoal: parsed.goalText });
-    return `Anotado! Objetivo: "${parsed.goalText}". Vou levar isso em conta nas próximas análises.`;
+    return `Anotado! Objetivo: "${parsed.goalText}". Vou levar isso em conta nas próximas análises.` + quotaNote;
   }
 
   if (parsed.intent === "set_savings" && parsed.amount !== undefined) {
     await updateGroupFinancialProfile(groupId, { savingsAmount: parsed.amount });
-    return `Anotado! Vocês têm R$ ${parsed.amount.toFixed(2)} guardado.`;
+    return `Anotado! Vocês têm R$ ${parsed.amount.toFixed(2)} guardado.` + quotaNote;
   }
 
-  return parsed.reply || "Prontinho.";
+  return (parsed.reply || "Prontinho.") + quotaNote;
 }
 
 async function handleTelegramLinking(chatId: string, text: string | undefined): Promise<void> {
@@ -355,7 +371,10 @@ Escreva uma única mensagem curta (1-2 frases, sem emojis, sem saudação genér
   try {
     // Sem Premium, a abertura vem pronta dos números (sem IA).
     if (!(await isPremiumUser(userId))) throw new AssistantNotConfiguredError();
-    return await askGemini(prompt);
+    // Abrir o chat não gasta mensagem, mas quem já usou a cota do mês recebe
+    // a abertura pronta dos números.
+    if (!(await hasAiLeft(userId, "message"))) throw new AssistantNotConfiguredError();
+    return await askGemini(prompt, undefined, userId);
   } catch (err) {
     if (!(err instanceof AssistantNotConfiguredError)) logError("assistant-greeting", err, { userId });
     const s = financeContext.snapshot;

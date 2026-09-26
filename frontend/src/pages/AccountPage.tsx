@@ -447,7 +447,7 @@ export function AccountPage() {
             <button
               type="button"
               className="btn btn-outline btn-sm"
-              onClick={() => showToast("Open Finance chega em breve", { variant: "info", description: "Por enquanto, importe o extrato do banco" })}
+              onClick={() => setIsImportOpen(true)}
             >
               <Icon name="bank" />
               Conectar conta

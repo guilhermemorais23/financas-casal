@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestGroup, todayISO } from "../../test-helpers";
 import { insertCategory } from "../categories/categories.repository";
 import { createTransaction } from "../transactions/transactions.service";
@@ -202,5 +202,34 @@ describe("commitStatement", () => {
       ])
     ).rejects.toBeInstanceOf(InvalidImportItemError);
     await expect(commitStatement(userAId, personalAccountId, [])).rejects.toBeInstanceOf(InvalidImportItemError);
+  });
+});
+
+describe("sugestões da IA na importação", () => {
+  it("sugere pros nomes novos e conta uma importação só na cota", async () => {
+    const { groupId, userAId } = await createTestGroup();
+    const casa = await insertCategory({ groupId, name: "Contas da casa", emoji: null });
+    const spy = vi.spyOn(await import("./suggestCategories"), "suggestCategories");
+    spy.mockResolvedValue(new Map([["expense:energisa pb", { categoryId: casa.id, notExpense: false }]]));
+    const saved = process.env.GEMINI_API_KEY;
+    process.env.GEMINI_API_KEY = "teste";
+    try {
+      const result = await previewStatement(userAId, {
+        content: csvFor("20/09/2026", [
+          ["ENERGISA PB", "-175,65"],
+          ["Maria Silva", "-50,00"],
+        ]),
+      });
+      expect(result.groups.find((g) => g.key === "energisa pb")?.suggestion).toEqual({ categoryId: casa.id, notExpense: false });
+      expect(result.groups.find((g) => g.key === "maria silva")?.suggestion).toBeUndefined();
+      expect(result.ai).toEqual({ suggested: 1, limitReached: false });
+      const { getAiUsageSummary } = await import("../aiUsage/aiUsage");
+      const mine = (await getAiUsageSummary()).imports;
+      expect(mine).toBeGreaterThanOrEqual(1);
+    } finally {
+      if (saved === undefined) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = saved;
+      spy.mockRestore();
+    }
   });
 });

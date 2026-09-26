@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Request, Response } from "express";
 import { requireGroupId } from "../groups/groups.service";
 import {
@@ -67,8 +68,10 @@ interface TelegramUpdate {
 // auth middleware. Always answers 200 so Telegram doesn't keep retrying;
 // real failures are logged, not surfaced to the caller.
 export async function telegramWebhookHandler(req: Request, res: Response) {
+  // Sem o segredo configurado, recusa tudo: senão qualquer um que achasse a
+  // URL mandaria mensagens "do Telegram" em nome de quem já vinculou.
   const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (expectedSecret && req.header("x-telegram-bot-api-secret-token") !== expectedSecret) {
+  if (!expectedSecret || !safeEqual(req.header("x-telegram-bot-api-secret-token") ?? "", expectedSecret)) {
     res.status(401).end();
     return;
   }
@@ -133,6 +136,14 @@ interface WhatsappWebhookPayload {
 // above plus knowledge of this exact URL. Always answers 200 so Meta
 // doesn't keep retrying; real failures are logged, not surfaced to Meta.
 export async function whatsappWebhookHandler(req: Request, res: Response) {
+  // A Meta assina cada POST com o App Secret (X-Hub-Signature-256). Sem
+  // conferir isso, quem achasse a URL lançaria gastos na conta de qualquer
+  // número vinculado. Sem o segredo configurado, ignora tudo.
+  if (!isValidMetaSignature(req)) {
+    logError("whatsapp-webhook", new Error("assinatura da Meta ausente ou inválida"), { path: req.path, method: req.method });
+    res.status(401).end();
+    return;
+  }
   const message = (req.body as WhatsappWebhookPayload).entry?.[0]?.changes?.[0]?.value?.messages?.[0];
   if (!message) {
     res.status(200).end();
@@ -153,4 +164,20 @@ export async function whatsappWebhookHandler(req: Request, res: Response) {
   }
 
   res.status(200).end();
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+// X-Hub-Signature-256: "sha256=" + HMAC-SHA256(App Secret, corpo cru).
+export function isValidMetaSignature(req: Request): boolean {
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  const raw = (req as Request & { rawBody?: Buffer }).rawBody;
+  const header = req.header("x-hub-signature-256") ?? "";
+  if (!appSecret || !raw || !header.startsWith("sha256=")) return false;
+  const expected = "sha256=" + createHmac("sha256", appSecret).update(raw).digest("hex");
+  return safeEqual(header, expected);
 }

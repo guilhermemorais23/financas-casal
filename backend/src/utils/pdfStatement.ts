@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { geminiModel, tokensOf, type GeminiTokens } from "./gemini";
 import { StatementParseError, parseAmountToCents, parseDate, type ParsedStatementRow } from "./statementParser";
 
 // Extrato em PDF (o que o app do banco gera em "Compartilhar extrato").
@@ -592,7 +592,7 @@ interface AiReply {
   rows?: { date?: string; description?: string; amount?: number }[];
 }
 
-async function readLinesWithAi(lines: string[], apiKey: string): Promise<PdfRead> {
+async function readLinesWithAi(lines: string[], apiKey: string, onTokens?: (tokens: GeminiTokens) => void): Promise<PdfRead> {
   const text = lines.join("\n").slice(0, MAX_TEXT_FOR_AI);
   const prompt = `Você recebe o texto de um extrato bancário brasileiro. Sua única tarefa é COPIAR os lançamentos, sem interpretar nem classificar.
 
@@ -610,11 +610,9 @@ Regras:
 
 Extrato:
 ${text}`;
-  const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
-    model: "gemini-2.5-flash",
-    generationConfig: { responseMimeType: "application/json", temperature: 0 },
-  });
+  const model = geminiModel(apiKey, { responseMimeType: "application/json", temperature: 0 });
   const result = await model.generateContent(prompt);
+  onTokens?.(tokensOf(result));
   let reply: AiReply;
   try {
     reply = JSON.parse(result.response.text()) as AiReply;
@@ -642,7 +640,19 @@ export function reconcile(read: PdfRead) {
 // Banco escolhido na tela primeiro; se o PDF não tiver a cara dele, tenta os
 // outros leitores e, por último, a leitura geral/IA. `bank` no resultado diz
 // qual layout foi reconhecido de fato (a tela avisa se não for o escolhido).
-export async function parsePdfStatement(data: Uint8Array, password?: string, chosen?: Bank | null): Promise<PdfStatement> {
+// Quem chama decide se a IA pode ser usada (Premium com cota) e recebe os
+// tokens gastos; sem `ai`, a leitura é só por padrão de linha.
+export interface PdfAiOptions {
+  allow: () => Promise<boolean>;
+  onTokens?: (tokens: GeminiTokens) => void;
+}
+
+export async function parsePdfStatement(
+  data: Uint8Array,
+  password?: string,
+  chosen?: Bank | null,
+  ai?: PdfAiOptions
+): Promise<PdfStatement> {
   const lines = await extractPdfLines(data, password);
 
   const readers: { bank: Bank; read: () => SectionRead | BalanceColumnRead | null }[] = [
@@ -671,9 +681,9 @@ export async function parsePdfStatement(data: Uint8Array, password?: string, cho
   const apiKey = process.env.GEMINI_API_KEY;
   let read = readLinesWithoutAi(general);
   let readBy: PdfStatement["readBy"] = "text";
-  if (apiKey) {
+  if (apiKey && ai && (await ai.allow())) {
     try {
-      const byAi = await readLinesWithAi(general, apiKey);
+      const byAi = await readLinesWithAi(general, apiKey, ai.onTokens);
       // Fica com a leitura da IA se ela achou lançamentos; senão, a por padrão.
       if (byAi.rows.length > 0) {
         read = byAi;

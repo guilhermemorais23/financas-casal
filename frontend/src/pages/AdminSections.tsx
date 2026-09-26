@@ -167,35 +167,70 @@ export function AdminFeedback() {
   );
 }
 
-interface Diagnostics {
-  email: { provider: "brevo" | "gmail-smtp" | "none"; brevoKey: boolean; from: boolean; gmailSmtp: boolean; ownerEmail: boolean };
-  ai: { geminiKey: boolean };
-  reminders: { cronSecret: boolean };
+type DiagLevel = "required" | "recommended" | "optional";
+interface DiagItem {
+  label: string;
+  ok: boolean;
+  level: DiagLevel;
+  env?: string;
+  hint?: string;
+}
+interface DiagSection {
+  id: string;
+  title: string;
+  summary?: string;
+  items: DiagItem[];
+  test?: "email" | "ai";
 }
 
-function Check({ ok, label, hint }: { ok: boolean; label: string; hint?: string }) {
+// Faltando: obrigatória fica vermelha, recomendada amarela, opcional cinza
+// (só um recurso extra desligado).
+function Check({ ok, label, hint, level = "required", env }: { ok: boolean; label: string; hint?: string; level?: DiagLevel; env?: string }) {
+  const state = ok ? "ok" : level === "required" ? "bad" : level === "recommended" ? "warn" : "off";
   return (
-    <li className={`diag-row${ok ? " ok" : " bad"}`}>
+    <li className={`diag-row ${state}`}>
       <span className="diag-icon" aria-hidden="true">
         <Icon name={ok ? "check" : "alert"} />
       </span>
       <span className="diag-text">
-        <strong>{label}</strong>
-        {hint && <small>{hint}</small>}
+        <strong>
+          {label}
+          {!ok && <span className="diag-level">{level === "required" ? "obrigatória" : level === "recommended" ? "recomendada" : "opcional"}</span>}
+        </strong>
+        {env && !ok && <code className="diag-env">{env}</code>}
+        {hint && !ok && <small>{hint}</small>}
       </span>
     </li>
   );
 }
 
-// Admin > Diagnóstico: a produção está mesmo configurada, e funciona?
+// O que só o site sabe (vem do build, não do servidor): nome e documento nos
+// Termos, necessários pra cobrar.
+function frontendItems(): DiagItem[] {
+  return [
+    {
+      label: "Seu nome e CPF/CNPJ nos Termos",
+      ok: Boolean(import.meta.env.VITE_LEGAL_NAME && import.meta.env.VITE_LEGAL_DOCUMENT),
+      level: "recommended",
+      env: "VITE_LEGAL_NAME / VITE_LEGAL_DOCUMENT (secrets do GitHub)",
+      hint: "Obrigatório antes de cobrar de verdade.",
+    },
+  ];
+}
+
+// Admin > Diagnóstico: tudo que a produção precisa ter configurado, por área.
 export function AdminDiagnostics() {
   const { token } = useAuth();
   const { showToast } = useToast();
-  const [diag, setDiag] = useState<Diagnostics | null>(null);
+  const [sections, setSections] = useState<DiagSection[] | null>(null);
   const [testing, setTesting] = useState<"email" | "ai" | null>(null);
 
   useEffect(() => {
-    apiRequest<Diagnostics>("/admin/diagnostics", { token }).then(setDiag).catch(() => setDiag(null));
+    apiRequest<{ sections: DiagSection[] }>("/admin/diagnostics", { token })
+      .then((res) =>
+        setSections(res.sections.map((section) => (section.id === "billing" ? { ...section, items: [...section.items, ...frontendItems()] } : section)))
+      )
+      .catch(() => setSections(null));
   }, [token]);
 
   async function run(kind: "email" | "ai") {
@@ -216,52 +251,49 @@ export function AdminDiagnostics() {
     }
   }
 
-  if (!diag) return <p className="empty-state">Carregando...</p>;
+  if (!sections) return <p className="empty-state">Carregando...</p>;
 
-  const providerLabel =
-    diag.email.provider === "brevo" ? "Brevo (API)" : diag.email.provider === "gmail-smtp" ? "Gmail SMTP" : "nenhum";
+  const all = sections.flatMap((section) => section.items);
+  const missingRequired = all.filter((item) => !item.ok && item.level === "required").length;
+  const missingRecommended = all.filter((item) => !item.ok && item.level === "recommended").length;
 
   return (
     <>
-      <div className="card">
-        <p className="card-title">Emails</p>
-        <ul className="diag-list">
-          <Check
-            ok={diag.email.provider === "brevo"}
-            label={`Provedor: ${providerLabel}`}
-            hint={
-              diag.email.provider === "brevo"
-                ? undefined
-                : "O Render grátis bloqueia Gmail SMTP. Crie uma chave em brevo.com e coloque BREVO_API_KEY no Render."
-            }
-          />
-          <Check ok={diag.email.from} label="Remetente definido" hint={diag.email.from ? undefined : "EMAIL_FROM (o email verificado na Brevo)"} />
-          <Check ok={diag.email.ownerEmail} label="Seu email pros avisos" hint={diag.email.ownerEmail ? undefined : "OWNER_EMAIL ou ADMIN_EMAILS"} />
-        </ul>
-        <button type="button" className="btn btn-outline btn-sm" disabled={testing !== null} onClick={() => run("email")}>
-          {testing === "email" ? "Enviando..." : "Mandar email de teste pra mim"}
-        </button>
+      <div className={`card diag-summary ${missingRequired ? "bad" : missingRecommended ? "warn" : "ok"}`}>
+        <p className="card-title">
+          {missingRequired
+            ? `Faltam ${missingRequired} configuraç${missingRequired === 1 ? "ão obrigatória" : "ões obrigatórias"}`
+            : missingRecommended
+              ? "O essencial está configurado"
+              : "Tudo configurado"}
+        </p>
+        <p className="card-subtitle">
+          {missingRecommended > 0 && `${missingRecommended} recomendada${missingRecommended === 1 ? "" : "s"} faltando. `}
+          As variáveis ficam no Render (servidor) ou nos secrets do GitHub (site). Os valores nunca aparecem aqui, só se existem.
+        </p>
       </div>
-      <div className="card">
-        <p className="card-title">Assistente (IA)</p>
-        <ul className="diag-list">
-          <Check
-            ok={diag.ai.geminiKey}
-            label="Chave do Gemini"
-            hint={diag.ai.geminiKey ? undefined : "Sem ela o assistente responde só com os números do mês. Chave grátis em aistudio.google.com/apikey → GEMINI_API_KEY."}
-          />
-        </ul>
-        <button type="button" className="btn btn-outline btn-sm" disabled={testing !== null} onClick={() => run("ai")}>
-          {testing === "ai" ? "Testando..." : "Testar a IA agora"}
-        </button>
-      </div>
-      <div className="card">
-        <p className="card-title">Lembretes diários</p>
-        <ul className="diag-list">
-          <Check ok label="Rodam sozinhos 1x por dia" hint="No primeiro acesso depois das 8h, mesmo sem o cron." />
-          <Check ok={diag.reminders.cronSecret} label="Cron externo (opcional)" hint={diag.reminders.cronSecret ? undefined : "CRON_SECRET não configurado"} />
-        </ul>
-      </div>
+      {sections.map((section) => (
+        <div className="card" key={section.id}>
+          <p className="card-title">{section.title}</p>
+          {section.summary && <p className="card-subtitle">{section.summary}</p>}
+          <ul className="diag-list">
+            {section.items.map((item) => (
+              <Check key={item.label} {...item} />
+            ))}
+          </ul>
+          {section.test && (
+            <button type="button" className="btn btn-outline btn-sm" disabled={testing !== null} onClick={() => run(section.test!)}>
+              {section.test === "email"
+                ? testing === "email"
+                  ? "Enviando..."
+                  : "Mandar email de teste pra mim"
+                : testing === "ai"
+                  ? "Testando..."
+                  : "Testar a IA agora"}
+            </button>
+          )}
+        </div>
+      ))}
     </>
   );
 }
@@ -788,7 +820,7 @@ export function AdminBilling() {
       <div className="card">
         <p className="card-title">Configuração</p>
         <ul className="diag-list">
-          <Check ok={config.enabled} label="Cobrança ligada" hint="Liga e desliga no botão abaixo. Desligada, todo mundo tem tudo." />
+          <Check ok={config.enabled} level="optional" label="Cobrança ligada" hint="Liga e desliga no botão abaixo. Desligada, todo mundo tem tudo." />
           <Check ok={config.asaasConfigured} label={`Chave do Asaas (${config.asaasEnv === "production" ? "produção" : "testes"})`} hint="ASAAS_API_KEY e ASAAS_ENV" />
           <Check ok={config.webhookConfigured} label="Webhook do Asaas" hint="ASAAS_WEBHOOK_TOKEN, o mesmo token cadastrado no painel do Asaas" />
         </ul>
@@ -935,6 +967,18 @@ interface Insights {
   retention: { cohort: number; returned: number };
   funnel: { accounts: number; inGroup: number; inPairedGroup: number; payingGroups: number | null };
   firestore: { reads: number; writes: number; readLimit: number; writeLimit: number; countingSince: number; counterInstalled: boolean };
+  ai?: {
+    month: string;
+    model: string;
+    configured: boolean;
+    people: number;
+    messages: number;
+    imports: number;
+    atLimit: number;
+    limits: { message: number; import: number };
+    costBrl: number;
+    costPerPersonBrl: number;
+  };
   settings: { billingEnabled: boolean; maintenance: { enabled: boolean; message: string } };
 }
 
@@ -990,7 +1034,7 @@ export function AdminInsights() {
   }
 
   if (!data) return null;
-  const { activity, retention, funnel, firestore, settings } = data;
+  const { activity, retention, funnel, firestore, settings, ai } = data;
   const steps = [
     { label: "Criaram conta", value: funnel.accounts },
     { label: "Entraram num grupo", value: funnel.inGroup },
@@ -1063,6 +1107,36 @@ export function AdminInsights() {
         </div>
       </div>
 
+      {ai && (
+        <div className="card">
+          <p className="card-title">IA este mês</p>
+          <p className="card-subtitle">
+            {ai.configured ? `Modelo ${ai.model}.` : "Chave da IA não configurada no servidor."} Custo é estimativa pelos tokens; a conta de verdade é a do Google.
+          </p>
+          <div className="stat-row wrap">
+            <div className="stat-box">
+              <p className="label">Custo estimado</p>
+              <p className="value-sm">{ai.costBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+            </div>
+            <div className="stat-box">
+              <p className="label">Por pessoa</p>
+              <p className="value-sm">{ai.costPerPersonBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+            </div>
+            <div className="stat-box">
+              <p className="label">Pessoas usando</p>
+              <p className="value-sm">{ai.people}</p>
+            </div>
+            <div className="stat-box">
+              <p className="label">No limite</p>
+              <p className="value-sm">{ai.atLimit}</p>
+            </div>
+          </div>
+          <p className="card-subtitle">
+            {ai.messages.toLocaleString("pt-BR")} mensagens e {ai.imports.toLocaleString("pt-BR")} importações com IA. Limite por pessoa:{" "}
+            {ai.limits.message} mensagens e {ai.limits.import} importações por mês.
+          </p>
+        </div>
+      )}
       <div className="card">
         <p className="card-title">Modo manutenção</p>
         <p className="card-subtitle">

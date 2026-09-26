@@ -30,6 +30,8 @@ interface PreviewGroup {
   total: string;
   rowIndexes: number[];
   rule: { categoryId: string | null; notExpense: boolean } | null;
+  // Sugestão da IA (a pessoa confirma).
+  suggestion?: { categoryId: string | null; notExpense: boolean } | null;
 }
 
 interface PdfCheck {
@@ -43,11 +45,14 @@ interface PdfCheck {
 }
 
 interface PreviewResponse {
-  format: "ofx" | "csv" | "pdf";
+  format: "ofx" | "csv" | "pdf" | "bank";
+  // Quando veio do banco conectado (Open Finance).
+  source?: { itemId: string; accountId: string; label: string; from: string; until: string };
   assumedAllExpenses: boolean;
   rows: PreviewRow[];
   groups: PreviewGroup[];
   pdf: PdfCheck | null;
+  ai?: { suggested: number; limitReached: boolean };
 }
 
 interface AccountRow {
@@ -76,6 +81,17 @@ interface Answer {
 }
 
 type Stage = "file" | "questions" | "summary";
+
+interface OpenFinanceStatus {
+  configured: boolean;
+  allowed: boolean;
+  items: {
+    itemId: string;
+    connectorName: string;
+    status: string;
+    accounts: { id: string; label: string; type: "BANK" | "CREDIT"; syncedUntil: string | null }[];
+  }[];
+}
 
 type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "outro";
 
@@ -159,6 +175,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   // janela já rola; lista com rolagem própria dentro dela fica cortada).
   const [showAllUnmatched, setShowAllUnmatched] = useState(false);
   const [showAllRules, setShowAllRules] = useState(false);
+  // "Aceitar as sugestões": os nomes sugeridos saem da fila de perguntas
+  // (continuam no resumo pra mudar).
+  const [acceptedSuggestions, setAcceptedSuggestions] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -169,6 +188,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Conectar conta (Pluggy): só aparece pra quem o servidor liberar.
+  const [bankLink, setBankStatus] = useState<OpenFinanceStatus | null>(null);
+  const [bankBusy, setBankBusy] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -184,6 +206,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         setBank(rememberedBank(first));
       })
       .catch(() => setError("Não foi possível carregar suas contas."));
+    void loadBankStatus();
   }, [token, user?.id]);
 
   const groupKey = (group: PreviewGroup) => `${group.transactionType}:${group.key}`;
@@ -194,12 +217,13 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   // aqui garante mesmo que a lista mude).
   const questions = useMemo(
     () =>
-      (preview?.groups.filter((group) => !group.rule) ?? [])
+      (preview?.groups.filter((group) => !group.rule && !(acceptedSuggestions && group.suggestion)) ?? [])
         .map((group, order) => ({ group, order }))
         .sort((a, b) => Number(b.group.transactionType === "income") - Number(a.group.transactionType === "income") || a.order - b.order)
         .map(({ group }) => group),
-    [preview]
+    [preview, acceptedSuggestions]
   );
+  const suggestedGroups = preview?.groups.filter((group) => !group.rule && group.suggestion) ?? [];
   const incomeQuestions = questions.filter((group) => group.transactionType === "income").length;
 
   // Ida e volta: mesmo nome, mesmo valor, um entrou e o outro saiu com até 3
@@ -230,12 +254,29 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     return pairs;
   }, [preview]);
 
+  function acceptAllSuggestions() {
+    setAnswers((all) => {
+      const next = { ...all };
+      for (const group of suggestedGroups) {
+        const key = groupKey(group);
+        if (next[key]?.status === "answered") continue;
+        next[key] = { ...next[key], status: "answered", fromRule: false, categoryId: group.suggestion!.categoryId, notExpense: group.suggestion!.notExpense };
+      }
+      return next;
+    });
+    setAcceptedSuggestions(true);
+    setQuestionIndex(0);
+    setShowDescription(false);
+    if (preview && preview.groups.every((group) => group.rule || group.suggestion)) setStage("summary");
+  }
+
   function startReview(result: PreviewResponse) {
     setPreview(result);
     const initial: Record<string, Answer> = {};
     for (const group of result.groups) initial[`${group.transactionType}:${group.key}`] = blankAnswer(group);
     setAnswers(initial);
     setExcluded(new Set());
+    setAcceptedSuggestions(false);
     setQuestionIndex(0);
     setShowDescription(false);
     setStage(result.groups.some((group) => !group.rule) ? "questions" : "summary");
@@ -451,6 +492,80 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const duplicateCount = preview?.rows.filter((row) => row.isDuplicate).length ?? 0;
   const unreadLines = preview?.pdf?.unreadLines ?? [];
 
+  async function loadBankStatus() {
+    try {
+      setBankStatus(await apiRequest<OpenFinanceStatus>("/open-finance/status", { token }));
+    } catch {
+      setBankStatus(null);
+    }
+  }
+
+  // Abre a janela do Pluggy com um token de 30 min gerado no servidor (a chave
+  // secreta nunca vem pro navegador). No fim, o servidor confere que a conexão
+  // é mesmo desta pessoa antes de guardar.
+  async function connectBank() {
+    setError(null);
+    setBankBusy("connect");
+    try {
+      const { accessToken } = await apiRequest<{ accessToken: string }>("/open-finance/connect-token", { method: "POST", token, body: {} });
+      const { PluggyConnect } = await import("pluggy-connect-sdk");
+      const widget = new PluggyConnect({
+        connectToken: accessToken,
+        includeSandbox: import.meta.env.DEV,
+        language: "pt",
+        onSuccess: async ({ item }) => {
+          try {
+            await apiRequest("/open-finance/items", { method: "POST", token, body: { itemId: item.id } });
+            showToast("Conta conectada", { description: "Agora é só buscar os lançamentos." });
+            await loadBankStatus();
+          } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Não foi possível guardar a conexão.");
+          }
+        },
+        onError: ({ message }) => setError(`A conexão não terminou: ${message}`),
+      });
+      await widget.init();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível abrir a conexão com o banco.");
+    } finally {
+      setBankBusy(null);
+    }
+  }
+
+  async function fetchFromBank(itemId: string, accountId: string, label: string) {
+    setError(null);
+    setBankBusy(accountId);
+    setFileName(label);
+    try {
+      const result = await apiRequest<PreviewResponse>(`/open-finance/items/${encodeURIComponent(itemId)}/preview`, {
+        method: "POST",
+        token,
+        body: { accountId },
+      });
+      if (result.rows.length === 0) {
+        showToast("Nada novo nessa conta", { variant: "info", description: "Não há lançamentos desde a última busca." });
+        return;
+      }
+      startReview(result);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível buscar os lançamentos.");
+    } finally {
+      setBankBusy(null);
+    }
+  }
+
+  async function disconnectBank(itemId: string) {
+    setBankBusy(itemId);
+    try {
+      await apiRequest(`/open-finance/items/${encodeURIComponent(itemId)}`, { method: "DELETE", token });
+      await loadBankStatus();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível desconectar.");
+    } finally {
+      setBankBusy(null);
+    }
+  }
+
   async function handleSave() {
     if (!plan || !accountId || (plan.items.length === 0 && plan.rules.length === 0)) return;
     setIsSaving(true);
@@ -466,6 +581,14 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         `${n} lançamento${n === 1 ? "" : "s"} importado${n === 1 ? "" : "s"}` +
           (result.rulesSaved > 0 ? ` · ${result.rulesSaved} nome${result.rulesSaved === 1 ? "" : "s"} guardado${result.rulesSaved === 1 ? "" : "s"}` : "")
       );
+      // Veio do banco conectado: a próxima busca começa daqui.
+      if (preview?.source) {
+        await apiRequest(`/open-finance/items/${encodeURIComponent(preview.source.itemId)}/synced`, {
+          method: "POST",
+          token,
+          body: { accountId: preview.source.accountId, until: preview.source.until },
+        }).catch(() => undefined);
+      }
       onImported();
       onClose();
     } catch (err) {
@@ -641,22 +764,78 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               />
             </div>
           )}
-          <div className="import-connect">
-            <span className="import-connect-icon">
-              <Icon name="bank" />
-            </span>
-            <div>
-              <strong>Conectar conta</strong>
-              <small>Os lançamentos entram sozinhos, sem baixar nada (Open Finance).</small>
+          {bankLink?.allowed ? (
+            <div className="import-connect is-live">
+              <div className="import-connect-head">
+                <span className="import-connect-icon">
+                  <Icon name="bank" />
+                </span>
+                <div>
+                  <strong>Conta conectada (Open Finance)</strong>
+                  <small>Busca os lançamentos direto do banco, sem baixar arquivo. Passam pelas mesmas perguntas.</small>
+                </div>
+              </div>
+              {bankLink.items.map((item) => (
+                <div key={item.itemId} className="import-bank-item">
+                  <div className="import-bank-item-head">
+                    <strong>{item.connectorName}</strong>
+                    {item.status !== "UPDATED" && <small className="import-bank-status">{item.status === "UNAVAILABLE" ? "sem resposta do banco" : item.status.toLowerCase()}</small>}
+                    <button type="button" className="link-button" disabled={bankBusy !== null} onClick={() => void disconnectBank(item.itemId)}>
+                      Desconectar
+                    </button>
+                  </div>
+                  {item.accounts.map((account) => (
+                    <button
+                      key={account.id}
+                      type="button"
+                      className="btn btn-outline btn-sm import-bank-account"
+                      disabled={bankBusy !== null || isReading}
+                      onClick={() => void fetchFromBank(item.itemId, account.id, account.label)}
+                    >
+                      {bankBusy === account.id ? "Buscando..." : `Buscar lançamentos · ${account.label}`}
+                      {account.syncedUntil && (
+                        <small> (até {parseLocalDate(account.syncedUntil).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })})</small>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ))}
+              <button type="button" className="btn btn-primary btn-sm" disabled={bankBusy !== null} onClick={() => void connectBank()}>
+                {bankBusy === "connect" ? "Abrindo..." : bankLink.items.length > 0 ? "Conectar outra conta" : "Conectar conta"}
+              </button>
             </div>
-            <span className="pill-soon">Em breve</span>
-          </div>
+          ) : (
+            <div className="import-connect">
+              <span className="import-connect-icon">
+                <Icon name="bank" />
+              </span>
+              <div>
+                <strong>Conectar conta</strong>
+                <small>Os lançamentos entram sozinhos, sem baixar nada (Open Finance).</small>
+              </div>
+              <span className="pill-soon">Em breve</span>
+            </div>
+          )}
         </>
       )}
 
       {stage === "questions" && current && currentAnswer && (
         <>
           {questionIndex === 0 && !returnToSummary && pdfBanner}
+          {questionIndex === 0 && !returnToSummary && !acceptedSuggestions && suggestedGroups.length > 0 && (
+            <div className="import-suggest">
+              <p>
+                <Icon name="check" /> O PAR. sugeriu a categoria de <strong>{suggestedGroups.length}</strong> de {questions.length} nomes.
+              </p>
+              <button type="button" className="btn btn-primary btn-sm" onClick={acceptAllSuggestions}>
+                Aceitar as sugestões e responder só {questions.length - suggestedGroups.length === 0 ? "o resumo" : `os outros ${questions.length - suggestedGroups.length}`}
+              </button>
+              <small>Dá pra mudar qualquer uma no resumo. Ou siga as perguntas: a sugestão vem marcada.</small>
+            </div>
+          )}
+          {questionIndex === 0 && !returnToSummary && preview?.ai?.limitReached && (
+            <p className="import-note">Você usou as importações com IA deste mês, então desta vez não há sugestões. Elas voltam no dia 1º.</p>
+          )}
           {questionIndex === 0 && !returnToSummary && (
             <p className="import-summary">
               <strong>{preview!.rows.length}</strong> lançamentos em {fileName} viraram <strong>{preview!.groups.length}</strong>{" "}
@@ -774,6 +953,19 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               </div>
             )}
             <p className="import-question-ask">O que é isso?</p>
+            {current.suggestion && currentAnswer.status !== "answered" && (
+              <p className="import-hint">
+                Sugestão do PAR.:{" "}
+                <strong>
+                  {current.suggestion.notExpense
+                    ? current.transactionType === "income"
+                      ? "Não é entrada"
+                      : "Não é gasto"
+                    : categoryLabel(current.suggestion.categoryId)}
+                </strong>
+                . Toque pra confirmar ou escolha outra.
+              </p>
+            )}
             <div className="chip-row import-chips">
               {orderedCategories(current.transactionType).map((category) => (
                 <button
@@ -781,6 +973,10 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                   type="button"
                   className={`import-chip${
                     currentAnswer.status === "answered" && !currentAnswer.notExpense && currentAnswer.categoryId === category.id ? " active" : ""
+                  }${
+                    currentAnswer.status !== "answered" && current.suggestion && !current.suggestion.notExpense && current.suggestion.categoryId === category.id
+                      ? " suggested"
+                      : ""
                   }`}
                   onClick={() => choose(current, { categoryId: category.id, notExpense: false })}
                 >
@@ -790,7 +986,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               ))}
               <button
                 type="button"
-                className={`import-chip is-not${currentAnswer.status === "answered" && currentAnswer.notExpense ? " active" : ""}`}
+                className={`import-chip is-not${currentAnswer.status === "answered" && currentAnswer.notExpense ? " active" : ""}${
+                  currentAnswer.status !== "answered" && current.suggestion?.notExpense ? " suggested" : ""
+                }`}
                 onClick={() => choose(current, { categoryId: null, notExpense: true })}
                 title="Fatura do cartão, aplicação, transferência entre suas contas: não entra"
               >
