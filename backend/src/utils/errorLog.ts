@@ -30,6 +30,11 @@ export function isQuotaError(err: unknown): boolean {
   return code === 8 || code === "resource-exhausted" || /RESOURCE_EXHAUSTED|quota exceeded/i.test(message);
 }
 
+let errorListener: ((entry: ErrorLogEntry, isQuota: boolean) => void) | null = null;
+export function onErrorLogged(listener: typeof errorListener): void {
+  errorListener = listener;
+}
+
 export function listMemoryErrors(limit: number): ErrorLogEntry[] {
   return memoryErrors.slice(-limit).reverse();
 }
@@ -51,8 +56,16 @@ export function logError(
     userId: extra?.userId ?? null,
     createdAt: Date.now(),
   };
-  memoryErrors.push({ id: `mem-${++memorySeq}`, ...entry });
+  const stored = { id: `mem-${++memorySeq}`, ...entry };
+  memoryErrors.push(stored);
   if (memoryErrors.length > MEMORY_LIMIT) memoryErrors.shift();
+  // Avisa o dono por email se os erros se acumularem (utils/opsAlerts se
+  // registra aqui -- ele usa o email, que usa este módulo).
+  try {
+    errorListener?.(stored, isQuotaError(err));
+  } catch {
+    // aviso é cortesia
+  }
   // Com a cota estourada, gravar no Firestore falharia do mesmo jeito.
   if (isQuotaError(err)) return;
   errorLogsCol.add(entry).catch(() => {});

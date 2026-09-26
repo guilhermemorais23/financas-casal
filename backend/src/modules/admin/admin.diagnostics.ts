@@ -69,7 +69,13 @@ export async function buildDiagnostics(): Promise<DiagSection[]> {
           hint: "O Render grátis bloqueia Gmail SMTP. Crie uma chave em brevo.com.",
         },
         { label: "Remetente", ok: has("EMAIL_FROM") || has("GMAIL_USER"), level: "required", env: "EMAIL_FROM", hint: "O email verificado na Brevo." },
-        { label: "Quem recebe os avisos", ok: has("OWNER_EMAIL") || has("ADMIN_EMAILS"), level: "recommended", env: "OWNER_EMAIL" },
+        {
+          label: "Quem recebe os avisos",
+          ok: has("OWNER_EMAIL") || has("ADMIN_EMAILS"),
+          level: "recommended",
+          env: "OWNER_EMAIL",
+          hint: "Também recebe os alertas: muitos erros seguidos, banco sem cota, Telegram parado, IA perto do orçamento (AI_MONTHLY_BUDGET_BRL, padrão R$ 50).",
+        },
       ],
     },
     {
