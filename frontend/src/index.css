@@ -8662,7 +8662,7 @@ select {
 }
 .bills-none { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; }
 .bills-empty p { margin: 0; }
-.bills-empty { display: grid; gap: 0.35rem; }
+.card.bills-empty { display: grid; gap: 0.35rem; max-width: none; }
 .bills-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--color-text-muted); }
 .bills-add-link {
   padding: 0.4rem 0.8rem;
@@ -8689,3 +8689,4 @@ select {
 .admin-user-danger { display: grid; gap: 0.4rem; margin-top: 0.5rem; padding-top: 0.85rem; border-top: 1px solid var(--color-border); }
 .admin-user-danger-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .admin-user-danger-row input { flex: 1 1 14rem; min-width: 0; }
+.card.admin-imports { width: 100%; max-width: none; min-width: 0; }

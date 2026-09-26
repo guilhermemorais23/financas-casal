@@ -1551,7 +1551,7 @@ export function AdminImports() {
         </div>
       )}
       <p className="field-hint">
-        Em vermelho: banco com 3+ leituras e 30% ou mais sem nada lido ou com erro -- o leitor dele precisa de ajuste. "Pela IA" é quando o
+        Em vermelho: banco com 3+ leituras e 30% ou mais sem nada lido ou com erro, ou seja, o leitor dele precisa de ajuste. "Pela IA" é quando o
         leitor próprio não deu conta e a IA leu (custa cota).
       </p>
     </div>
