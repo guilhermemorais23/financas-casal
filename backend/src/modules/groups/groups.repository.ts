@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
 import { memoizeScoped } from "../../utils/readCache";
+import { findUserDocsInGroup, type UserRow } from "../users/users.repository";
 
 export interface GroupRow {
   id: string;
@@ -28,16 +29,18 @@ const groupsCol = db.collection("groups");
 const usersCol = db.collection("users");
 const accountsCol = db.collection("accounts");
 
-export async function createGroup(): Promise<GroupRow> {
+export async function createGroup(input: { nickname?: string | null; emoji?: string | null } = {}): Promise<GroupRow> {
+  const nickname = input.nickname ?? null;
+  const emoji = input.emoji ?? null;
   const ref = await groupsCol.add({
-    nickname: null,
-    emoji: null,
+    nickname,
+    emoji,
     financialGoal: null,
     savingsAmount: null,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return { id: ref.id, nickname: null, emoji: null, financialGoal: null, savingsAmount: null };
+  return { id: ref.id, nickname, emoji, financialGoal: null, savingsAmount: null };
 }
 
 export function findGroupById(groupId: string): Promise<GroupRow | null> {
@@ -64,8 +67,28 @@ export async function updateGroupFinancialProfile(
   await groupsCol.doc(groupId).set({ ...updates, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 
-export async function setUserGroup(userId: string, groupId: string | null): Promise<void> {
-  await usersCol.doc(userId).set({ groupId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+export async function updateGroupIdentity(
+  groupId: string,
+  updates: { nickname?: string | null; emoji?: string | null }
+): Promise<void> {
+  await groupsCol.doc(groupId).set({ ...updates, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+
+// Entrar num grupo não tira a pessoa dos outros; o novo vira o aberto por
+// padrão (groupId). A lista inteira é regravada (e não arrayUnion) pra levar
+// junto o groupId de perfis de antes dos vários grupos, que não têm groupIds.
+export async function addUserToGroup(user: Pick<UserRow, "id" | "groupIds">, groupId: string): Promise<void> {
+  const groupIds = user.groupIds.includes(groupId) ? user.groupIds : [...user.groupIds, groupId];
+  await usersCol.doc(user.id).set({ groupIds, groupId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+
+export async function removeUserFromGroup(
+  user: Pick<UserRow, "id" | "groupId" | "groupIds">,
+  groupId: string
+): Promise<void> {
+  const groupIds = user.groupIds.filter((id) => id !== groupId);
+  const primary = user.groupId && user.groupId !== groupId ? user.groupId : groupIds[0] ?? null;
+  await usersCol.doc(user.id).set({ groupIds, groupId: primary, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 
 export async function createAccount(input: {
@@ -118,6 +141,6 @@ export function findMembersByGroupId(groupId: string): Promise<MemberRow[]> {
 }
 
 async function loadFindMembersByGroupId(groupId: string): Promise<MemberRow[]> {
-  const snapshot = await usersCol.where("groupId", "==", groupId).get();
-  return snapshot.docs.map((doc) => ({ id: doc.id, displayName: doc.data().displayName }));
+  const docs = await findUserDocsInGroup(groupId);
+  return docs.map((doc) => ({ id: doc.id, displayName: doc.data().displayName }));
 }

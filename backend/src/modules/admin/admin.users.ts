@@ -3,6 +3,7 @@ import { recordAdminAction } from "../billing/billing.repository";
 import { describeAccess } from "../billing/billing.service";
 import { findSubscription } from "../billing/billing.repository";
 import { isBillingEnabled } from "../settings/appSettings";
+import { findUserDocsInGroup } from "../users/users.repository";
 import { isAdminEmail } from "./admin.service";
 
 const usersCol = db.collection("users");
@@ -59,7 +60,7 @@ export async function getUserDetailForAdmin(userId: string) {
   const groupId: string | null = d.groupId ?? null;
 
   const [members, transactionCount, accessSnap, sub, billingOn] = await Promise.all([
-    groupId ? usersCol.where("groupId", "==", groupId).select("displayName", "email").get() : Promise.resolve(null),
+    groupId ? findUserDocsInGroup(groupId) : Promise.resolve(null),
     db.collection("transactions").where("payerId", "==", userId).count().get(),
     // Sem orderBy: um filtro só de igualdade não precisa de índice; ordena aqui.
     db.collection("accessLogs").where("userId", "==", userId).limit(50).get(),
@@ -83,7 +84,7 @@ export async function getUserDetailForAdmin(userId: string) {
     group: groupId
       ? {
           id: groupId,
-          members: (members?.docs ?? []).map((m) => ({ id: m.id, displayName: m.data().displayName ?? "", email: m.data().email ?? "" })),
+          members: (members ?? []).map((m) => ({ id: m.id, displayName: m.data().displayName ?? "", email: m.data().email ?? "" })),
         }
       : null,
     transactionCount: transactionCount.data().count,

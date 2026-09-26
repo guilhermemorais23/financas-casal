@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
-import { findUserById } from "../users/users.repository";
+import { findUserById, type UserRow } from "../users/users.repository";
+import { requestedGroupId } from "../../utils/activeGroup";
 import { getAccountBalances } from "../transactions/transactions.repository";
 import {
   createAccount,
@@ -7,8 +8,10 @@ import {
   findAccountsByGroupId,
   findGroupById,
   findMembersByGroupId,
-  setUserGroup,
+  addUserToGroup,
+  removeUserFromGroup,
   updateGroupFinancialProfile,
+  updateGroupIdentity,
   type AccountRow,
   type GroupRow,
   type MemberRow,
@@ -21,6 +24,8 @@ import {
 } from "./invites.repository";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Casal, família, república... cinco dá e sobra, e segura o custo de leitura.
+export const MAX_GROUPS_PER_USER = 5;
 
 export class AlreadyInGroupError extends Error {}
 export class InviteNotFoundError extends Error {}
@@ -29,26 +34,59 @@ export class InviteExpiredError extends Error {}
 export class NoGroupError extends Error {}
 export class MemberNotFoundError extends Error {}
 export class CannotRemoveSelfError extends Error {}
+export class TooManyGroupsError extends Error {}
+// O app pediu (X-Group-Id) um grupo do qual a pessoa não é membro.
+export class GroupAccessError extends Error {}
 
 function generateInviteToken(): string {
   return randomBytes(24).toString("base64url");
 }
 
-export async function requireGroupId(userId: string): Promise<string> {
-  const user = await findUserById(userId);
-  if (!user?.groupId) {
-    throw new NoGroupError();
+// O grupo aberto nesta requisição: o que o app pediu (X-Group-Id), se a
+// pessoa for membro dele; sem pedido, o último grupo em que ela entrou.
+// Tudo que é de um grupo (transações, metas, cartões...) passa por aqui, então
+// é este o ponto que impede alguém de ver um grupo que não é dele.
+export function resolveActiveGroupId(user: Pick<UserRow, "groupId" | "groupIds">): string | null {
+  const requested = requestedGroupId();
+  if (requested) {
+    if (!user.groupIds.includes(requested)) throw new GroupAccessError();
+    return requested;
   }
   return user.groupId;
 }
 
-export async function createGroupForUser(userId: string) {
+export async function findActiveGroupId(userId: string): Promise<string | null> {
+  const user = await findUserById(userId);
+  return user ? resolveActiveGroupId(user) : null;
+}
+
+export async function requireGroupId(userId: string): Promise<string> {
+  const groupId = await findActiveGroupId(userId);
+  if (!groupId) {
+    throw new NoGroupError();
+  }
+  return groupId;
+}
+
+function cleanNickname(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().slice(0, 40);
+  return trimmed || null;
+}
+
+function cleanEmoji(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed && [...trimmed].length <= 8 ? trimmed : null;
+}
+
+export async function createGroupForUser(userId: string, input: { name?: unknown; emoji?: unknown } = {}) {
   const user = await findUserById(userId);
   if (!user) throw new NoGroupError();
-  if (user.groupId) throw new AlreadyInGroupError();
+  if (user.groupIds.length >= MAX_GROUPS_PER_USER) throw new TooManyGroupsError();
 
-  const group = await createGroup();
-  await setUserGroup(userId, group.id);
+  const group = await createGroup({ nickname: cleanNickname(input.name), emoji: cleanEmoji(input.emoji) });
+  await addUserToGroup(user, group.id);
   await createAccount({
     groupId: group.id,
     ownerUserId: userId,
@@ -76,14 +114,15 @@ export async function createGroupForUser(userId: string) {
 export async function acceptInvite(userId: string, token: string) {
   const user = await findUserById(userId);
   if (!user) throw new NoGroupError();
-  if (user.groupId) throw new AlreadyInGroupError();
 
   const invite = await findInviteByToken(token);
   if (!invite) throw new InviteNotFoundError();
   if (invite.status !== "pending") throw new InviteNotPendingError();
   if (invite.expiresAt.getTime() < Date.now()) throw new InviteExpiredError();
+  if (user.groupIds.includes(invite.groupId)) throw new AlreadyInGroupError();
+  if (user.groupIds.length >= MAX_GROUPS_PER_USER) throw new TooManyGroupsError();
 
-  await setUserGroup(userId, invite.groupId);
+  await addUserToGroup(user, invite.groupId);
   await createAccount({
     groupId: invite.groupId,
     ownerUserId: userId,
@@ -109,9 +148,12 @@ export async function createNewInvite(userId: string): Promise<string> {
 
 // "Desvincular conta": no data reconciliation, just detach -- the group's
 // data is untouched and stays fully accessible to whoever remains in it.
+// Só sai do grupo aberto; os outros grupos da pessoa continuam como estão.
 export async function leaveGroup(userId: string): Promise<void> {
-  await requireGroupId(userId);
-  await setUserGroup(userId, null);
+  const user = await findUserById(userId);
+  const groupId = user ? resolveActiveGroupId(user) : null;
+  if (!user || !groupId) throw new NoGroupError();
+  await removeUserFromGroup(user, groupId);
 }
 
 // Any member can remove any other -- same mutual-trust model already used
@@ -125,10 +167,11 @@ export async function removeMemberForUser(userId: string, targetUserId: string):
     throw new CannotRemoveSelfError();
   }
   const members = await findMembersByGroupId(groupId);
-  if (!members.some((member) => member.id === targetUserId)) {
+  const target = members.some((member) => member.id === targetUserId) ? await findUserById(targetUserId) : null;
+  if (!target) {
     throw new MemberNotFoundError();
   }
-  await setUserGroup(targetUserId, null);
+  await removeUserFromGroup(target, groupId);
 }
 
 export async function getGroupForUser(userId: string): Promise<{
@@ -137,10 +180,10 @@ export async function getGroupForUser(userId: string): Promise<{
   members: MemberRow[];
   pendingInviteToken: string | null;
 } | null> {
-  const user = await findUserById(userId);
-  if (!user?.groupId) return null;
+  const groupId = await findActiveGroupId(userId);
+  if (!groupId) return null;
 
-  const group = await findGroupById(user.groupId);
+  const group = await findGroupById(groupId);
   if (!group) return null;
 
   const [accounts, members, pendingInvite, balanceRows] = await Promise.all([
@@ -174,4 +217,37 @@ export async function updateFinancialProfile(
   await updateGroupFinancialProfile(groupId, updates);
   const group = await findGroupById(groupId);
   return group!;
+}
+
+export interface GroupSummary {
+  id: string;
+  nickname: string | null;
+  emoji: string | null;
+  memberCount: number;
+}
+
+// Pro seletor de grupo: só o que a própria pessoa já pode ver (nome, emoji e
+// quantas pessoas), nunca nada de dentro dos grupos.
+export async function listGroupsForUser(userId: string): Promise<{ groups: GroupSummary[]; defaultGroupId: string | null }> {
+  const user = await findUserById(userId);
+  if (!user) return { groups: [], defaultGroupId: null };
+  const rows = await Promise.all(
+    user.groupIds.map(async (groupId) => {
+      const [group, members] = await Promise.all([findGroupById(groupId), findMembersByGroupId(groupId)]);
+      return group ? { id: group.id, nickname: group.nickname, emoji: group.emoji, memberCount: members.length } : null;
+    })
+  );
+  return { groups: rows.filter((row): row is GroupSummary => row !== null), defaultGroupId: user.groupId };
+}
+
+export async function updateGroupIdentityForUser(
+  userId: string,
+  input: { name?: unknown; emoji?: unknown }
+): Promise<GroupRow> {
+  const groupId = await requireGroupId(userId);
+  const updates: { nickname?: string | null; emoji?: string | null } = {};
+  if (input.name !== undefined) updates.nickname = cleanNickname(input.name);
+  if (input.emoji !== undefined) updates.emoji = cleanEmoji(input.emoji);
+  await updateGroupIdentity(groupId, updates);
+  return (await findGroupById(groupId))!;
 }

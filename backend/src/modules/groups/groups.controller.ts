@@ -6,15 +6,21 @@ import {
   InviteNotFoundError,
   InviteNotPendingError,
   MemberNotFoundError,
+  MAX_GROUPS_PER_USER,
   NoGroupError,
+  TooManyGroupsError,
   acceptInvite,
   createGroupForUser,
   createNewInvite,
   getGroupForUser,
   leaveGroup,
+  listGroupsForUser,
   removeMemberForUser,
   updateFinancialProfile,
+  updateGroupIdentityForUser,
 } from "./groups.service";
+
+const TOO_MANY_GROUPS = { error: `Dá pra participar de até ${MAX_GROUPS_PER_USER} grupos.`, code: "too_many_groups" };
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -22,11 +28,12 @@ function isNonEmptyString(value: unknown): value is string {
 
 export async function createGroupHandler(req: Request, res: Response) {
   try {
-    const result = await createGroupForUser(req.user!.id);
+    const { name, emoji } = req.body ?? {};
+    const result = await createGroupForUser(req.user!.id, { name, emoji });
     res.status(201).json(result);
   } catch (err) {
-    if (err instanceof AlreadyInGroupError) {
-      res.status(409).json({ error: "user already belongs to a group" });
+    if (err instanceof TooManyGroupsError) {
+      res.status(409).json(TOO_MANY_GROUPS);
       return;
     }
     throw err;
@@ -49,7 +56,11 @@ export async function acceptInviteHandler(req: Request, res: Response) {
       return;
     }
     if (err instanceof AlreadyInGroupError) {
-      res.status(409).json({ error: "user already belongs to a group" });
+      res.status(409).json({ error: "Você já está nesse grupo.", code: "already_in_group" });
+      return;
+    }
+    if (err instanceof TooManyGroupsError) {
+      res.status(409).json(TOO_MANY_GROUPS);
       return;
     }
     if (err instanceof InviteNotPendingError || err instanceof InviteExpiredError) {
@@ -67,6 +78,32 @@ export async function getMyGroupHandler(req: Request, res: Response) {
     return;
   }
   res.status(200).json(result);
+}
+
+export async function listMyGroupsHandler(req: Request, res: Response) {
+  res.status(200).json(await listGroupsForUser(req.user!.id));
+}
+
+export async function updateGroupIdentityHandler(req: Request, res: Response) {
+  const { name, emoji } = req.body ?? {};
+  if (name !== undefined && name !== null && typeof name !== "string") {
+    res.status(400).json({ error: "name must be a string" });
+    return;
+  }
+  if (emoji !== undefined && emoji !== null && typeof emoji !== "string") {
+    res.status(400).json({ error: "emoji must be a string" });
+    return;
+  }
+  try {
+    const group = await updateGroupIdentityForUser(req.user!.id, { name, emoji });
+    res.status(200).json(group);
+  } catch (err) {
+    if (err instanceof NoGroupError) {
+      res.status(404).json({ error: "no group yet" });
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function createInviteHandler(req: Request, res: Response) {

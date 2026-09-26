@@ -2,7 +2,7 @@ import { escapeHtml, sendOwnerEmail } from "../../email/mailer";
 import { isValidCpfCnpj, onlyDigits } from "../../utils/cpfCnpj";
 import { invalidateScopes } from "../../utils/readCache";
 import { findMembersByGroupId } from "../groups/groups.repository";
-import { requireGroupId } from "../groups/groups.service";
+import { findActiveGroupId, requireGroupId, resolveActiveGroupId } from "../groups/groups.service";
 import { findUserById } from "../users/users.repository";
 import * as asaas from "./asaas.client";
 import { isBillingEnabled } from "../settings/appSettings";
@@ -84,9 +84,9 @@ export async function getEntitlementForGroup(groupId: string): Promise<Entitleme
 
 export async function isPremiumUser(userId: string): Promise<boolean> {
   if (!(await isBillingEnabled())) return true;
-  const user = await findUserById(userId);
-  if (!user?.groupId) return false;
-  return (await getEntitlementForGroup(user.groupId)).premium;
+  const groupId = await findActiveGroupId(userId);
+  if (!groupId) return false;
+  return (await getEntitlementForGroup(groupId)).premium;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,8 +134,9 @@ export async function startCheckout(
   if (!isValidCpfCnpj(document)) throw new BillingError("CPF ou CNPJ inválido. Confira os números.");
 
   const user = await findUserById(userId);
-  if (!user?.groupId) throw new BillingError("Crie ou entre num grupo antes de assinar.");
-  const sub = await loadOrStartSubscription(user.groupId);
+  const groupId = user ? resolveActiveGroupId(user) : null;
+  if (!user || !groupId) throw new BillingError("Crie ou entre num grupo antes de assinar.");
+  const sub = await loadOrStartSubscription(groupId);
   const access = describeAccess(sub);
   if (access.state === "active" || access.state === "courtesy" || access.state === "past_due") {
     throw new BillingError("O grupo já tem o Premium.", 409);
@@ -159,13 +160,13 @@ export async function startCheckout(
     plan,
     value: priceFor(plan),
     nextDueDate: firstDue,
-    groupId: user.groupId,
+    groupId,
   });
   const payments = await asaas.listSubscriptionPayments(subscription.id);
   const invoiceUrl = payments.data[0]?.invoiceUrl;
   if (!invoiceUrl) throw new BillingError("O Asaas não devolveu a página de pagamento. Tente de novo.", 502);
 
-  await updateSubscription(user.groupId, {
+  await updateSubscription(groupId, {
     // Continua no teste até pagar; quem não está mais no teste fica "aguardando pagamento".
     status: sub.status === "trialing" ? "trialing" : "pending",
     plan,
@@ -186,8 +187,9 @@ export async function startCheckout(
 // (direito de arrependimento) -- aí o Premium acaba na hora.
 export async function cancelSubscription(userId: string, input: { refund?: unknown }): Promise<void> {
   const user = await findUserById(userId);
-  if (!user?.groupId) throw new BillingError("Você não está num grupo.");
-  const sub = await findSubscription(user.groupId);
+  const groupId = user ? resolveActiveGroupId(user) : null;
+  if (!user || !groupId) throw new BillingError("Você não está num grupo.");
+  const sub = await findSubscription(groupId);
   if (!sub?.asaasSubscriptionId || sub.status === "canceled") throw new BillingError("Não há assinatura pra cancelar.");
   if (sub.payerUserId !== userId) {
     throw new BillingError(`Só quem assinou (${sub.payerName ?? "a outra pessoa"}) pode cancelar.`, 403);
@@ -201,7 +203,7 @@ export async function cancelSubscription(userId: string, input: { refund?: unkno
   });
   if (wantsRefund && sub.lastPaymentId) await asaas.refundPayment(sub.lastPaymentId);
 
-  await updateSubscription(user.groupId, {
+  await updateSubscription(groupId, {
     status: "canceled",
     canceledAt: Date.now(),
     pendingInvoiceUrl: null,

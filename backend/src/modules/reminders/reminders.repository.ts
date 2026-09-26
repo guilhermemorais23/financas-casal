@@ -1,8 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
+import { findUserDocsInGroup } from "../users/users.repository";
 
 const reminderLogsCol = db.collection("reminderLogs");
-const usersCol = db.collection("users");
 const groupsCol = db.collection("groups");
 
 export interface MemberWithEmail {
@@ -25,8 +25,8 @@ export async function findAllGroupIds(): Promise<GroupIdRow[]> {
 // Unlike groups.repository's findMembersByGroupId, the reminders job needs
 // an address to actually send to.
 export async function findMembersWithEmailByGroupId(groupId: string): Promise<MemberWithEmail[]> {
-  const snapshot = await usersCol.where("groupId", "==", groupId).get();
-  return snapshot.docs.map((doc) => {
+  const docs = await findUserDocsInGroup(groupId);
+  return docs.map((doc) => {
     const data = doc.data();
     return { id: doc.id, displayName: data.displayName, email: data.email ?? null };
   });

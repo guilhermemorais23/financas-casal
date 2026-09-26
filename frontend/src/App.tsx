@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, type ComponentType } from "react";
+import { Fragment, lazy, Suspense, useEffect, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { AuthProvider } from "./auth/AuthContext";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PageSkeleton } from "./components/Skeleton";
 import { ConfirmProvider } from "./components/ConfirmDialog";
@@ -72,6 +72,13 @@ const InvestmentsPage = namedLazy(() => import("./pages/InvestmentsPage"), "Inve
 const ShoppingListPage = namedLazy(() => import("./pages/ShoppingListPage"), "ShoppingListPage");
 const LoansPage = namedLazy(() => import("./pages/LoansPage"), "LoansPage");
 
+// Trocar de grupo remonta todas as telas: cada uma busca de novo os dados
+// do grupo aberto e nada do grupo anterior fica na tela.
+function GroupScoped({ children }: { children: ReactNode }) {
+  const { activeGroupId } = useAuth();
+  return <Fragment key={activeGroupId ?? "none"}>{children}</Fragment>;
+}
+
 function App() {
   useEffect(preloadPages, []);
   return (
@@ -80,6 +87,7 @@ function App() {
       <AuthProvider>
         <ErrorBoundary>
         <Suspense fallback={<PageSkeleton />}>
+          <GroupScoped>
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<LoginPage />} />
@@ -209,6 +217,7 @@ function App() {
               }
             />
           </Routes>
+          </GroupScoped>
         </Suspense>
         <WelcomeTour />
         <AnnouncementPopup />

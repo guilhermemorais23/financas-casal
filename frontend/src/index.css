@@ -8458,3 +8458,194 @@ select {
   justify-content: space-between;
   gap: 0.75rem;
 }
+
+/* Seletor de grupo (casal, família...) ------------------------------------ */
+.group-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.3rem 0.65rem 0.3rem 0.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-card);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.group-switcher:hover {
+  background: var(--color-bg-soft);
+}
+
+.group-switcher:focus-visible,
+.group-sheet-item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.group-switcher-emoji {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  font-size: 0.95rem;
+}
+
+.group-switcher-name {
+  min-width: 0;
+}
+
+.group-switcher-chevron {
+  flex-shrink: 0;
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.group-switcher-topbar {
+  margin-left: auto;
+  max-width: 55vw;
+}
+
+.group-switcher-topbar + .topbar-avatar {
+  margin-left: 0;
+}
+
+.group-switcher-sidebar {
+  display: flex;
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.group-sheet-title {
+  margin: 0;
+}
+
+.group-sheet-hint {
+  margin: 0.35rem 0 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.group-sheet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.group-sheet-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.group-sheet-item:hover {
+  background: var(--color-bg-soft);
+}
+
+.group-sheet-item.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.group-sheet-emoji {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: var(--color-bg-soft);
+  font-size: 1.15rem;
+}
+
+.group-sheet-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.group-sheet-text span {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.group-sheet-check {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--color-primary);
+}
+
+.group-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.group-emoji-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.group-emoji-option {
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-card);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.group-emoji-option.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.group-emoji-option:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.group-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.group-rename-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.group-rename-actions {
+  display: flex;
+  gap: 0.5rem;
+}

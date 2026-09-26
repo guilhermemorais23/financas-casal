@@ -3,6 +3,7 @@ import { auth, db } from "../db/firestore";
 import { isAdminEmail } from "../modules/admin/admin.service";
 import { getAppSettings } from "../modules/settings/appSettings";
 import type { AuthenticatedUser } from "../types/express";
+import { parseGroupIdHeader, runWithActiveGroup } from "../utils/activeGroup";
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
@@ -46,7 +47,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       // Sem conseguir ler a configuração, não trava ninguém.
     }
   }
-  next();
+  // Grupo aberto no app (quem está em mais de um grupo). Só é usado depois
+  // de requireGroupId conferir que a pessoa é membro dele.
+  const activeGroupId = parseGroupIdHeader(req.header("x-group-id"));
+  req.activeGroupId = activeGroupId;
+  runWithActiveGroup(activeGroupId, next);
 }
 
 // "Visto por último" (users.lastSeenAt), no máximo uma gravação por pessoa

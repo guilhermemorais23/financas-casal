@@ -7,6 +7,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency } from "../utils/format";
 import { Icon } from "../components/Icon";
+import { DEFAULT_GROUP_EMOJI, DEFAULT_GROUP_NAME, groupLabel, useMyGroups } from "../components/GroupSwitcher";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ImportRulesCard } from "../components/ImportRulesCard";
 import { ImportStatementModal } from "../components/ImportStatementModal";
@@ -26,6 +27,7 @@ interface MemberRow {
 }
 
 interface GroupResponse {
+  group: { id: string; nickname: string | null; emoji: string | null };
   accounts: AccountRow[];
   members: MemberRow[];
   pendingInviteToken: string | null;
@@ -76,6 +78,11 @@ export function AccountPage() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importsDone, setImportsDone] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
+  const [groupNameInput, setGroupNameInput] = useState("");
+  const [groupEmojiInput, setGroupEmojiInput] = useState("");
+  const { groups: myGroups, reload: reloadMyGroups } = useMyGroups();
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isRevokingSessions, setIsRevokingSessions] = useState(false);
@@ -248,11 +255,40 @@ export function AccountPage() {
     }
   }
 
+  function startRename() {
+    setGroupNameInput(group?.group.nickname ?? "");
+    setGroupEmojiInput(group?.group.emoji ?? "");
+    setIsRenaming(true);
+  }
+
+  async function handleRename(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setIsSavingGroup(true);
+    try {
+      await apiRequest("/groups/me", {
+        method: "PATCH",
+        token,
+        body: { name: groupNameInput, emoji: groupEmojiInput },
+      });
+      setIsRenaming(false);
+      showToast("Grupo atualizado");
+      await Promise.all([load(), reloadMyGroups()]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar o grupo");
+    } finally {
+      setIsSavingGroup(false);
+    }
+  }
+
   async function handleLeaveGroup() {
+    const otherGroups = myGroups.length > 1;
     const confirmed = await confirm({
-      title: "Desvincular sua conta?",
-      body: "Você continua usando o app individualmente e pode criar ou entrar em outro grupo depois.",
-      confirmLabel: "Desvincular",
+      title: `Sair de ${groupLabel(group?.group)}?`,
+      body: otherGroups
+        ? "Seus outros grupos continuam como estão. Nada deste grupo é apagado; quem fica nele continua vendo tudo."
+        : "Você continua usando o app individualmente e pode criar ou entrar em outro grupo depois.",
+      confirmLabel: "Sair do grupo",
     });
     if (!confirmed) return;
 
@@ -261,7 +297,9 @@ export function AccountPage() {
     try {
       await apiRequest("/groups/leave", { method: "POST", token });
       await refreshUser();
-      navigate("/group-setup");
+      // Com outros grupos, o app abre o grupo padrão; sem nenhum, a tela
+      // de criar ou entrar num grupo (ProtectedRoute leva pra lá).
+      navigate("/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível desvincular a conta");
       setIsLeaving(false);
@@ -364,7 +402,53 @@ export function AccountPage() {
         )}
 
         <div className="card">
-          <p className="card-title">Grupo</p>
+          {isRenaming ? (
+            <form onSubmit={handleRename} className="group-rename-form">
+              <div className="field">
+                <label htmlFor="group-rename-name">Nome do grupo</label>
+                <input
+                  id="group-rename-name"
+                  value={groupNameInput}
+                  onChange={(e) => setGroupNameInput(e.target.value)}
+                  placeholder={DEFAULT_GROUP_NAME}
+                  maxLength={40}
+                  autoFocus
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="group-rename-emoji">Ícone (emoji)</label>
+                <input
+                  id="group-rename-emoji"
+                  value={groupEmojiInput}
+                  onChange={(e) => setGroupEmojiInput(e.target.value)}
+                  placeholder={DEFAULT_GROUP_EMOJI}
+                  maxLength={8}
+                />
+              </div>
+              <div className="group-rename-actions">
+                <button type="submit" className="btn btn-primary" disabled={isSavingGroup}>
+                  {isSavingGroup ? "Salvando..." : "Salvar"}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setIsRenaming(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="group-card-head">
+              <p className="card-title">
+                {group.group.emoji || DEFAULT_GROUP_EMOJI} {groupLabel(group.group)}
+              </p>
+              <button type="button" className="btn-icon" title="Renomear grupo" onClick={startRename}>
+                <Icon name="pencil" />
+              </button>
+            </div>
+          )}
+          {myGroups.length > 1 && (
+            <p className="card-subtitle">
+              Você está em {myGroups.length} grupos. Quem está aqui não vê os outros; troque pelo nome do grupo no topo.
+            </p>
+          )}
           <ul className="member-list">
             {[...group.members]
               .sort((a, b) => (a.id === user?.id ? -1 : b.id === user?.id ? 1 : a.id.localeCompare(b.id)))
@@ -678,7 +762,7 @@ export function AccountPage() {
         </button>
 
         <button type="button" className="btn btn-ghost danger-text" onClick={handleLeaveGroup} disabled={isLeaving}>
-          {isLeaving ? "Desvinculando..." : "Desvincular conta do grupo"}
+          {isLeaving ? "Saindo..." : `Sair do grupo ${groupLabel(group.group)}`}
         </button>
 
         <div className="card danger-zone">
