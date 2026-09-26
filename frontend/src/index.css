@@ -8458,3 +8458,64 @@ select {
   justify-content: space-between;
   gap: 0.75rem;
 }
+
+/* Metas: link pras cotações (a tela saiu do menu). */
+.goals-quotes-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+
+.goals-quotes-link .icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* A pagar: escolher entre contas fixas e parceladas. */
+.payables-switch {
+  width: 100%;
+}
+
+/* Painel de conta nova: começar pelo extrato. */
+.first-import {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  border: 1.5px solid var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.first-import-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.first-import-icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.first-import-text {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.first-import-text .card-title,
+.first-import-text .card-subtitle {
+  margin: 0;
+}
+
+.first-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

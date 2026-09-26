@@ -43,7 +43,8 @@ interface RecurringBillRow {
   lastGeneratedMonth: string | null;
 }
 
-export function RecurringBillsPage() {
+// `embedded`: dentro da aba "A pagar" (sem o próprio AppLayout e abas).
+export function RecurringBillsPage({ embedded = false }: { embedded?: boolean }) {
   const { user, token } = useAuth();
   const { showToast } = useToast();
   const confirm = useConfirm();
@@ -294,10 +295,8 @@ export function RecurringBillsPage() {
   // Sem nenhuma conta ainda, o formulário já aparece aberto.
   const isFormOpen = showForm || (bills !== null && bills.length === 0);
 
-  return (
-    <AppLayout>
-      <div className="page-stack">
-        <BillsTabs />
+  const content = (
+    <>
         <div className="page-title-row">
           <h1>Contas fixas</h1>
           <button
@@ -457,6 +456,15 @@ export function RecurringBillsPage() {
           </form>
         </div>
         )}
+    </>
+  );
+
+  if (embedded) return content;
+  return (
+    <AppLayout>
+      <div className="page-stack">
+        <BillsTabs />
+        {content}
       </div>
     </AppLayout>
   );

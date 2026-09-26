@@ -44,7 +44,6 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     label: "Planejar",
     items: [
       { to: "/goals", label: "Metas", icon: "target" },
-      { to: "/investments", label: "Investimentos", icon: "trend" },
       { to: "/shopping", label: "Lista de compras", icon: "cart" },
     ],
   },
@@ -71,12 +70,12 @@ const ADMIN_SUBLINKS = [
 const MORE_TILES: NavItem[] = [
   { to: "/reports", label: "Relatórios", icon: "chart" },
   { to: "/goals", label: "Metas", icon: "target" },
-  { to: "/investments", label: "Investir", icon: "trend" },
   { to: "/shopping", label: "Compras", icon: "cart" },
 ];
 
-const BILLS_PATHS = BILLS_TABS.map((tab) => tab.to);
-const MORE_PATHS = [...MORE_TILES.map((tile) => tile.to), "/account", "/admin"];
+const BILLS_PATHS = [...BILLS_TABS.map((tab) => tab.to), "/debts", "/recurring-bills"];
+// Cotações (Investimentos) saiu do menu mas a tela continua, pelo link em Metas.
+const MORE_PATHS = [...MORE_TILES.map((tile) => tile.to), "/investments", "/account", "/admin"];
 
 // Último valor dos widgets da barra lateral, por mês (vive enquanto o app
 // estiver aberto).

@@ -61,8 +61,7 @@ const GroupSetupPage = namedLazy(() => import("./pages/GroupSetupPage"), "GroupS
 const DashboardPage = namedLazy(() => import("./pages/DashboardPage"), "DashboardPage");
 const ParPage = namedLazy(() => import("./pages/ParPage"), "ParPage");
 const NewTransactionPage = namedLazy(() => import("./pages/NewTransactionPage"), "NewTransactionPage");
-const DebtsPage = namedLazy(() => import("./pages/DebtsPage"), "DebtsPage");
-const RecurringBillsPage = namedLazy(() => import("./pages/RecurringBillsPage"), "RecurringBillsPage");
+const PayablesPage = namedLazy(() => import("./pages/PayablesPage"), "PayablesPage");
 const CardsPage = namedLazy(() => import("./pages/CardsPage"), "CardsPage");
 const GoalsPage = namedLazy(() => import("./pages/GoalsPage"), "GoalsPage");
 const ReportsPage = namedLazy(() => import("./pages/ReportsPage"), "ReportsPage");
@@ -120,22 +119,18 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            {/* Dívidas e Contas fixas agora ficam juntas em "A pagar"; os
+                endereços antigos continuam valendo. */}
             <Route
-              path="/debts"
+              path="/a-pagar"
               element={
                 <ProtectedRoute requireGroup>
-                  <DebtsPage />
+                  <PayablesPage />
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/recurring-bills"
-              element={
-                <ProtectedRoute requireGroup>
-                  <RecurringBillsPage />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/debts" element={<Navigate to="/a-pagar?aba=dividas" replace />} />
+            <Route path="/recurring-bills" element={<Navigate to="/a-pagar?aba=fixas" replace />} />
             <Route
               path="/cards"
               element={

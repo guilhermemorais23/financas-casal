@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { NewGoalModal } from "../components/NewGoalModal";
@@ -197,6 +198,11 @@ export function GoalsPage() {
           );
         })}
       </div>
+
+      {/* Cotações saíram do menu (não é o dinheiro do casal), mas a tela continua. */}
+      <Link to="/investments" className="link goals-quotes-link">
+        <Icon name="trend" /> Ver cotações do mercado (Ibovespa e ações)
+      </Link>
 
       {isCreating && <NewGoalModal onClose={() => setIsCreating(false)} onCreated={loadGoals} />}
     </AppLayout>

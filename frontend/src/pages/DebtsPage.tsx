@@ -37,7 +37,8 @@ interface DebtRow {
   remainingCount: number;
 }
 
-export function DebtsPage() {
+// `embedded`: dentro da aba "A pagar" (sem o próprio AppLayout e abas).
+export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
   const { user, token } = useAuth();
   const { showToast } = useToast();
   const confirm = useConfirm();
@@ -238,11 +239,8 @@ export function DebtsPage() {
   const jointDebts = useMemo(() => debts?.filter((d) => d.scope === "joint") ?? [], [debts]);
   const personalDebts = useMemo(() => debts?.filter((d) => d.scope === "personal") ?? [], [debts]);
 
-  return (
+  const content = (
     <>
-      <AppLayout>
-      <div className="page-stack">
-        <BillsTabs />
         <div className="card form-card">
           <h1>Dívidas</h1>
           <p className="card-subtitle">
@@ -384,8 +382,21 @@ export function DebtsPage() {
             <div className="page-stack">{personalDebts.map(renderDebtCard)}</div>
           )}
         </div>
-      </div>
-      </AppLayout>
+    </>
+  );
+
+  return (
+    <>
+      {embedded ? (
+        content
+      ) : (
+        <AppLayout>
+          <div className="page-stack">
+            <BillsTabs />
+            {content}
+          </div>
+        </AppLayout>
+      )}
 
       {editingDebt && (
         <EditDebtModal debt={editingDebt} onClose={() => setEditingDebt(null)} onSaved={load} />
