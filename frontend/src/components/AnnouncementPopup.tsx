@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { isWelcomeTourPending } from "../utils/welcomeTour";
+import { isWelcomeTourOpen, isWelcomeTourPending, subscribeWelcomeTour } from "../utils/welcomeTour";
 import { Icon, type IconName } from "./Icon";
 
 export interface Announcement {
@@ -66,7 +66,8 @@ export function AnnouncementPopup() {
   const primaryRef = useRef<HTMLButtonElement>(null);
 
   const hiddenHere = HIDDEN_ON.some((prefix) => location.pathname.startsWith(prefix));
-  const tourPending = !!user && isWelcomeTourPending(user.id);
+  const tourOpen = useSyncExternalStore(subscribeWelcomeTour, () => !!user && isWelcomeTourOpen(user.id));
+  const tourPending = !!user && (tourOpen || isWelcomeTourPending(user));
 
   // Busca uma vez por conta, na primeira tela em que o pop-up pode aparecer
   // (e depois que a apresentação de boas-vindas foi fechada).

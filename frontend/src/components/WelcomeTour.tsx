@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { useLocation } from "react-router-dom";
+import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { isWelcomeTourPending, markWelcomeTourDone } from "../utils/welcomeTour";
+import { isWelcomeTourPending, markWelcomeTourShown, setWelcomeTourOpen } from "../utils/welcomeTour";
 import { BrandMark } from "./Brand";
 import { Icon, type IconName } from "./Icon";
 
@@ -25,7 +26,7 @@ const SLIDES: Slide[] = [
   {
     icon: "heart",
     title: "Como funciona",
-    text: "Monte seu grupo, chame as pessoas por um link e lance os gastos pelo botão +.",
+    text: "Monte seu grupo, chame as pessoas por um link e lance os gastos pelo botão +. Ou comece importando o extrato do banco.",
     bullets: [
       "Nossa Conta e a conta pessoal de cada um",
       "Contas fixas e faturas com aviso por email",
@@ -34,28 +35,13 @@ const SLIDES: Slide[] = [
   },
   {
     icon: "home",
-    tag: "Novidade",
     title: "Painel que avisa",
     text: "Logo no topo: quanto você tem hoje, quanto dá pra gastar por dia e o que vence nos próximos 7 dias.",
     bullets: ["Faturas, parcelas e contas fixas da semana", "Atalhos pra lançar em um toque", "Aviso por email antes de vencer"],
   },
   {
-    icon: "coin",
-    tag: "Novidade",
-    title: "Quem te deve, num lugar só",
-    text: "Em Contas > Empréstimos: quanto te devem, quanto você deve e quanto é seu de verdade.",
-    bullets: ["Com ou sem prazo pra devolver", "Juros por mês, se quiser", "Não conta como gasto"],
-  },
-  {
-    icon: "chat",
-    tag: "Novidade",
-    title: "Fale com a gente",
-    text: "Em Mais > Fale com a gente você manda ideia, problema ou elogio e recebe a resposta ali mesmo, como num chat.",
-  },
-  {
     icon: "spark",
-    tag: "Novidade",
-    title: "Assistente do mês",
+    title: "Assistente",
     text: "Pergunte \"como está meu mês?\" ou \"o que vence essa semana?\". Também dá pra lançar escrevendo \"gastei 50 no mercado\".",
   },
 ];
@@ -64,24 +50,39 @@ const SLIDES: Slide[] = [
 // the "Conta criada!" moment on /register) and public pages.
 const HIDDEN_ON = ["/login", "/register", "/privacidade", "/termos", "/r/", "/invite/"];
 
-// Aparece uma vez por edição pra toda conta logada (nova ou antiga -- ver
-// utils/welcomeTour.ts): pra que serve o app e o que tem de novo, dá pra
-// arrastar.
+// Aparece uma vez só, pra conta recém-criada (ver utils/welcomeTour.ts): pra
+// que serve o app, dá pra arrastar.
 export function WelcomeTour() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const location = useLocation();
   const [dismissedFor, setDismissedFor] = useState<string | null>(null);
+  // Guardado ao abrir: a marca de "já vista" vai pro servidor na hora, e a
+  // apresentação continua aberta até a pessoa fechar.
+  const [shownFor, setShownFor] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
 
   const hiddenHere = HIDDEN_ON.some((prefix) => location.pathname.startsWith(prefix));
-  const open = !!user && !hiddenHere && dismissedFor !== user.id && isWelcomeTourPending(user.id);
+  const open =
+    !!user && !hiddenHere && dismissedFor !== user.id && (shownFor === user.id || isWelcomeTourPending(user));
   const isLast = index === SLIDES.length - 1;
+
+  useEffect(() => {
+    if (!open || !user || shownFor === user.id) return;
+    setShownFor(user.id);
+    markWelcomeTourShown(user.id);
+    void apiRequest("/me/welcome-seen", { method: "POST", token }).catch(() => {
+      // Sem rede: a marca local segura neste aparelho.
+    });
+  }, [open, user, token, shownFor]);
+
+  useEffect(() => {
+    setWelcomeTourOpen(open && user ? user.id : null);
+  }, [open, user]);
 
   function close() {
     if (!user) return;
-    markWelcomeTourDone(user.id);
     setDismissedFor(user.id);
   }
 

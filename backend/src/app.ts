@@ -29,6 +29,7 @@ import {
   bootstrapHandler,
   deleteAccountHandler,
   logLoginEventHandler,
+  welcomeSeenHandler,
   meHandler,
   revokeSessionsHandler,
   updateProfileHandler,
@@ -129,6 +130,7 @@ export function createApp() {
   app.get("/api/me", requireAuth, asyncHandler(meHandler));
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));
   app.post("/api/me/login-event", requireAuth, asyncHandler(logLoginEventHandler));
+  app.post("/api/me/welcome-seen", requireAuth, asyncHandler(welcomeSeenHandler));
   app.patch("/api/me", requireAuth, asyncHandler(updateProfileHandler));
   app.delete("/api/me", requireAuth, asyncHandler(deleteAccountHandler));
   app.post("/api/me/revoke-sessions", requireAuth, asyncHandler(revokeSessionsHandler));

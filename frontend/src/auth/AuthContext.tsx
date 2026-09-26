@@ -31,6 +31,8 @@ export interface AuthUser {
   // maintenance é a mensagem do modo manutenção (null = desligado).
   billingEnabled?: boolean;
   maintenance?: string | null;
+  // Conta recém-criada que ainda não viu a apresentação de boas-vindas.
+  welcomePending?: boolean;
 }
 
 interface AuthContextValue {
