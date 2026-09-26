@@ -8007,6 +8007,44 @@ select {
   font-weight: 600;
 }
 
+.import-suggest {
+  display: grid;
+  gap: var(--imp-space-2);
+  padding: var(--imp-box-pad);
+  border-radius: var(--radius);
+  background: var(--color-primary-soft);
+  font-size: var(--imp-text-sm);
+}
+
+.import-suggest p {
+  margin: 0;
+}
+
+.import-suggest p .icon {
+  width: 16px;
+  height: 16px;
+  margin-right: var(--imp-space-1);
+  vertical-align: -3px;
+}
+
+.import-suggest .btn {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.import-suggest small {
+  color: var(--color-text-muted);
+  font-size: var(--imp-text-xs);
+}
+
+/* Sugestão da IA: contorno na cor principal até a pessoa confirmar. */
+.import-chip.suggested {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
 .import-mirror {
   display: grid;
   gap: var(--imp-space-2);

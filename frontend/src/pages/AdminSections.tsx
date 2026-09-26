@@ -935,6 +935,18 @@ interface Insights {
   retention: { cohort: number; returned: number };
   funnel: { accounts: number; inGroup: number; inPairedGroup: number; payingGroups: number | null };
   firestore: { reads: number; writes: number; readLimit: number; writeLimit: number; countingSince: number; counterInstalled: boolean };
+  ai?: {
+    month: string;
+    model: string;
+    configured: boolean;
+    people: number;
+    messages: number;
+    imports: number;
+    atLimit: number;
+    limits: { message: number; import: number };
+    costBrl: number;
+    costPerPersonBrl: number;
+  };
   settings: { billingEnabled: boolean; maintenance: { enabled: boolean; message: string } };
 }
 
@@ -990,7 +1002,7 @@ export function AdminInsights() {
   }
 
   if (!data) return null;
-  const { activity, retention, funnel, firestore, settings } = data;
+  const { activity, retention, funnel, firestore, settings, ai } = data;
   const steps = [
     { label: "Criaram conta", value: funnel.accounts },
     { label: "Entraram num grupo", value: funnel.inGroup },
@@ -1063,6 +1075,36 @@ export function AdminInsights() {
         </div>
       </div>
 
+      {ai && (
+        <div className="card">
+          <p className="card-title">IA este mês</p>
+          <p className="card-subtitle">
+            {ai.configured ? `Modelo ${ai.model}.` : "Chave da IA não configurada no servidor."} Custo é estimativa pelos tokens; a conta de verdade é a do Google.
+          </p>
+          <div className="stat-row wrap">
+            <div className="stat-box">
+              <p className="label">Custo estimado</p>
+              <p className="value-sm">{ai.costBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+            </div>
+            <div className="stat-box">
+              <p className="label">Por pessoa</p>
+              <p className="value-sm">{ai.costPerPersonBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+            </div>
+            <div className="stat-box">
+              <p className="label">Pessoas usando</p>
+              <p className="value-sm">{ai.people}</p>
+            </div>
+            <div className="stat-box">
+              <p className="label">No limite</p>
+              <p className="value-sm">{ai.atLimit}</p>
+            </div>
+          </div>
+          <p className="card-subtitle">
+            {ai.messages.toLocaleString("pt-BR")} mensagens e {ai.imports.toLocaleString("pt-BR")} importações com IA. Limite por pessoa:{" "}
+            {ai.limits.message} mensagens e {ai.limits.import} importações por mês.
+          </p>
+        </div>
+      )}
       <div className="card">
         <p className="card-title">Modo manutenção</p>
         <p className="card-subtitle">

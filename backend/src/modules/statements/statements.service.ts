@@ -1,7 +1,10 @@
 import { fromCents } from "../../utils/money";
-import { BANKS, parsePdfStatement, type Bank } from "../../utils/pdfStatement";
+import { BANKS, parsePdfStatement, type Bank, type PdfAiOptions } from "../../utils/pdfStatement";
 import { StatementParseError, cleanStatementDescription, parseDate, parseStatement, type ParsedStatementRow } from "../../utils/statementParser";
-import { categoryIsVisibleTo } from "../categories/categories.repository";
+import { categoryIsVisibleTo, findVisibleCategories } from "../categories/categories.repository";
+import { recordAiTokens, reserveAi } from "../aiUsage/aiUsage";
+import { logError } from "../../utils/errorLog";
+import { suggestCategories, type Suggestion } from "./suggestCategories";
 import { deleteRule, findRulesByGroup, normalizeStatementName, upsertRules } from "./importRules.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { createTransaction } from "../transactions/transactions.service";
@@ -42,6 +45,8 @@ export interface PreviewGroup {
   count: number;
   total: string;
   rowIndexes: number[];
+  // Sugestão da IA pra pergunta nova (a pessoa confirma).
+  suggestion?: Suggestion | null;
   // Resposta guardada de uma importação anterior (null = pergunta nova).
   rule: { categoryId: string | null; notExpense: boolean } | null;
 }
@@ -75,11 +80,11 @@ function normalizeDescription(value: string): string {
 
 const duplicateKey = (date: string, cents: number, type: string) => `${date}|${cents}|${type}`;
 
-async function readInput(input: StatementInput): Promise<{ format: "ofx" | "csv" | "pdf"; rows: ParsedStatementRow[]; pdf: PdfCheck | null }> {
+async function readInput(input: StatementInput, ai?: PdfAiOptions): Promise<{ format: "ofx" | "csv" | "pdf"; rows: ParsedStatementRow[]; pdf: PdfCheck | null }> {
   if (typeof input.pdfBase64 === "string" && input.pdfBase64) {
     const data = new Uint8Array(Buffer.from(input.pdfBase64, "base64"));
     const chosen = BANKS.includes(input.bank as Bank) ? (input.bank as Bank) : null;
-    const read = await parsePdfStatement(data, typeof input.password === "string" ? input.password : undefined, chosen);
+    const read = await parsePdfStatement(data, typeof input.password === "string" ? input.password : undefined, chosen, ai);
     return {
       format: "pdf",
       rows: read.rows,
@@ -112,7 +117,24 @@ async function readInput(input: StatementInput): Promise<{ format: "ofx" | "csv"
 // category.
 export async function previewStatement(userId: string, input: StatementInput) {
   const groupId = await requireGroupId(userId);
-  const { format, rows, pdf } = await readInput(input);
+  // IA na importação (ler PDF de banco sem leitor próprio e sugerir as
+  // categorias): conta uma vez só na cota do mês, na primeira vez que for
+  // usada nesta importação. A rota já exige Premium.
+  const apiKey = process.env.GEMINI_API_KEY;
+  let aiAllowed: boolean | null = null;
+  let aiLimitReached = false;
+  const allowAi = async () => {
+    if (!apiKey) return false;
+    if (aiAllowed === null) {
+      const quota = await reserveAi(userId, "import");
+      aiAllowed = quota.allowed;
+      aiLimitReached = !quota.allowed;
+    }
+    return aiAllowed;
+  };
+  const onTokens = (tokens: { input: number; output: number }) => void recordAiTokens(userId, tokens);
+
+  const { format, rows, pdf } = await readInput(input, { allow: allowAi, onTokens });
 
   // Some banks export purchases as positive numbers. With no negative row
   // at all there is no way to tell, so treat everything as an expense and
@@ -191,7 +213,33 @@ export async function previewStatement(userId: string, input: StatementInput) {
     .sort((a, b) => Number(b.transactionType === "income") - Number(a.transactionType === "income") || b.cents - a.cents)
     .map(({ cents: _cents, ...group }) => group);
 
-  return { format, assumedAllExpenses, rows: preview, groups, pdf };
+  // Sugestão de categoria pros nomes novos (sem resposta guardada e sem
+  // categoria já usada antes pra essa descrição).
+  let suggested = 0;
+  const open = groups.filter((group) => !group.rule && group.rowIndexes.every((index) => !preview[index].suggestedCategoryId));
+  if (open.length > 0 && (await allowAi())) {
+    try {
+      const categories = (await findVisibleCategories(groupId)).map((c) => ({ id: c.id, name: c.name }));
+      const suggestions = await suggestCategories(
+        open.map((g) => ({ key: g.key, name: g.name, kind: g.kind, transactionType: g.transactionType, total: g.total })),
+        categories,
+        apiKey!,
+        onTokens
+      );
+      for (const group of groups) {
+        const suggestion = suggestions.get(`${group.transactionType}:${group.key}`);
+        if (suggestion) {
+          (group as PreviewGroup).suggestion = suggestion;
+          suggested++;
+        }
+      }
+    } catch (err) {
+      // Sem sugestão a importação segue igual: a pessoa responde tudo.
+      logError("statement-suggest", err, { userId });
+    }
+  }
+
+  return { format, assumedAllExpenses, rows: preview, groups, pdf, ai: { suggested, limitReached: aiLimitReached } };
 }
 
 export interface ImportItem {

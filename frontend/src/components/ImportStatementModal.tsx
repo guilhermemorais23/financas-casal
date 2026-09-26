@@ -30,6 +30,8 @@ interface PreviewGroup {
   total: string;
   rowIndexes: number[];
   rule: { categoryId: string | null; notExpense: boolean } | null;
+  // Sugestão da IA (a pessoa confirma).
+  suggestion?: { categoryId: string | null; notExpense: boolean } | null;
 }
 
 interface PdfCheck {
@@ -48,6 +50,7 @@ interface PreviewResponse {
   rows: PreviewRow[];
   groups: PreviewGroup[];
   pdf: PdfCheck | null;
+  ai?: { suggested: number; limitReached: boolean };
 }
 
 interface AccountRow {
@@ -159,6 +162,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   // janela já rola; lista com rolagem própria dentro dela fica cortada).
   const [showAllUnmatched, setShowAllUnmatched] = useState(false);
   const [showAllRules, setShowAllRules] = useState(false);
+  // "Aceitar as sugestões": os nomes sugeridos saem da fila de perguntas
+  // (continuam no resumo pra mudar).
+  const [acceptedSuggestions, setAcceptedSuggestions] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -194,12 +200,13 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   // aqui garante mesmo que a lista mude).
   const questions = useMemo(
     () =>
-      (preview?.groups.filter((group) => !group.rule) ?? [])
+      (preview?.groups.filter((group) => !group.rule && !(acceptedSuggestions && group.suggestion)) ?? [])
         .map((group, order) => ({ group, order }))
         .sort((a, b) => Number(b.group.transactionType === "income") - Number(a.group.transactionType === "income") || a.order - b.order)
         .map(({ group }) => group),
-    [preview]
+    [preview, acceptedSuggestions]
   );
+  const suggestedGroups = preview?.groups.filter((group) => !group.rule && group.suggestion) ?? [];
   const incomeQuestions = questions.filter((group) => group.transactionType === "income").length;
 
   // Ida e volta: mesmo nome, mesmo valor, um entrou e o outro saiu com até 3
@@ -230,12 +237,29 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     return pairs;
   }, [preview]);
 
+  function acceptAllSuggestions() {
+    setAnswers((all) => {
+      const next = { ...all };
+      for (const group of suggestedGroups) {
+        const key = groupKey(group);
+        if (next[key]?.status === "answered") continue;
+        next[key] = { ...next[key], status: "answered", fromRule: false, categoryId: group.suggestion!.categoryId, notExpense: group.suggestion!.notExpense };
+      }
+      return next;
+    });
+    setAcceptedSuggestions(true);
+    setQuestionIndex(0);
+    setShowDescription(false);
+    if (preview && preview.groups.every((group) => group.rule || group.suggestion)) setStage("summary");
+  }
+
   function startReview(result: PreviewResponse) {
     setPreview(result);
     const initial: Record<string, Answer> = {};
     for (const group of result.groups) initial[`${group.transactionType}:${group.key}`] = blankAnswer(group);
     setAnswers(initial);
     setExcluded(new Set());
+    setAcceptedSuggestions(false);
     setQuestionIndex(0);
     setShowDescription(false);
     setStage(result.groups.some((group) => !group.rule) ? "questions" : "summary");
@@ -657,6 +681,20 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       {stage === "questions" && current && currentAnswer && (
         <>
           {questionIndex === 0 && !returnToSummary && pdfBanner}
+          {questionIndex === 0 && !returnToSummary && !acceptedSuggestions && suggestedGroups.length > 0 && (
+            <div className="import-suggest">
+              <p>
+                <Icon name="check" /> O PAR. sugeriu a categoria de <strong>{suggestedGroups.length}</strong> de {questions.length} nomes.
+              </p>
+              <button type="button" className="btn btn-primary btn-sm" onClick={acceptAllSuggestions}>
+                Aceitar as sugestões e responder só {questions.length - suggestedGroups.length === 0 ? "o resumo" : `os outros ${questions.length - suggestedGroups.length}`}
+              </button>
+              <small>Dá pra mudar qualquer uma no resumo. Ou siga as perguntas: a sugestão vem marcada.</small>
+            </div>
+          )}
+          {questionIndex === 0 && !returnToSummary && preview?.ai?.limitReached && (
+            <p className="import-note">Você usou as importações com IA deste mês, então desta vez não há sugestões. Elas voltam no dia 1º.</p>
+          )}
           {questionIndex === 0 && !returnToSummary && (
             <p className="import-summary">
               <strong>{preview!.rows.length}</strong> lançamentos em {fileName} viraram <strong>{preview!.groups.length}</strong>{" "}
@@ -774,6 +812,19 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               </div>
             )}
             <p className="import-question-ask">O que é isso?</p>
+            {current.suggestion && currentAnswer.status !== "answered" && (
+              <p className="import-hint">
+                Sugestão do PAR.:{" "}
+                <strong>
+                  {current.suggestion.notExpense
+                    ? current.transactionType === "income"
+                      ? "Não é entrada"
+                      : "Não é gasto"
+                    : categoryLabel(current.suggestion.categoryId)}
+                </strong>
+                . Toque pra confirmar ou escolha outra.
+              </p>
+            )}
             <div className="chip-row import-chips">
               {orderedCategories(current.transactionType).map((category) => (
                 <button
@@ -781,6 +832,10 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                   type="button"
                   className={`import-chip${
                     currentAnswer.status === "answered" && !currentAnswer.notExpense && currentAnswer.categoryId === category.id ? " active" : ""
+                  }${
+                    currentAnswer.status !== "answered" && current.suggestion && !current.suggestion.notExpense && current.suggestion.categoryId === category.id
+                      ? " suggested"
+                      : ""
                   }`}
                   onClick={() => choose(current, { categoryId: category.id, notExpense: false })}
                 >
@@ -790,7 +845,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               ))}
               <button
                 type="button"
-                className={`import-chip is-not${currentAnswer.status === "answered" && currentAnswer.notExpense ? " active" : ""}`}
+                className={`import-chip is-not${currentAnswer.status === "answered" && currentAnswer.notExpense ? " active" : ""}${
+                  currentAnswer.status !== "answered" && current.suggestion?.notExpense ? " suggested" : ""
+                }`}
                 onClick={() => choose(current, { categoryId: null, notExpense: true })}
                 title="Fatura do cartão, aplicação, transferência entre suas contas: não entra"
               >
