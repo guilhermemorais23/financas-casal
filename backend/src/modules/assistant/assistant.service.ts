@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import type { Part } from "@google/generative-ai";
 import {
   consumeLinkCode,
@@ -28,8 +29,11 @@ import { answerFromSnapshot, brl, buildMonthSnapshot, parseQuickEntry, snapshotA
 
 export class AssistantNotConfiguredError extends Error {}
 
+// Código de vincular Telegram/WhatsApp: 8 letras/números sem os que se
+// confundem (0/O, 1/I), sorteados com crypto (Math.random é previsível).
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function randomCode(): string {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
+  return Array.from({ length: 8 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
 }
 
 // Codes expire quickly -- they only need to survive the few seconds between

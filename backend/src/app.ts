@@ -56,9 +56,40 @@ const apiLimiter = rateLimit({
   message: { error: "Muitas requisições. Tente novamente em alguns minutos." },
 });
 
+// Limites mais apertados onde uma rajada custa caro (PDF, IA) ou dá pra
+// tentar adivinhar algo (link público, código de convite).
+const heavyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas seguidas. Espere uns minutos e tente de novo." },
+});
+
+// Webhooks (Telegram, WhatsApp, Asaas) chegam sempre dos mesmos servidores
+// e já se autenticam por segredo/assinatura: não entram no limite por IP,
+// senão com muita gente usando as mensagens começariam a ser recusadas.
+const WEBHOOK_PATHS = new Set(["/assistant/telegram/webhook", "/assistant/whatsapp/webhook", "/billing/webhook"]);
+
+// PDF/IA (custam), link público e convite (dá pra tentar adivinhar),
+// mensagem de feedback (vira e-mail pro dono).
+export function isHeavyRequest(method: string, path: string): boolean {
+  if (method === "POST" && ["/statements/preview", "/assistant/chat", "/groups/accept", "/feedback"].includes(path)) return true;
+  return method === "GET" && path.startsWith("/public/shares/");
+}
+
 export function createApp() {
   const app = express();
   app.set("trust proxy", TRUST_PROXY);
+  app.disable("x-powered-by");
+  // Cabeçalhos básicos de proteção: não adivinhar tipo de arquivo, não abrir
+  // dentro de outro site, não vazar a URL pra fora.
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    next();
+  });
 
   // ALLOWED_ORIGIN unset (local dev) => allow any origin. Set it in
   // production to the real frontend URL(s), comma-separated, to stop
@@ -69,8 +100,19 @@ export function createApp() {
   // (base64 blows up ~33% over the raw image bytes).
   // Extrato em PDF vem em base64 (até 4MB de arquivo => ~5.4MB de JSON).
   app.use("/api/statements/preview", express.json({ limit: "6mb" }));
-  app.use(express.json({ limit: "1mb" }));
-  app.use("/api", apiLimiter);
+  // O webhook do WhatsApp precisa do corpo cru pra conferir a assinatura da Meta.
+  app.use(
+    express.json({
+      limit: "1mb",
+      verify: (req, _res, buf) => {
+        if ((req as { url?: string }).url?.startsWith("/api/assistant/whatsapp/webhook")) {
+          (req as unknown as { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+        }
+      },
+    })
+  );
+  app.use("/api", (req, res, next) => (WEBHOOK_PATHS.has(req.path) ? next() : apiLimiter(req, res, next)));
+  app.use("/api", (req, res, next) => (isHeavyRequest(req.method, req.path) ? heavyLimiter(req, res, next) : next()));
   app.use("/api", readCacheScope);
 
   // Unauthenticated on purpose -- this is what the keep-alive cron pings.
