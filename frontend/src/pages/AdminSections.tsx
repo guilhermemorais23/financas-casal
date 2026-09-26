@@ -317,9 +317,25 @@ interface AnnouncementDraft {
   bullets: string;
   ctaLabel: string;
   ctaPath: string;
-  audience: "all" | "user";
+  audience: Audience;
   targetUserId: string;
 }
+
+type Audience = "all" | "couples" | "solo" | "new" | "user";
+const AUDIENCE_LABEL: Record<Audience, string> = {
+  all: "Todo mundo",
+  couples: "Casais",
+  solo: "Quem usa sozinho",
+  new: "Contas novas",
+  user: "Uma pessoa",
+};
+// O que aparece na confirmação e na lista de enviados.
+const AUDIENCE_WHO: Record<Exclude<Audience, "user">, string> = {
+  all: "todo mundo",
+  couples: "os casais",
+  solo: "quem usa sozinho",
+  new: "as contas novas",
+};
 
 const EMPTY_DRAFT: AnnouncementDraft = {
   icon: "spark",
@@ -446,13 +462,15 @@ export function AdminAnnouncements() {
   async function handleSend(event: FormEvent) {
     event.preventDefault();
     if (missing) return;
-    const who = draft.audience === "all" ? "todo mundo" : target!.displayName || target!.email;
+    const who = draft.audience === "user" ? target!.displayName || target!.email : AUDIENCE_WHO[draft.audience];
     const ok = await confirm({
       title: `Mandar pra ${who}?`,
       body:
-        draft.audience === "all"
-          ? "O pop-up aparece uma vez pra cada pessoa, na próxima vez que ela abrir o app."
-          : "O pop-up aparece pra essa pessoa na próxima vez que ela abrir o app.",
+        draft.audience === "user"
+          ? "O pop-up aparece pra essa pessoa na próxima vez que ela abrir o app."
+          : draft.audience === "new"
+            ? "Aparece uma vez pra quem criou conta nos últimos 14 dias e pra quem criar daqui pra frente."
+            : "O pop-up aparece uma vez pra cada pessoa, na próxima vez que ela abrir o app.",
       confirmLabel: "Mandar",
       tone: "primary",
     });
@@ -517,12 +535,16 @@ export function AdminAnnouncements() {
         <div className="field">
           <span className="field-label">Pra quem</span>
           <div className="announce-row">
-            <button type="button" className={`chat-kind-pick${draft.audience === "all" ? " active" : ""}`} onClick={() => set("audience", "all")}>
-              Todo mundo
-            </button>
-            <button type="button" className={`chat-kind-pick${draft.audience === "user" ? " active" : ""}`} onClick={() => set("audience", "user")}>
-              Uma pessoa
-            </button>
+            {(Object.keys(AUDIENCE_LABEL) as Audience[]).map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`chat-kind-pick${draft.audience === value ? " active" : ""}`}
+                onClick={() => set("audience", value)}
+              >
+                {AUDIENCE_LABEL[value]}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -633,7 +655,7 @@ export function AdminAnnouncements() {
         </div>
 
         <button type="submit" className="btn btn-primary" disabled={!!missing || isSending}>
-          {isSending ? "Enviando..." : missing ?? (draft.audience === "all" ? "Mandar pra todo mundo" : `Mandar pra ${target?.displayName.split(" ")[0] || "essa pessoa"}`)}
+          {isSending ? "Enviando..." : missing ?? (draft.audience === "user" ? `Mandar pra ${target?.displayName.split(" ")[0] || "essa pessoa"}` : `Mandar pra ${AUDIENCE_WHO[draft.audience]}`)}
         </button>
       </form>
 
@@ -679,7 +701,8 @@ export function AdminAnnouncements() {
                 <span className="announce-sent-info">
                   <strong className="text-truncate">{a.title}</strong>
                   <small>
-                    {a.audience === "all" ? "Todo mundo" : `Pra ${a.targetName ?? "uma pessoa"}`} · {when(a.createdAt)} · visto por {a.seenCount}
+                    {a.audience === "user" ? `Pra ${a.targetName ?? "uma pessoa"}` : AUDIENCE_LABEL[a.audience]} · {when(a.createdAt)} · visto por {a.seenCount}
+                    {a.ctaPath ? ` · tocaram no botão ${a.clickCount ?? 0}` : ""}
                     {a.active ? "" : " · desativado"}
                   </small>
                 </span>

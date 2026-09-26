@@ -1,7 +1,10 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
 
-export type AnnouncementAudience = "all" | "user";
+// all = todo mundo que já tinha conta; couples/solo = grupo com 2+ pessoas ou
+// sozinho; new = contas criadas nos 14 dias antes do envio ou depois (dica de
+// começo); user = uma pessoa.
+export type AnnouncementAudience = "all" | "couples" | "solo" | "new" | "user";
 
 export interface Announcement {
   id: string;
@@ -18,11 +21,13 @@ export interface Announcement {
   targetName: string | null;
   active: boolean;
   seenCount: number;
+  // Quantos tocaram no botão do pop-up (uma vez por pessoa).
+  clickCount: number;
   createdAt: number;
   createdBy: string;
 }
 
-export type NewAnnouncement = Omit<Announcement, "id" | "active" | "seenCount" | "createdAt">;
+export type NewAnnouncement = Omit<Announcement, "id" | "active" | "seenCount" | "clickCount" | "createdAt">;
 
 // Um documento por comunicado; quem já viu fica em announcements/{id}/seen/{userId}.
 const col = db.collection("announcements");
@@ -43,6 +48,7 @@ function toAnnouncement(doc: FirebaseFirestore.DocumentSnapshot): Announcement {
     targetName: data.targetName ?? null,
     active: data.active ?? true,
     seenCount: data.seenCount ?? 0,
+    clickCount: data.clickCount ?? 0,
     createdAt: data.createdAt,
     createdBy: data.createdBy,
   };
@@ -50,7 +56,7 @@ function toAnnouncement(doc: FirebaseFirestore.DocumentSnapshot): Announcement {
 
 export async function insertAnnouncement(input: NewAnnouncement): Promise<Announcement> {
   const ref = col.doc();
-  const data = { ...input, active: true, seenCount: 0, createdAt: Date.now() };
+  const data = { ...input, active: true, seenCount: 0, clickCount: 0, createdAt: Date.now() };
   await ref.set(data);
   return { id: ref.id, ...data };
 }
@@ -83,15 +89,20 @@ export async function findSeenIds(announcementIds: string[], userId: string): Pr
   return new Set(docs.filter((doc) => doc.exists).map((doc) => doc.ref.parent.parent!.id));
 }
 
-// Idempotente: ver de novo (outra aba, outro aparelho) não conta duas vezes.
-export async function markSeen(id: string, userId: string): Promise<void> {
+// Idempotente: ver de novo (outra aba, outro aparelho) não conta duas vezes,
+// nem o clique no botão.
+export async function markSeen(id: string, userId: string, clicked = false): Promise<void> {
   const ref = col.doc(id);
   const seenRef = ref.collection("seen").doc(userId);
   await db.runTransaction(async (tx) => {
     const seen = await tx.get(seenRef);
-    if (seen.exists) return;
-    tx.set(seenRef, { at: Date.now() });
-    tx.update(ref, { seenCount: FieldValue.increment(1) });
+    const wasClicked = seen.data()?.clicked === true;
+    if (seen.exists && (wasClicked || !clicked)) return;
+    const updates: Record<string, FirebaseFirestore.FieldValue> = {};
+    if (!seen.exists) updates.seenCount = FieldValue.increment(1);
+    if (clicked) updates.clickCount = FieldValue.increment(1);
+    tx.set(seenRef, { at: seen.data()?.at ?? Date.now(), clicked: clicked || wasClicked });
+    tx.update(ref, updates);
   });
 }
 

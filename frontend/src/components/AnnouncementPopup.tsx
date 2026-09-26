@@ -14,11 +14,12 @@ export interface Announcement {
   bullets: string[];
   ctaLabel: string | null;
   ctaPath: string | null;
-  audience: "all" | "user";
+  audience: "all" | "couples" | "solo" | "new" | "user";
   targetUserId: string | null;
   targetName: string | null;
   active: boolean;
   seenCount: number;
+  clickCount?: number;
   createdAt: number;
 }
 
@@ -85,7 +86,7 @@ export function AnnouncementPopup() {
 
   function done(goTo?: string | null) {
     if (!current) return;
-    void apiRequest(`/announcements/${current.id}/seen`, { method: "POST", token }).catch(() => {});
+    void apiRequest(`/announcements/${current.id}/seen`, { method: "POST", token, body: { clicked: !!goTo } }).catch(() => {});
     setQueue((prev) => prev.slice(1));
     if (goTo) navigate(goTo);
   }

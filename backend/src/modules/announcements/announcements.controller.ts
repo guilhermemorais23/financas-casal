@@ -39,7 +39,7 @@ export async function listPendingHandler(req: Request, res: Response) {
 
 export async function markSeenHandler(req: Request, res: Response) {
   try {
-    await markAnnouncementSeen(String(req.params.id), req.user!.id);
+    await markAnnouncementSeen(String(req.params.id), req.user!.id, req.body?.clicked === true);
     res.status(204).end();
   } catch (err) {
     if (!notFound(err, res)) throw err;
