@@ -8344,3 +8344,25 @@ select {
   justify-content: space-between;
   gap: 0.75rem;
 }
+
+/* Importar: categoria própria de um lançamento dentro de um nome repetido. */
+.import-rows-detail li:has(.import-row-line) {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.import-row-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--imp-space-3);
+}
+
+.import-row-select {
+  padding: 0.4rem 0.8rem;
+  font-size: var(--imp-text-sm);
+}
+
+.import-rows-detail li.is-custom .import-row-select {
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}

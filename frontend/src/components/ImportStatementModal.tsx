@@ -75,6 +75,14 @@ interface Answer {
   descriptions: Record<number, string>;
 }
 
+// Uma linha do nome com resposta própria (ex.: no mercado, a compra que foi
+// só produto de limpeza vai pra Casa, não pra Alimentação). Não vira regra:
+// a próxima importação continua usando a resposta do nome.
+interface RowOverride {
+  categoryId: string | null;
+  notExpense: boolean;
+}
+
 type Stage = "file" | "questions" | "summary";
 
 type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "outro";
@@ -153,6 +161,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const [returnToSummary, setReturnToSummary] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
   const [showRows, setShowRows] = useState(false);
+  const [rowOverrides, setRowOverrides] = useState<Record<number, RowOverride>>({});
   // Linhas de ida e volta que a pessoa mandou não contar.
   const [excluded, setExcluded] = useState<Set<number>>(() => new Set());
   // Listas do resumo mostram os primeiros e abrem inteiras num toque (a
@@ -236,6 +245,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     for (const group of result.groups) initial[`${group.transactionType}:${group.key}`] = blankAnswer(group);
     setAnswers(initial);
     setExcluded(new Set());
+    setRowOverrides({});
     setQuestionIndex(0);
     setShowDescription(false);
     setStage(result.groups.some((group) => !group.rule) ? "questions" : "summary");
@@ -339,8 +349,19 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   function choose(group: PreviewGroup, patch: { categoryId: string | null; notExpense: boolean }) {
     patchAnswer(group, { ...patch, status: "answered", fromRule: false });
-    // Com a descrição aberta a pessoa ainda vai digitar; senão, próxima.
-    if (!showDescription) goNext();
+    // Com a descrição ou a lista de lançamentos aberta a pessoa ainda está
+    // mexendo; senão, próxima.
+    if (!showDescription && !showRows) goNext();
+  }
+
+  // "" = igual às outras do nome; "not" = não é gasto/entrada; senão o id.
+  function setRowCategory(index: number, value: string) {
+    setRowOverrides((all) => {
+      const next = { ...all };
+      if (value === "") delete next[index];
+      else next[index] = value === "not" ? { categoryId: null, notExpense: true } : { categoryId: value, notExpense: false };
+      return next;
+    });
   }
 
   function editFromSummary(group: PreviewGroup) {
@@ -413,13 +434,18 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       }
       const entry = answeredByRow.get(index);
       const answer = entry?.answer;
-      if (answer?.status === "answered" && answer.notExpense) {
+      const override = rowOverrides[index];
+      if (override ? override.notExpense : answer?.status === "answered" && answer.notExpense) {
         skippedNotExpense++;
         return;
       }
       const custom =
         answer?.descMode === "each" ? answer.descriptions[index]?.trim() : answer?.description.trim();
-      const categoryId = answer?.status === "answered" ? answer.categoryId : row.suggestedCategoryId;
+      const categoryId = override
+        ? override.categoryId
+        : answer?.status === "answered"
+          ? answer.categoryId
+          : row.suggestedCategoryId;
       const amount = Number(row.amount);
       if (row.transactionType === "income") incoming += amount;
       else outgoing += amount;
@@ -445,7 +471,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       }));
     const withoutCategory = unmatched.length;
     return { items, rules, incoming, outgoing, skippedNotExpense, skippedRoundTrip, withoutCategory, unmatched };
-  }, [preview, answers, includeDuplicates, excluded]);
+  }, [preview, answers, includeDuplicates, excluded, rowOverrides]);
 
 
   const duplicateCount = preview?.rows.filter((row) => row.isDuplicate).length ?? 0;
@@ -710,22 +736,49 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               </p>
             )}
             {showRows && current.count > 1 && (
-              <ul className="import-rows-detail">
-                {current.rowIndexes.map((index) => {
-                  const row = preview!.rows[index];
-                  return (
-                    <li key={index}>
-                      <span>
-                        {parseLocalDate(row.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                        {row.time && ` às ${row.time}`}
-                        {row.kind && <small> · {row.kind}</small>}
-                        {excluded.has(index) && <small> · ida e volta, não conta</small>}
-                      </span>
-                      <strong className={`transaction-amount ${row.transactionType}`}>{formatCurrency(Number(row.amount))}</strong>
-                    </li>
-                  );
-                })}
-              </ul>
+              <>
+                <p className="import-hint">
+                  Alguma foi diferente? Escolha a categoria só dela. As outras seguem a resposta abaixo.
+                </p>
+                <ul className="import-rows-detail">
+                  {current.rowIndexes.map((index) => {
+                    const row = preview!.rows[index];
+                    const override = rowOverrides[index];
+                    const value = !override ? "" : override.notExpense ? "not" : (override.categoryId ?? "");
+                    const sameLabel =
+                      currentAnswer.status === "answered" ? answerLabel(currentAnswer, current.transactionType) : "a resposta abaixo";
+                    return (
+                      <li key={index} className={override ? "is-custom" : undefined}>
+                        <div className="import-row-line">
+                          <span>
+                            {parseLocalDate(row.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                            {row.time && ` às ${row.time}`}
+                            {row.kind && <small> · {row.kind}</small>}
+                            {excluded.has(index) && <small> · ida e volta, não conta</small>}
+                          </span>
+                          <strong className={`transaction-amount ${row.transactionType}`}>{formatCurrency(Number(row.amount))}</strong>
+                        </div>
+                        <select
+                          id={`import-row-category-${index}`}
+                          className="import-row-select"
+                          value={value}
+                          onChange={(event) => setRowCategory(index, event.target.value)}
+                          aria-label={`Categoria do lançamento de ${row.date}`}
+                        >
+                          <option value="">Igual às outras ({sameLabel})</option>
+                          {orderedCategories(current.transactionType).map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.emoji ? `${category.emoji} ` : ""}
+                              {category.name}
+                            </option>
+                          ))}
+                          <option value="not">{current.transactionType === "income" ? "Não é entrada" : "Não é gasto"}</option>
+                        </select>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
             )}
             {mirror && (
               <div className="import-mirror">
@@ -980,6 +1033,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
           <ul className="import-rules import-flat">
             {(showAllRules ? preview.groups : preview.groups.slice(0, LIST_PREVIEW)).map((group) => {
               const answer = answers[groupKey(group)];
+              const customRows = group.rowIndexes.filter((index) => rowOverrides[index]).length;
               return (
                 <li key={groupKey(group)}>
                   <button type="button" onClick={() => editFromSummary(group)}>
@@ -989,6 +1043,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                         {group.transactionType === "income" ? "Entrou" : "Saiu"} · {group.count}× · {formatCurrency(Number(group.total))}
                         {group.kind && ` · ${group.kind}`}
                         {answer?.fromRule && " · já sabia"}
+                        {customRows > 0 && ` · ${customRows} com categoria própria`}
                       </small>
                     </span>
                     <span className={`import-rules-answer${answer?.status === "answered" ? "" : " muted"}`}>
@@ -1018,7 +1073,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
           <button type="button" className="btn btn-outline" onClick={goBack}>
             Voltar
           </button>
-          {showDescription ? (
+          {showDescription || showRows ? (
             <button type="button" className="btn btn-primary" onClick={goNext}>
               {currentAnswer?.status === "answered" ? "Próxima" : "Pular"}
             </button>
