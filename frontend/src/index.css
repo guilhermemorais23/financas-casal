@@ -8684,3 +8684,8 @@ select {
 .admin-imports-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); }
 .admin-imports-table .muted { color: var(--color-text-muted); font-size: 0.8rem; }
 .admin-imports-table tr.is-bad td { color: var(--color-danger-text); font-weight: 700; }
+
+.admin-user-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.admin-user-danger { display: grid; gap: 0.4rem; margin-top: 0.5rem; padding-top: 0.85rem; border-top: 1px solid var(--color-border); }
+.admin-user-danger-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.admin-user-danger-row input { flex: 1 1 14rem; min-width: 0; }

@@ -144,7 +144,7 @@ export async function sendWelcomeEmail(to: string, displayName: string): Promise
     "Bem-vindo(a) ao PAR.",
     `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
-        <h1 style="font-size: 22px;">Olá, ${displayName}!</h1>
+        <h1 style="font-size: 22px;">Olá, ${escapeHtml(displayName)}!</h1>
         <p>Seja bem-vindo(a) ao <strong>PAR.</strong> — finanças em grupo, sem atrito.</p>
         <p>Você já pode criar um grupo ou aceitar um convite, lançar suas primeiras transações e acompanhar tudo em tempo real.</p>
         <p style="margin-top: 24px;">Bons controles financeiros! 💰</p>
@@ -161,6 +161,23 @@ export async function sendReminderEmail(to: string, subject: string, bodyHtml: s
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
         ${bodyHtml}
         <p style="margin-top: 24px; font-size: 12px; color: #888;">PAR. — finanças em grupo, sem atrito.</p>
+      </div>
+    `
+  );
+}
+
+// Admin > Usuários: "Mandar email pra trocar a senha" (a pessoa pediu ajuda
+// porque não consegue entrar). O link é do Firebase e vale por pouco tempo.
+export async function sendPasswordResetEmail(to: string, displayName: string, link: string): Promise<EmailResult> {
+  return sendEmail(
+    to,
+    "Trocar a senha do PAR.",
+    `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+        <h1 style="font-size: 20px;">Oi, ${escapeHtml(displayName || "tudo bem")}!</h1>
+        <p>Você pediu ajuda pra entrar no PAR. Toque no botão pra criar uma senha nova:</p>
+        <p style="margin: 24px 0;"><a href="${escapeHtml(link)}" style="background:#6d54ec;color:#fff;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold;">Criar senha nova</a></p>
+        <p style="font-size: 13px; color: #666;">Se não foi você que pediu, é só ignorar este email: sua senha continua a mesma.</p>
       </div>
     `
   );

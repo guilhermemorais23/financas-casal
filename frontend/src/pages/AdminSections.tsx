@@ -1224,6 +1224,7 @@ export function AdminUsers() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1236,6 +1237,7 @@ export function AdminUsers() {
 
   async function open(id: string) {
     setDetail(null);
+    setDeleteConfirm("");
     try {
       setDetail(await apiRequest<AdminUserDetail>(`/admin/users/${id}`, { token }));
     } catch (err) {
@@ -1262,6 +1264,46 @@ export function AdminUsers() {
       setUsers((prev) => prev?.map((u) => (u.id === user.id ? { ...u, blocked: blocking } : u)) ?? prev);
     } catch (err) {
       showToast("Não foi possível", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function sendPasswordReset(user: AdminUserDetail) {
+    const ok = await confirm({
+      title: `Mandar email pra ${user.displayName || user.email} trocar a senha?`,
+      body: `Vai pra ${user.email} um link pra criar uma senha nova. A senha atual continua valendo até ela trocar.`,
+      confirmLabel: "Mandar email",
+      tone: "primary",
+    });
+    if (!ok) return;
+    setIsBusy(true);
+    try {
+      await apiRequest(`/admin/users/${user.id}/password-reset`, { method: "POST", token });
+      showToast("Email enviado", { description: user.email });
+    } catch (err) {
+      showToast("O email não saiu", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function deleteUser(user: AdminUserDetail) {
+    const ok = await confirm({
+      title: `Excluir a conta de ${user.displayName || user.email}?`,
+      body: "Apaga o login, o perfil e os dados pessoais dela. Se ela divide grupo com alguém, o que é da Nossa Conta fica pra quem ficou. Não dá pra desfazer.",
+      confirmLabel: "Excluir para sempre",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setIsBusy(true);
+    try {
+      await apiRequest(`/admin/users/${user.id}/delete`, { method: "POST", token, body: { confirmEmail: deleteConfirm } });
+      showToast("Conta excluída", { description: user.email });
+      setUsers((prev) => prev?.filter((u) => u.id !== user.id) ?? prev);
+      setDetail(null);
+    } catch (err) {
+      showToast("Não foi possível excluir", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
     } finally {
       setIsBusy(false);
     }
@@ -1297,7 +1339,22 @@ export function AdminUsers() {
           </div>
           <div>
             <dt>Grupo</dt>
-            <dd>{detail.group ? detail.group.members.map((m) => m.displayName || m.email).join(", ") : "Sem grupo"}</dd>
+            <dd>
+              {detail.group
+                ? detail.group.members.map((m, i) => (
+                    <span key={m.id}>
+                      {i > 0 && ", "}
+                      {m.id === detail.id ? (
+                        m.displayName || m.email
+                      ) : (
+                        <button type="button" className="link-button" onClick={() => void open(m.id)}>
+                          {m.displayName || m.email}
+                        </button>
+                      )}
+                    </span>
+                  ))
+                : "Sem grupo"}
+            </dd>
           </div>
           {detail.phone && (
             <div>
@@ -1318,10 +1375,40 @@ export function AdminUsers() {
             </ul>
           </>
         )}
-        {!detail.isAdmin && (
-          <button type="button" className={`btn ${detail.blocked ? "btn-primary" : "btn-outline"}`} disabled={isBusy} onClick={() => toggleBlock(detail)}>
-            {detail.blocked ? "Desbloquear conta" : "Bloquear conta"}
+        <div className="admin-user-actions">
+          <button type="button" className="btn btn-outline" disabled={isBusy} onClick={() => void sendPasswordReset(detail)}>
+            Mandar email pra trocar a senha
           </button>
+          {!detail.isAdmin && (
+            <button type="button" className={`btn ${detail.blocked ? "btn-primary" : "btn-outline"}`} disabled={isBusy} onClick={() => toggleBlock(detail)}>
+              {detail.blocked ? "Desbloquear conta" : "Bloquear conta"}
+            </button>
+          )}
+        </div>
+        {!detail.isAdmin && (
+          <div className="admin-user-danger">
+            <p className="admin-user-subtitle">Excluir a conta a pedido da pessoa</p>
+            <p className="field-hint">
+              Use quando a pessoa pedir pra apagar os dados dela (LGPD). Pra confirmar, digite o email: <strong>{detail.email}</strong>
+            </p>
+            <div className="admin-user-danger-row">
+              <input
+                type="email"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={detail.email}
+                aria-label="Email da pessoa, pra confirmar"
+              />
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={isBusy || deleteConfirm.trim().toLowerCase() !== detail.email.toLowerCase()}
+                onClick={() => void deleteUser(detail)}
+              >
+                Excluir conta
+              </button>
+            </div>
+          </div>
         )}
       </div>
     );

@@ -4,6 +4,8 @@ import { requireAuth } from "../../middleware/auth";
 import { isAdminEmail } from "./admin.service";
 import {
   blockUserHandler,
+  deleteUserHandler,
+  passwordResetHandler,
   getAdminOverviewHandler,
   getDiagnosticsHandler,
   getUserHandler,
@@ -37,3 +39,5 @@ adminRouter.post("/settings", asyncHandler(updateSettingsHandler));
 adminRouter.get("/users", asyncHandler(listUsersHandler));
 adminRouter.get("/users/:userId", asyncHandler(getUserHandler));
 adminRouter.post("/users/:userId/block", asyncHandler(blockUserHandler));
+adminRouter.post("/users/:userId/password-reset", asyncHandler(passwordResetHandler));
+adminRouter.post("/users/:userId/delete", asyncHandler(deleteUserHandler));

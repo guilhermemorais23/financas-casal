@@ -4,6 +4,8 @@ import { describeAccess } from "../billing/billing.service";
 import { findSubscription } from "../billing/billing.repository";
 import { isBillingEnabled } from "../settings/appSettings";
 import { isAdminEmail } from "./admin.service";
+import { sendPasswordResetEmail } from "../../email/mailer";
+import { deleteAccountForUser } from "../users/deleteAccount.service";
 
 const usersCol = db.collection("users");
 
@@ -104,4 +106,30 @@ export async function setUserBlocked(adminEmail: string, userId: string, blocked
   if (blocked) await auth.revokeRefreshTokens(userId);
   await usersCol.doc(userId).update({ blocked });
   await recordAdminAction({ adminEmail, action: blocked ? "block_user" : "unblock_user", groupId: null, detail: email });
+}
+
+// Mandar o link de trocar a senha pra pessoa (ela pediu ajuda pra entrar).
+export async function sendPasswordResetForAdmin(adminEmail: string, userId: string): Promise<void> {
+  const doc = await usersCol.doc(userId).get();
+  if (!doc.exists) throw new AdminUserError("Usuário não encontrado.", 404);
+  const { email, displayName } = doc.data() as { email?: string; displayName?: string };
+  if (!email) throw new AdminUserError("Essa conta não tem email.");
+  const link = await auth.generatePasswordResetLink(email);
+  const sent = await sendPasswordResetEmail(email, displayName ?? "", link);
+  if (!sent.ok) throw new AdminUserError(`O email não saiu: ${sent.error ?? "sem provedor de email"}.`, 502);
+  await recordAdminAction({ adminEmail, action: "password_reset_email", groupId: null, detail: email });
+}
+
+// Excluir a conta a pedido da pessoa (LGPD): o mesmo que ela faria em Conta e
+// grupo > Excluir conta. O admin confirma digitando o email dela.
+export async function deleteUserForAdmin(adminEmail: string, userId: string, confirmEmail: unknown): Promise<void> {
+  const doc = await usersCol.doc(userId).get();
+  if (!doc.exists) throw new AdminUserError("Usuário não encontrado.", 404);
+  const email = (doc.data()!.email as string) ?? "";
+  if (isAdminEmail(email)) throw new AdminUserError("Não dá pra excluir uma conta de admin por aqui.");
+  if (typeof confirmEmail !== "string" || confirmEmail.trim().toLowerCase() !== email.toLowerCase()) {
+    throw new AdminUserError("Digite o email da pessoa pra confirmar.");
+  }
+  await deleteAccountForUser(userId);
+  await recordAdminAction({ adminEmail, action: "delete_user", groupId: null, detail: email });
 }

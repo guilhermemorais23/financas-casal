@@ -4,7 +4,7 @@ import { checkAssistant } from "../assistant/assistant.service";
 import { getAdminOverview, NotAdminError, requireAdminEmail } from "./admin.service";
 import { getAdminInsights } from "./admin.insights";
 import { buildDiagnostics } from "./admin.diagnostics";
-import { AdminUserError, getUserDetailForAdmin, listUsersForAdmin, setUserBlocked } from "./admin.users";
+import { AdminUserError, deleteUserForAdmin, getUserDetailForAdmin, listUsersForAdmin, sendPasswordResetForAdmin, setUserBlocked } from "./admin.users";
 import { billingConfig } from "../billing/billing.config";
 import { recordAdminAction } from "../billing/billing.repository";
 import { updateAppSettings } from "../settings/appSettings";
@@ -88,6 +88,34 @@ export async function blockUserHandler(req: Request, res: Response) {
   if (!ensureAdmin(req, res)) return;
   try {
     await setUserBlocked(req.user!.email, String(req.params.userId), req.body?.blocked === true);
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof AdminUserError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function passwordResetHandler(req: Request, res: Response) {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    await sendPasswordResetForAdmin(req.user!.email, String(req.params.userId));
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof AdminUserError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function deleteUserHandler(req: Request, res: Response) {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    await deleteUserForAdmin(req.user!.email, String(req.params.userId), req.body?.confirmEmail);
     res.status(204).end();
   } catch (err) {
     if (err instanceof AdminUserError) {
