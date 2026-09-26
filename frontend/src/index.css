@@ -89,6 +89,17 @@
   --color-danger-text: var(--status-critical);
   --color-brand-accent: var(--coffee-500);
   --radius: 20px;
+  /* Escala da importação de extrato: 4 tamanhos de letra e 4 passos de
+     espaço. Tudo em .import-* usa só estes valores. */
+  --imp-text-xs: 0.75rem; /* etiquetas (ENTROU, contador, "já sabia") */
+  --imp-text-sm: 0.85rem; /* texto de apoio, avisos, listas */
+  --imp-text-md: 1rem; /* texto normal, títulos de seção */
+  --imp-text-lg: 1.35rem; /* o nome da pergunta */
+  --imp-space-1: 0.25rem;
+  --imp-space-2: 0.5rem;
+  --imp-space-3: 0.75rem;
+  --imp-space-4: 1rem;
+  --imp-box-pad: 0.6rem 0.8rem; /* caixas de aviso */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-brand: var(--font-sans);
   --font-display: var(--font-sans);
@@ -3950,23 +3961,31 @@ input[type="checkbox"] {
   max-width: 640px;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: var(--imp-space-4);
+}
+
+.import-panel .card-subtitle {
+  margin: 0;
 }
 
 .import-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: var(--imp-space-2);
+  padding-right: 2.75rem; /* espaço do X de fechar */
 }
 
 .import-head h1 {
   margin: 0;
+  white-space: nowrap;
 }
 
 .import-drop {
   display: grid;
   justify-items: center;
-  gap: 0.45rem;
+  gap: var(--imp-space-2);
   padding: 1.6rem 1rem;
   text-align: center;
   border: 1.5px dashed var(--color-border);
@@ -3997,7 +4016,7 @@ input[type="checkbox"] {
 .import-connect {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--imp-space-3);
   padding: 0.75rem 0.9rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -4014,7 +4033,7 @@ input[type="checkbox"] {
 }
 
 .import-connect small {
-  font-size: 0.8rem;
+  font-size: var(--imp-text-sm);
   color: var(--color-text-muted);
 }
 
@@ -4024,7 +4043,7 @@ input[type="checkbox"] {
   border-radius: var(--radius);
   display: grid;
   place-items: center;
-  background: rgba(62, 121, 247, 0.12);
+  background: color-mix(in srgb, var(--olive-500) 12%, transparent);
   color: var(--olive-500);
 }
 
@@ -4033,13 +4052,13 @@ input[type="checkbox"] {
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--imp-space-3);
 }
 
 .import-account {
   display: grid;
-  gap: 0.25rem;
-  font-size: 0.8rem;
+  gap: var(--imp-space-1);
+  font-size: var(--imp-text-sm);
   font-weight: 600;
   color: var(--color-text-muted);
   min-width: 200px;
@@ -4047,15 +4066,15 @@ input[type="checkbox"] {
 
 .import-note {
   margin: 0;
-  padding: 0.6rem 0.8rem;
+  padding: var(--imp-box-pad);
   border-radius: var(--radius);
-  background: rgba(250, 178, 25, 0.16);
-  font-size: 0.8rem;
+  background: color-mix(in srgb, var(--status-warning) 16%, transparent);
+  font-size: var(--imp-text-sm);
 }
 
 .import-summary {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--imp-text-sm);
   color: var(--color-text-muted);
 }
 
@@ -7753,7 +7772,8 @@ select {
 /* Importação: perguntas por nome ------------------------------------------ */
 
 .import-progress {
-  font-size: 0.8rem;
+  white-space: nowrap;
+  font-size: var(--imp-text-sm);
   font-weight: 700;
   color: var(--color-text-muted);
   background: var(--color-bg-soft);
@@ -7763,12 +7783,12 @@ select {
 
 .import-check {
   margin: 0;
-  padding: 0.6rem 0.8rem;
+  padding: var(--imp-box-pad);
   border-radius: var(--radius);
   background: var(--color-bg-soft);
-  font-size: 0.82rem;
+  font-size: var(--imp-text-sm);
   display: flex;
-  gap: 0.4rem;
+  gap: var(--imp-space-2);
   align-items: flex-start;
 }
 
@@ -7777,7 +7797,7 @@ select {
 }
 
 .import-check.warn {
-  background: rgba(250, 178, 25, 0.18);
+  background: color-mix(in srgb, var(--status-warning) 18%, transparent);
 }
 
 .import-check .icon {
@@ -7789,7 +7809,7 @@ select {
 
 .import-password {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--imp-space-2);
   padding: 1rem;
   border: 1px dashed var(--color-border);
   border-radius: var(--radius);
@@ -7797,7 +7817,7 @@ select {
 
 .import-password strong {
   display: flex;
-  gap: 0.4rem;
+  gap: var(--imp-space-2);
   align-items: center;
 }
 
@@ -7807,12 +7827,12 @@ select {
 
 .import-question {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--imp-space-2);
 }
 
 .import-question-type {
   justify-self: start;
-  font-size: 0.72rem;
+  font-size: var(--imp-text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -7829,7 +7849,7 @@ select {
 
 .import-question-name {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: var(--imp-text-lg);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.01em;
   word-break: break-word;
@@ -7838,7 +7858,7 @@ select {
 .import-question-meta {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: var(--imp-text-sm);
 }
 
 .import-question-ask {
@@ -7847,7 +7867,7 @@ select {
 }
 
 .import-chips {
-  gap: 0.45rem;
+  gap: var(--imp-space-2);
 }
 
 .import-chip {
@@ -7857,7 +7877,7 @@ select {
   border-radius: 999px;
   padding: 0.45rem 0.85rem;
   font: inherit;
-  font-size: 0.88rem;
+  font-size: var(--imp-text-sm);
   font-weight: 600;
   cursor: pointer;
 }
@@ -7890,7 +7910,7 @@ select {
 
 .import-new-category {
   display: flex;
-  gap: 0.4rem;
+  gap: var(--imp-space-2);
   align-items: center;
 }
 
@@ -7901,13 +7921,13 @@ select {
 
 .import-hint {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--imp-text-sm);
   color: var(--color-text-muted);
 }
 
 .import-description {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--imp-space-2);
 }
 
 .import-description .segmented {
@@ -7919,7 +7939,7 @@ select {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.4rem;
+  gap: var(--imp-space-2);
   max-height: 30vh;
   overflow-y: auto;
 }
@@ -7927,21 +7947,21 @@ select {
 .import-each li {
   display: grid;
   grid-template-columns: 130px 1fr;
-  gap: 0.5rem;
+  gap: var(--imp-space-2);
   align-items: center;
-  font-size: 0.82rem;
+  font-size: var(--imp-text-sm);
   color: var(--color-text-muted);
 }
 
 .import-totals {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
+  gap: var(--imp-space-2);
 }
 
 .import-totals > div {
   display: grid;
-  gap: 0.15rem;
+  gap: var(--imp-space-1);
   padding: 0.7rem 0.8rem;
   border-radius: var(--radius);
   background: var(--color-bg-soft);
@@ -7949,51 +7969,52 @@ select {
 
 .import-totals small {
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--imp-text-xs);
 }
 
 .import-totals strong {
-  font-size: 1.05rem;
+  font-size: var(--imp-text-md);
 }
 
 .import-dup-toggle {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--imp-space-2);
   align-items: flex-start;
-  font-size: 0.82rem;
+  font-size: var(--imp-text-sm);
   color: var(--color-text-muted);
 }
 
 .import-rules-title {
   margin: 0.4rem 0 0;
-  font-size: 1rem;
+  font-size: var(--imp-text-md);
 }
 
 .import-bank-note {
   font-weight: 400;
+  font-size: var(--imp-text-sm);
   color: var(--color-text-muted);
 }
 
 .import-phase {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--imp-space-2);
   margin: 0;
-  padding: 0.5rem 0.7rem;
+  padding: var(--imp-box-pad);
   border-radius: var(--radius);
   background: var(--color-primary-soft);
-  font-size: 0.85rem;
+  font-size: var(--imp-text-sm);
   font-weight: 600;
 }
 
 .import-mirror {
   display: grid;
-  gap: 0.4rem;
-  padding: 0.7rem 0.8rem;
+  gap: var(--imp-space-2);
+  padding: var(--imp-box-pad);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-bg-soft);
-  font-size: 0.85rem;
+  font-size: var(--imp-text-sm);
 }
 
 .import-mirror p {
@@ -8005,7 +8026,7 @@ select {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.3rem;
+  gap: var(--imp-space-1);
   font-variant-numeric: tabular-nums;
 }
 
@@ -8013,7 +8034,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--imp-space-2);
 }
 
 .import-mirror small,
@@ -8024,7 +8045,7 @@ select {
 .import-trip {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: var(--imp-space-2);
   cursor: pointer;
 }
 
@@ -8043,7 +8064,7 @@ select {
 .import-rows-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--imp-space-1);
   justify-self: start;
   padding: 0.2rem 0.5rem 0.2rem 0;
   background: none;
@@ -8082,14 +8103,14 @@ select {
   max-height: 30vh;
   overflow-y: auto;
   border-top: 1px solid var(--color-border);
-  font-size: 0.85rem;
+  font-size: var(--imp-text-sm);
   font-variant-numeric: tabular-nums;
 }
 
 .import-rows-detail li {
   display: flex;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--imp-space-3);
   padding: 0.4rem 0.2rem;
   border-bottom: 1px solid var(--color-border);
 }
@@ -8102,11 +8123,11 @@ select {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--imp-space-2);
 }
 
 .import-question-kind {
-  font-size: 0.8rem;
+  font-size: var(--imp-text-sm);
   color: var(--color-text-muted);
 }
 
@@ -8118,13 +8139,20 @@ select {
   border-radius: 999px;
   background: var(--color-primary-soft);
   color: var(--color-text);
-  font-size: 0.8rem;
+  font-size: var(--imp-text-sm);
   text-align: center;
   vertical-align: middle;
 }
 
-.import-unmatched {
-  max-height: 30vh;
+.import-rules.import-flat {
+  max-height: none;
+  overflow: visible;
+}
+
+.import-more {
+  align-self: flex-start;
+  padding: var(--imp-space-1) 0;
+  font-size: var(--imp-text-sm);
 }
 
 .import-unmatched .import-unread {
@@ -8132,7 +8160,7 @@ select {
   padding: 0.6rem 0.2rem;
   color: var(--color-text-muted);
   border-bottom: 1px solid var(--color-border);
-  font-size: 0.85rem;
+  font-size: var(--imp-text-sm);
   word-break: break-word;
 }
 
@@ -8150,7 +8178,7 @@ select {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--imp-space-3);
   padding: 0.6rem 0.2rem;
   background: none;
   border: none;
@@ -8169,7 +8197,7 @@ select {
   display: grid;
   min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.85rem;
+  font-size: var(--imp-text-sm);
   overflow-wrap: anywhere;
 }
 
@@ -8177,12 +8205,12 @@ select {
   font-family: inherit;
   font-family: system-ui, sans-serif;
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--imp-text-xs);
 }
 
 .import-rules-answer {
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--imp-text-sm);
   white-space: nowrap;
 }
 
@@ -8221,7 +8249,7 @@ select {
 
 @media (max-width: 520px) {
   .import-totals strong {
-    font-size: 0.92rem;
+    font-size: var(--imp-text-sm);
   }
   .import-each li {
     grid-template-columns: 1fr;

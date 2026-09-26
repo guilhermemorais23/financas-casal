@@ -106,6 +106,9 @@ function rememberedBank(account: AccountRow | undefined): BankId | null {
   return BANKS.find((bank) => bank.match.test(account.name))?.id ?? null;
 }
 
+// Quantos itens as listas do resumo mostram antes do "Ver todos".
+const LIST_PREVIEW = 5;
+
 const INCOME_HINT = /sal[aá]r|renda|receb|freel|reembol|venda|rendiment|b[oô]nus|comiss|extra/i;
 
 function blankAnswer(group: PreviewGroup): Answer {
@@ -152,6 +155,10 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   const [showRows, setShowRows] = useState(false);
   // Linhas de ida e volta que a pessoa mandou não contar.
   const [excluded, setExcluded] = useState<Set<number>>(() => new Set());
+  // Listas do resumo mostram os primeiros e abrem inteiras num toque (a
+  // janela já rola; lista com rolagem própria dentro dela fica cortada).
+  const [showAllUnmatched, setShowAllUnmatched] = useState(false);
+  const [showAllRules, setShowAllRules] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -926,13 +933,13 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               <h2 className="import-rules-title">
                 Não conciliado <span className="import-unmatched-count">{plan.unmatched.length + unreadLines.length}</span>
               </h2>
-              <p className="card-subtitle">
+              <p className="import-hint">
                 {plan.unmatched.length > 0 && "Esses entram sem categoria. Toque pra dizer o que é."}
                 {plan.unmatched.length > 0 && unreadLines.length > 0 && " "}
                 {unreadLines.length > 0 && "As linhas marcadas “não li” estão no PDF mas não viraram lançamento: confira no app do banco."}
               </p>
-              <ul className="import-rules import-unmatched">
-                {plan.unmatched.map(({ index, group, description }) => {
+              <ul className="import-rules import-unmatched import-flat">
+                {(showAllUnmatched ? plan.unmatched : plan.unmatched.slice(0, LIST_PREVIEW)).map(({ index, group, description }) => {
                   const row = preview.rows[index];
                   return (
                     <li key={`row-${index}`}>
@@ -952,7 +959,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                     </li>
                   );
                 })}
-                {unreadLines.map((line, i) => (
+                {(showAllUnmatched || plan.unmatched.length < LIST_PREVIEW ? unreadLines : []).map((line, i) => (
                   <li key={`unread-${i}`} className="import-unread">
                     <span className="import-rules-name">
                       {line}
@@ -961,12 +968,17 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                   </li>
                 ))}
               </ul>
+              {plan.unmatched.length + unreadLines.length > LIST_PREVIEW && (
+                <button type="button" className="link-button import-more" onClick={() => setShowAllUnmatched((all) => !all)}>
+                  {showAllUnmatched ? "Mostrar menos" : `Ver todos (${plan.unmatched.length + unreadLines.length})`}
+                </button>
+              )}
             </>
           )}
           <h2 className="import-rules-title">Guardado pra próxima vez</h2>
-          <p className="card-subtitle">Toque num nome pra mudar a resposta. Na próxima importação o PAR. só pergunta nomes novos.</p>
-          <ul className="import-rules">
-            {preview.groups.map((group) => {
+          <p className="import-hint">Toque num nome pra mudar a resposta. Na próxima importação o PAR. só pergunta nomes novos.</p>
+          <ul className="import-rules import-flat">
+            {(showAllRules ? preview.groups : preview.groups.slice(0, LIST_PREVIEW)).map((group) => {
               const answer = answers[groupKey(group)];
               return (
                 <li key={groupKey(group)}>
@@ -987,6 +999,11 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               );
             })}
           </ul>
+          {preview.groups.length > LIST_PREVIEW && (
+            <button type="button" className="link-button import-more" onClick={() => setShowAllRules((all) => !all)}>
+              {showAllRules ? "Mostrar menos" : `Ver todos (${preview.groups.length})`}
+            </button>
+          )}
         </>
       )}
 
