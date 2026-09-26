@@ -1,3 +1,4 @@
+import { groupSuffix } from "../api/activeGroup";
 // Cartão padrão pro "Crédito": na primeira compra no crédito o app pergunta
 // se quer lançar num cartão; a resposta fica guardada aqui e as próximas já
 // vão direto pra ele (sempre dá pra trocar no próprio lançamento ou em
@@ -7,7 +8,8 @@
 
 export type CreditCardPreference = string | "none" | null;
 
-const key = (userId: string) => `par:credit-card:${userId}`;
+// Cartões são de um grupo: cada grupo lembra o seu.
+const key = (userId: string) => `par:credit-card:${userId}${groupSuffix()}`;
 
 export function readCreditCardPreference(userId: string): CreditCardPreference {
   if (!userId) return null;

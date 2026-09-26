@@ -1,7 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
+import { GroupAccessError } from "../modules/groups/groups.service";
 import { isQuotaError, logError } from "../utils/errorLog";
 
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
+  // O app pediu um grupo que a pessoa não tem (saiu ou foi removida em outro
+  // aparelho). Não é erro do servidor: o app volta pro grupo padrão.
+  if (err instanceof GroupAccessError) {
+    res.status(403).json({ error: "Você não faz mais parte desse grupo.", code: "group_access" });
+    return;
+  }
   console.error(err);
   logError("http", err, { path: req.path, method: req.method, userId: req.user?.id });
   if (isQuotaError(err)) {

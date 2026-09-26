@@ -1,7 +1,11 @@
 // Stale-while-revalidate cache for page data: pages hydrate instantly from the
 // last-seen value (survives closing the app, via localStorage) while a fresh
 // fetch runs in the background and overwrites it. Keys are caller-scoped
-// (include the user id) so switching accounts never shows another user's data.
+// (include the user id) so switching accounts never shows another user's data,
+// and prefixed here with the open group, so switching groups never shows the
+// other group's numbers either.
+import { getActiveGroupId } from "../api/activeGroup";
+
 const memoryCache = new Map<string, unknown>();
 
 // Cached responses are whatever shape the API had when they were written --
@@ -31,11 +35,16 @@ try {
   // Storage unavailable: cache is best-effort anyway.
 }
 
+function scopedKey(key: string): string {
+  return `${getActiveGroupId() ?? "-"}:${key}`;
+}
+
 function storageKey(key: string): string {
   return `par-cache:${key}`;
 }
 
-export function readCache<T>(key: string): T | null {
+export function readCache<T>(rawKey: string): T | null {
+  const key = scopedKey(rawKey);
   if (memoryCache.has(key)) return memoryCache.get(key) as T;
   try {
     const raw = localStorage.getItem(storageKey(key));
@@ -48,7 +57,8 @@ export function readCache<T>(key: string): T | null {
   }
 }
 
-export function writeCache<T>(key: string, value: T): void {
+export function writeCache<T>(rawKey: string, value: T): void {
+  const key = scopedKey(rawKey);
   memoryCache.set(key, value);
   try {
     localStorage.setItem(storageKey(key), JSON.stringify(value));

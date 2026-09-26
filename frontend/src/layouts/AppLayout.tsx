@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
 import { type DailyTrendPoint } from "../components/DailyTrendChart";
 import { GlobalAssistant } from "../components/GlobalAssistant";
+import { GroupSwitcher } from "../components/GroupSwitcher";
 import { Icon, type IconName } from "../components/Icon";
 import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
 import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
@@ -184,6 +185,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
     <div className="app-shell-nav">
       <header className="app-mobile-topbar">
         <Brand animated />
+        <GroupSwitcher className="group-switcher-topbar" />
         <button
           type="button"
           className="topbar-avatar"
@@ -197,6 +199,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       <aside className="app-sidebar">
         <div className="app-sidebar-brand">
           <Brand animated />
+          <GroupSwitcher className="group-switcher-sidebar" />
         </div>
         <div className="app-sidebar-scroll">
         <nav className="app-nav">
