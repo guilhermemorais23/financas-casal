@@ -162,16 +162,11 @@ export function NewTransactionPage() {
       setPayerId((current) => current || user?.id || "");
     }
     load();
-    apiRequest<CardOption[]>("/cards", { token })
-      .then((result) => {
+    Promise.all([apiRequest<CardOption[]>("/cards", { token }), readCreditCardPreference(token, user?.id ?? "")])
+      .then(([result, preference]) => {
         const options = result.map((card) => ({ id: card.id, name: card.name }));
         setCards(options);
-        setCardChoice(
-          resolveCreditCardPreference(
-            readCreditCardPreference(user?.id ?? ""),
-            options.map((card) => card.id)
-          )
-        );
+        setCardChoice(resolveCreditCardPreference(preference, options.map((card) => card.id)));
       })
       .catch(() => setCards([]));
   }, [token, user?.id]);
@@ -212,7 +207,7 @@ export function NewTransactionPage() {
   function chooseCard(value: string) {
     setCardChoice(value);
     setIsPickingCard(false);
-    saveCreditCardPreference(user?.id ?? "", value);
+    saveCreditCardPreference(token, user?.id ?? "", value).catch(() => undefined);
   }
 
   async function saveCardPurchase(card: CardOption, parsedAmount: number) {

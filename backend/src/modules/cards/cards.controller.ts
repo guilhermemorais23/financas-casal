@@ -381,13 +381,12 @@ export async function updatePurchaseHandler(req: Request, res: Response) {
   const { description, amount, categoryId, buyerId, purchaseDate, installments } = req.body ?? {};
   if (
     !isNonEmptyString(description) ||
-    typeof amount !== "number" ||
-    amount <= 0 ||
+    (amount !== undefined && (typeof amount !== "number" || amount <= 0)) ||
     !isNonEmptyString(buyerId) ||
     !isValidDate(purchaseDate) ||
     (installments !== undefined && !ALLOWED_INSTALLMENT_COUNTS.includes(installments))
   ) {
-    res.status(400).json({ error: "description, amount, buyerId and purchaseDate (YYYY-MM-DD) are required" });
+    res.status(400).json({ error: "description, buyerId and purchaseDate (YYYY-MM-DD) are required; amount (if set) must be positive" });
     return;
   }
   try {

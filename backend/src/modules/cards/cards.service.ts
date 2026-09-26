@@ -555,7 +555,13 @@ export async function removeCard(userId: string, cardId: string) {
 // Editar uma compra: descrição, categoria e quem comprou valem pra todas as
 // parcelas dela. Valor, data e parcelas refazem a compra inteira -- só dá
 // enquanto nenhuma fatura com parcela dela foi paga.
-export async function updatePurchase(userId: string, cardId: string, purchaseId: string, input: AddPurchaseInput) {
+// amount é o total da compra (todas as parcelas); sem ele, mantém o total atual.
+export async function updatePurchase(
+  userId: string,
+  cardId: string,
+  purchaseId: string,
+  input: Omit<AddPurchaseInput, "amount"> & { amount?: number }
+) {
   const { groupId, card } = await requireManageableCard(userId, cardId);
   const purchase = await findPurchaseById(cardId, purchaseId);
   if (!purchase) {
@@ -574,8 +580,9 @@ export async function updatePurchase(userId: string, cardId: string, purchaseId:
 
   const series = (await findAllPurchasesByCardId(cardId)).filter((p) => p.purchaseGroupId === purchase.purchaseGroupId);
   const seriesTotalCents = series.reduce((sum, p) => sum + Math.round(Number(p.amount) * 100), 0);
+  const amountCents = input.amount !== undefined ? Math.round(input.amount * 100) : seriesTotalCents;
   const moneyChanged =
-    Math.round(input.amount * 100) !== seriesTotalCents ||
+    amountCents !== seriesTotalCents ||
     input.purchaseDate !== purchase.purchaseDate ||
     input.installments !== purchase.installmentsCount;
 
@@ -598,7 +605,7 @@ export async function updatePurchase(userId: string, cardId: string, purchaseId:
     cardId,
     series.map((p) => p.id)
   );
-  return addPurchase(userId, cardId, input);
+  return addPurchase(userId, cardId, { ...input, amount: amountCents / 100 });
 }
 
 // "Mover pro cartão": uma despesa que foi no crédito mas entrou como gasto

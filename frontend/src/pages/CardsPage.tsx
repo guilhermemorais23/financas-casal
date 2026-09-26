@@ -12,7 +12,11 @@ import { BillsTabs } from "../components/BillsTabs";
 import { initialOf } from "../utils/initial";
 import { SplitSummary } from "../components/SplitSummary";
 import { personColor } from "../utils/categoryColor";
-import { readCreditCardPreference, saveCreditCardPreference } from "../utils/creditCardPreference";
+import {
+  readCachedCreditCardPreference,
+  readCreditCardPreference,
+  saveCreditCardPreference,
+} from "../utils/creditCardPreference";
 
 interface MemberRow {
   id: string;
@@ -49,6 +53,8 @@ interface CardRow {
   limitUsed: string | null;
   limitType: "normal" | "secured";
   securedFromAccount: boolean;
+  savingsPlan: { amount: string; day: number } | null;
+  lastDepositMonth: string | null;
   limitReleases: LimitRelease[];
 }
 
@@ -98,7 +104,7 @@ export function CardsPage() {
   // Sem padrão de propósito: as duas situações são comuns e escolher errado
   // deixa o saldo da conta errado, então a pessoa responde.
   const [securedFromAccount, setSecuredFromAccount] = useState<boolean | null>(null);
-  const [defaultCreditCardId, setDefaultCreditCardId] = useState(() => readCreditCardPreference(user?.id ?? ""));
+  const [defaultCreditCardId, setDefaultCreditCardId] = useState(() => readCachedCreditCardPreference(user?.id ?? ""));
   const [scope, setScope] = useState<"personal" | "joint">("joint");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -114,6 +120,14 @@ export function CardsPage() {
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [purchaseInstallments, setPurchaseInstallments] = useState("1");
   const [isAddingPurchase, setIsAddingPurchase] = useState(false);
+  // Editar compra: usa o mesmo formulário de lançar. initialAmount serve pra
+  // só mandar o valor quando a pessoa mudou (evita diferença de centavo nas
+  // parcelas).
+  const [editingPurchase, setEditingPurchase] = useState<{ id: string; initialAmount: string } | null>(null);
+  // "Guardar todo mês" -- formulário aberto num cartão garantido por vez.
+  const [savingsPlanCardId, setSavingsPlanCardId] = useState<string | null>(null);
+  const [savingsAmount, setSavingsAmount] = useState("");
+  const [savingsDay, setSavingsDay] = useState("10");
 
   // "Guardar mais" / "Resgatar" on a cartão com limite garantido -- one
   // inline form at a time, tied to whichever card opened it.
@@ -133,6 +147,10 @@ export function CardsPage() {
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar os cartões");
     }
   }
+
+  useEffect(() => {
+    readCreditCardPreference(token, user?.id ?? "").then(setDefaultCreditCardId);
+  }, [token, user?.id]);
 
   useEffect(() => {
     loadCards();
@@ -252,30 +270,89 @@ export function CardsPage() {
 
     setIsSubmitting(true);
     try {
-      await apiRequest(`/cards/${cardId}/purchases`, {
-        method: "POST",
-        token,
-        body: {
-          description: purchaseDescription.trim(),
-          amount: parsedAmount,
-          categoryId: purchaseCategoryId || null,
-          buyerId: purchaseBuyerId,
-          purchaseDate,
-          installments: Number(purchaseInstallments),
-        },
-      });
+      const body = {
+        description: purchaseDescription.trim(),
+        amount: parsedAmount,
+        categoryId: purchaseCategoryId || null,
+        buyerId: purchaseBuyerId,
+        purchaseDate,
+        installments: Number(purchaseInstallments),
+      };
+      if (editingPurchase) {
+        await apiRequest(`/cards/${cardId}/purchases/${editingPurchase.id}`, {
+          method: "PATCH",
+          token,
+          body: { ...body, amount: purchaseAmount === editingPurchase.initialAmount ? undefined : parsedAmount },
+        });
+      } else {
+        await apiRequest(`/cards/${cardId}/purchases`, { method: "POST", token, body });
+      }
       setPurchaseDescription("");
       setPurchaseAmount("");
       setPurchaseCategoryId("");
       setPurchaseInstallments("1");
       setIsAddingPurchase(false);
-      showToast("Compra lançada no cartão");
+      showToast(editingPurchase ? "Compra atualizada" : "Compra lançada no cartão");
+      setEditingPurchase(null);
       await loadStatement(cardId, statementMonth);
       await loadCards();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível lançar a compra");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function startEditPurchase(purchase: PurchaseRow) {
+    // O valor mostrado é o total da compra (todas as parcelas).
+    const total = (Number(purchase.amount) * purchase.installmentsCount).toFixed(2).replace(".", ",");
+    setEditingPurchase({ id: purchase.id, initialAmount: total });
+    setPurchaseDescription(purchase.description);
+    setPurchaseAmount(total);
+    setPurchaseCategoryId(purchase.categoryId ?? "");
+    setPurchaseBuyerId(purchase.buyerId);
+    setPurchaseDate(purchase.purchaseDate);
+    setPurchaseInstallments(String(purchase.installmentsCount));
+    setIsAddingPurchase(true);
+  }
+
+  function cancelPurchaseForm() {
+    setIsAddingPurchase(false);
+    if (editingPurchase) {
+      setEditingPurchase(null);
+      setPurchaseDescription("");
+      setPurchaseAmount("");
+      setPurchaseCategoryId("");
+      setPurchaseInstallments("1");
+      setPurchaseDate(new Date().toISOString().slice(0, 10));
+    }
+  }
+
+  function openSavingsPlan(card: CardRow) {
+    setSavingsPlanCardId((current) => (current === card.id ? null : card.id));
+    setSavingsAmount(card.savingsPlan ? Number(card.savingsPlan.amount).toFixed(2).replace(".", ",") : "");
+    setSavingsDay(String(card.savingsPlan?.day ?? 10));
+  }
+
+  async function saveSavingsPlan(event: FormEvent, card: CardRow, remove = false) {
+    event.preventDefault();
+    const amount = Number(savingsAmount.replace(",", "."));
+    const day = Number(savingsDay);
+    if (!remove && (!(amount > 0) || !(day >= 1 && day <= 31))) {
+      setError("Informe um valor maior que zero e um dia de 1 a 31.");
+      return;
+    }
+    try {
+      await apiRequest(`/cards/${card.id}/savings-plan`, {
+        method: "PUT",
+        token,
+        body: remove ? { amount: null } : { amount, day },
+      });
+      showToast(remove ? "Lembrete de guardar removido" : `Lembrete todo dia ${day}`, remove ? { variant: "info" } : undefined);
+      setSavingsPlanCardId(null);
+      await loadCards();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar o lembrete");
     }
   }
 
@@ -319,7 +396,9 @@ export function CardsPage() {
 
   function toggleDefaultCreditCard(cardId: string) {
     const next = defaultCreditCardId === cardId ? null : cardId;
-    saveCreditCardPreference(user?.id ?? "", next);
+    saveCreditCardPreference(token, user?.id ?? "", next).catch(() =>
+      showToast("Não foi possível salvar o cartão padrão", { variant: "error" })
+    );
     setDefaultCreditCardId(next);
     showToast(next ? "Compras no crédito vão pra esse cartão" : "Cartão padrão removido", next ? undefined : { variant: "info" });
   }
@@ -345,7 +424,9 @@ export function CardsPage() {
   function openLimitAdjust(cardId: string, direction: "deposit" | "withdraw") {
     const isSameForm = limitAdjust?.cardId === cardId && limitAdjust.direction === direction;
     setLimitAdjust(isSameForm ? null : { cardId, direction });
-    setLimitAdjustAmount("");
+    // Com "Guardar todo mês", o valor do lembrete já vem preenchido.
+    const plan = cards?.find((card) => card.id === cardId)?.savingsPlan;
+    setLimitAdjustAmount(direction === "deposit" && plan ? Number(plan.amount).toFixed(2).replace(".", ",") : "");
     setLimitAdjustError(null);
   }
 
@@ -453,6 +534,69 @@ export function CardsPage() {
                   Resgatar
                 </button>
               </div>
+            )}
+
+            {isSecured && (
+              <p className="field-hint savings-plan-line">
+                {card.savingsPlan ? (
+                  <>
+                    Guardar {formatCurrency(Number(card.savingsPlan.amount))} todo dia {card.savingsPlan.day}
+                    {card.lastDepositMonth === new Date().toISOString().slice(0, 7) ? " · este mês já foi" : ""}.{" "}
+                  </>
+                ) : (
+                  "Quer ir aumentando o limite? "
+                )}
+                <button type="button" className="link-button" onClick={() => openSavingsPlan(card)}>
+                  {card.savingsPlan ? "Mudar" : "Lembrar de guardar todo mês"}
+                </button>
+              </p>
+            )}
+
+            {savingsPlanCardId === card.id && (
+              <form className="limit-adjust-form" onSubmit={(e) => saveSavingsPlan(e, card)}>
+                <div className="field-row">
+                  <div className="field">
+                    <label htmlFor={`savings-amount-${card.id}`}>Quanto (R$)</label>
+                    <input
+                      id={`savings-amount-${card.id}`}
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={savingsAmount}
+                      onChange={(e) => setSavingsAmount(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`savings-day-${card.id}`}>Todo dia</label>
+                    <input
+                      id={`savings-day-${card.id}`}
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={savingsDay}
+                      onChange={(e) => setSavingsDay(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <p className="field-hint">
+                  Aparece no Painel, em "Vence logo", até você tocar em Guardar mais naquele mês. O app não tira o dinheiro
+                  sozinho.
+                </p>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <button type="submit" className="btn btn-primary">
+                    Salvar lembrete
+                  </button>
+                  {card.savingsPlan && (
+                    <button type="button" className="btn btn-ghost" onClick={(e) => saveSavingsPlan(e, card, true)}>
+                      Tirar lembrete
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-ghost" onClick={() => setSavingsPlanCardId(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
             )}
 
             {limitAdjust?.cardId === card.id && (
@@ -637,8 +781,16 @@ export function CardsPage() {
                         <span className="transaction-amount expense">
                           −{formatCurrency(Number(purchase.amount))}
                         </span>
+                        <div className="transaction-row-actions">
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="Editar compra"
+                            onClick={() => startEditPurchase(purchase)}
+                          >
+                            <Icon name="pencil" />
+                          </button>
                         {!statement.isPaid && (
-                          <div className="transaction-row-actions">
                             <button
                               type="button"
                               className="btn-icon"
@@ -647,8 +799,8 @@ export function CardsPage() {
                             >
                               <Icon name="trash" />
                             </button>
-                          </div>
                         )}
+                        </div>
                       </li>
                     );
                   })}
@@ -657,7 +809,7 @@ export function CardsPage() {
                   )}
                 </ul>
 
-                {!statement.isPaid && (
+                {(!statement.isPaid || editingPurchase) && (
                   <>
                     {isAddingPurchase ? (
                       <form onSubmit={(e) => handleAddPurchase(e, card.id)} style={{ marginTop: "0.75rem" }}>
@@ -741,15 +893,17 @@ export function CardsPage() {
                             </p>
                           )}
                         </div>
+                        {editingPurchase && (
+                          <p className="field-hint">
+                            Nome, categoria e quem comprou mudam em todas as parcelas. Valor, data e parcelas só dá pra mudar
+                            enquanto nenhuma fatura dessa compra foi paga.
+                          </p>
+                        )}
                         <div style={{ display: "flex", gap: "0.5rem" }}>
                           <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                            {isSubmitting ? "Salvando..." : "Lançar compra"}
+                            {isSubmitting ? "Salvando..." : editingPurchase ? "Salvar compra" : "Lançar compra"}
                           </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() => setIsAddingPurchase(false)}
-                          >
+                          <button type="button" className="btn btn-ghost" onClick={cancelPurchaseForm}>
                             Cancelar
                           </button>
                         </div>
@@ -760,6 +914,7 @@ export function CardsPage() {
                         className="btn btn-primary"
                         style={{ marginTop: "0.75rem", width: "100%" }}
                         onClick={() => setIsAddingPurchase(true)}
+                        hidden={statement.isPaid}
                       >
                         + Lançar compra
                       </button>
