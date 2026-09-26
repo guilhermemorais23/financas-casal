@@ -8,6 +8,7 @@ import { AdminUserError, getUserDetailForAdmin, listUsersForAdmin, setUserBlocke
 import { billingConfig } from "../billing/billing.config";
 import { recordAdminAction } from "../billing/billing.repository";
 import { updateAppSettings } from "../settings/appSettings";
+import { getImportStats } from "../../utils/importLog";
 
 export async function getAdminOverviewHandler(req: Request, res: Response) {
   try {
@@ -100,6 +101,12 @@ export async function blockUserHandler(req: Request, res: Response) {
 export async function insightsHandler(req: Request, res: Response) {
   if (!ensureAdmin(req, res)) return;
   res.json(await getAdminInsights());
+}
+
+// Importações de extrato dos últimos 30 dias, por banco.
+export async function importStatsHandler(req: Request, res: Response) {
+  if (!ensureAdmin(req, res)) return;
+  res.json(await getImportStats(30));
 }
 
 export async function updateSettingsHandler(req: Request, res: Response) {

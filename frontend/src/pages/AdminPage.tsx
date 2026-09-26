@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../layouts/AppLayout";
-import { AdminAnnouncements, AdminBilling, AdminDiagnostics, AdminFeedback, AdminInsights, AdminUsers } from "./AdminSections";
+import { AdminAnnouncements, AdminBilling, AdminDiagnostics, AdminFeedback, AdminImports, AdminInsights, AdminUsers } from "./AdminSections";
 
 interface ErrorLogEntry {
   id: string;
@@ -145,6 +145,7 @@ export function AdminPage() {
         {section === "overview" && (
           <>
             <AdminInsights />
+            <AdminImports />
             <div className="stat-row wrap">
               <div className="stat-box tone-accent">
                 <p className="label">Usuários</p>

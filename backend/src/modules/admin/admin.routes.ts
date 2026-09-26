@@ -7,6 +7,7 @@ import {
   getAdminOverviewHandler,
   getDiagnosticsHandler,
   getUserHandler,
+  importStatsHandler,
   insightsHandler,
   listUsersHandler,
   testAiHandler,
@@ -31,6 +32,7 @@ adminRouter.get("/diagnostics", asyncHandler(getDiagnosticsHandler));
 adminRouter.post("/test-email", asyncHandler(testEmailHandler));
 adminRouter.post("/test-ai", asyncHandler(testAiHandler));
 adminRouter.get("/insights", asyncHandler(insightsHandler));
+adminRouter.get("/imports", asyncHandler(importStatsHandler));
 adminRouter.post("/settings", asyncHandler(updateSettingsHandler));
 adminRouter.get("/users", asyncHandler(listUsersHandler));
 adminRouter.get("/users/:userId", asyncHandler(getUserHandler));

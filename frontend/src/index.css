@@ -8673,3 +8673,14 @@ select {
   text-decoration: none;
 }
 .app-nav-invite { color: var(--color-primary); }
+
+/* Admin > importações por banco */
+.admin-imports-scroll { overflow-x: auto; margin: 0.5rem 0; }
+.admin-imports-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.admin-imports-table th,
+.admin-imports-table td { padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--color-border); text-align: right; white-space: nowrap; }
+.admin-imports-table th:first-child,
+.admin-imports-table td:first-child { text-align: left; }
+.admin-imports-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); }
+.admin-imports-table .muted { color: var(--color-text-muted); font-size: 0.8rem; }
+.admin-imports-table tr.is-bad td { color: var(--color-danger-text); font-weight: 700; }

@@ -1341,3 +1341,109 @@ export function AdminUsers() {
     </div>
   );
 }
+
+interface ImportSourceStats {
+  source: string;
+  attempts: number;
+  ok: number;
+  unreconciled: number;
+  empty: number;
+  password: number;
+  error: number;
+  byAi: number;
+}
+
+interface ImportStats {
+  days: number;
+  sources: ImportSourceStats[];
+  committed: number;
+  committedRows: number;
+  people: number;
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  bradesco: "Bradesco",
+  nubank: "Nubank",
+  bb: "Banco do Brasil",
+  caixa: "Caixa",
+  itau: "Itaú",
+  santander: "Santander",
+  inter: "Inter",
+  outro: "Outro banco (PDF)",
+  desconhecido: "PDF sem banco reconhecido",
+  arquivo: "Arquivo (OFX/CSV)",
+  ofx: "OFX",
+  csv: "CSV",
+  openfinance: "Conectar conta (Pluggy)",
+};
+
+// Admin > Visão geral: importações de extrato por banco -- o que lê certo e
+// o que falha, pra saber qual leitor precisa de ajuste antes de alguém
+// reclamar. Só contagens; o conteúdo dos extratos nunca é guardado.
+export function AdminImports() {
+  const { token } = useAuth();
+  const [data, setData] = useState<ImportStats | null>(null);
+
+  useEffect(() => {
+    apiRequest<ImportStats>("/admin/imports", { token })
+      .then(setData)
+      .catch(() => setData(null));
+  }, [token]);
+
+  if (!data) return null;
+  const pct = (n: number, of: number) => (of > 0 ? `${Math.round((n / of) * 100)}%` : "—");
+  const attempts = data.sources.reduce((sum, s) => sum + s.attempts, 0);
+
+  return (
+    <div className="card admin-imports">
+      <p className="card-title">Importações de extrato · {data.days} dias</p>
+      <p className="card-subtitle">
+        {attempts} leituras de {data.people} {data.people === 1 ? "pessoa" : "pessoas"} · {data.committed} importadas (
+        {data.committedRows} lançamentos)
+      </p>
+      {data.sources.length === 0 ? (
+        <p className="field-hint">Ninguém importou extrato nesse período.</p>
+      ) : (
+        <div className="admin-imports-scroll">
+          <table className="admin-imports-table">
+            <thead>
+              <tr>
+                <th>Banco</th>
+                <th>Leituras</th>
+                <th>Deu certo</th>
+                <th>Saldo não bateu</th>
+                <th>Nada lido</th>
+                <th>Senha</th>
+                <th>Erro</th>
+                <th>Pela IA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.sources.map((s) => {
+                const failed = s.empty + s.error;
+                return (
+                  <tr key={s.source} className={s.attempts >= 3 && failed / s.attempts >= 0.3 ? "is-bad" : undefined}>
+                    <td>{SOURCE_LABEL[s.source] ?? s.source}</td>
+                    <td>{s.attempts}</td>
+                    <td>
+                      {s.ok} <span className="muted">({pct(s.ok, s.attempts)})</span>
+                    </td>
+                    <td>{s.unreconciled}</td>
+                    <td>{s.empty}</td>
+                    <td>{s.password}</td>
+                    <td>{s.error}</td>
+                    <td>{s.byAi}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="field-hint">
+        Em vermelho: banco com 3+ leituras e 30% ou mais sem nada lido ou com erro -- o leitor dele precisa de ajuste. "Pela IA" é quando o
+        leitor próprio não deu conta e a IA leu (custa cota).
+      </p>
+    </div>
+  );
+}
