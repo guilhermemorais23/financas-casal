@@ -165,3 +165,156 @@ export function paymentsUntil(input: {
 
   return items.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
 }
+
+// ---------------------------------------------------------------------------
+// Tela Contas: tudo que você tem que pagar numa lista só, pela data --
+// faturas, parcelas e contas fixas dos próximos BILLS_WINDOW_DAYS (atrasados
+// inclusive), o que já foi pago neste mês e, à parte, os empréstimos.
+// ---------------------------------------------------------------------------
+export const BILLS_WINDOW_DAYS = 30;
+
+export type BillPayAction =
+  | { type: "card"; cardId: string; month: string }
+  | { type: "debt"; debtId: string; installmentId: string };
+
+export interface BillItem {
+  id: string;
+  kind: "card" | "debt" | "recurring";
+  title: string;
+  amount: number;
+  // null = parcelada sem dia de vencimento.
+  dueDate: string | null;
+  daysUntil: number | null;
+  isPaid: boolean;
+  // Conta fixa lança sozinha no dia: não tem botão de pagar.
+  pay: BillPayAction | null;
+  link: string;
+  card?: { closingDay: number; limitFree: number | null };
+  debt?: { installmentNumber: number; installmentsCount: number; paidCount: number; remainingAmount: number };
+}
+
+export interface BillLoan {
+  id: string;
+  direction: "lent" | "borrowed";
+  personName: string;
+  remaining: number;
+  dueDate: string | null;
+  isOverdue: boolean;
+}
+
+export interface BillsOverview {
+  today: string;
+  items: BillItem[];
+  loans: BillLoan[];
+  summary: { toPay: number; overdueCount: number; dueSoonCount: number };
+}
+
+export async function getBillsOverview(userId: string): Promise<BillsOverview> {
+  const today = todayInBrazil();
+  const thisMonth = today.slice(0, 7);
+  const [cards, debts, bills, loans] = await Promise.all([
+    listCards(userId),
+    listDebts(userId),
+    listRecurringBillsForUser(userId),
+    listLoans(userId),
+  ]);
+  const items: BillItem[] = [];
+  const inWindow = (dueDate: string) => daysBetween(today, dueDate) <= BILLS_WINDOW_DAYS;
+  const paidThisMonth = (dueDate: string | null) => !!dueDate && dueDate.slice(0, 7) === thisMonth;
+
+  for (const card of cards) {
+    const limitFree = card.limit !== null && card.limitUsed !== null ? Number(card.limit) - Number(card.limitUsed) : null;
+    const push = (month: string, dueDate: string, amount: number, isPaid: boolean) =>
+      items.push({
+        id: `card-${card.id}-${month}`,
+        kind: "card",
+        title: `Fatura ${card.name}`,
+        amount,
+        dueDate,
+        daysUntil: daysBetween(today, dueDate),
+        isPaid,
+        pay: { type: "card", cardId: card.id, month },
+        link: "/cards",
+        card: { closingDay: card.closingDay, limitFree },
+      });
+    const statement = card.currentStatement;
+    // Faturas anteriores ainda em aberto (só dá pra saber em cartão com
+    // limite, que guarda a linha do tempo de cada fatura não paga).
+    for (const release of card.limitReleases) {
+      if (release.month !== statement.month && inWindow(release.dueDate)) push(release.month, release.dueDate, Number(release.amount), false);
+    }
+    if (Number(statement.total) <= 0) continue;
+    if (statement.isPaid ? paidThisMonth(statement.dueDate) : inWindow(statement.dueDate)) {
+      push(statement.month, statement.dueDate, Number(statement.total), statement.isPaid);
+    }
+  }
+
+  for (const debt of debts) {
+    const sorted = [...debt.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+    const nextUnpaid = sorted.find((installment) => !installment.isPaid);
+    for (const installment of sorted) {
+      const shown = installment.isPaid
+        ? paidThisMonth(installment.dueDate)
+        : installment.dueDate
+        ? inWindow(installment.dueDate)
+        : installment === nextUnpaid;
+      if (!shown) continue;
+      items.push({
+        id: `debt-${debt.id}-${installment.id}`,
+        kind: "debt",
+        title: debt.name,
+        amount: Number(installment.amount),
+        dueDate: installment.dueDate,
+        daysUntil: installment.dueDate ? daysBetween(today, installment.dueDate) : null,
+        isPaid: installment.isPaid,
+        pay: { type: "debt", debtId: debt.id, installmentId: installment.id },
+        link: "/a-pagar?aba=dividas",
+        debt: {
+          installmentNumber: installment.installmentNumber,
+          installmentsCount: debt.installmentsCount,
+          paidCount: debt.paidCount,
+          remainingAmount: debt.remainingAmount,
+        },
+      });
+    }
+  }
+
+  for (const bill of bills) {
+    if (!bill.isActive || bill.transactionType !== "expense") continue;
+    const base = { kind: "recurring" as const, title: bill.description, amount: Number(bill.amount), pay: null, link: "/a-pagar?aba=fixas" };
+    if (bill.lastGeneratedMonth === thisMonth) {
+      const dueDate = dateForDayInMonth(thisMonth, bill.dayOfMonth);
+      items.push({ ...base, id: `recurring-${bill.id}-${thisMonth}`, dueDate, daysUntil: daysBetween(today, dueDate), isPaid: true });
+    }
+    const month = bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
+    const dueDate = dateForDayInMonth(month, bill.dayOfMonth);
+    const daysUntil = daysBetween(today, dueDate);
+    if (daysUntil < 0 || daysUntil > BILLS_WINDOW_DAYS) continue;
+    items.push({ ...base, id: `recurring-${bill.id}-${month}`, dueDate, daysUntil, isPaid: false });
+  }
+
+  const byDate = (a: BillItem, b: BillItem) =>
+    (a.dueDate ?? "9999") === (b.dueDate ?? "9999") ? a.title.localeCompare(b.title) : (a.dueDate ?? "9999") < (b.dueDate ?? "9999") ? -1 : 1;
+  items.sort(byDate);
+
+  const open = items.filter((item) => !item.isPaid);
+  return {
+    today,
+    items,
+    loans: loans.loans
+      .filter((loan) => loan.status === "open" && Number(loan.remaining) > 0)
+      .map((loan) => ({
+        id: loan.id,
+        direction: loan.direction,
+        personName: loan.personName,
+        remaining: Number(loan.remaining),
+        dueDate: loan.dueDate,
+        isOverdue: loan.isOverdue,
+      })),
+    summary: {
+      toPay: Math.round(open.reduce((sum, item) => sum + item.amount, 0) * 100) / 100,
+      overdueCount: open.filter((item) => item.daysUntil !== null && item.daysUntil < 0).length,
+      dueSoonCount: open.filter((item) => item.daysUntil !== null && item.daysUntil >= 0 && item.daysUntil <= UPCOMING_WINDOW_DAYS).length,
+    },
+  };
+}

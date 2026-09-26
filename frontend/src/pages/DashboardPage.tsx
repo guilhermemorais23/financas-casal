@@ -297,6 +297,7 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const firstImport = useFirstImportPrompt(user?.id, token, month === currentMonthParam() && !isLoading && recent.length === 0);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
   // Rows playing their exit animation (see .is-leaving in index.css) before
   // they're actually dropped from `recent`.
@@ -678,6 +679,28 @@ export function DashboardPage() {
         </div>
 
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
+        {firstImport.show && (
+          <div className="card first-import">
+            <span className="first-import-icon" aria-hidden="true">
+              <Icon name="upload" />
+            </span>
+            <div className="first-import-text">
+              <p className="card-title">Comece pelo extrato do banco</p>
+              <p className="card-subtitle">
+                Mande o PDF do extrato (ou OFX/CSV) e o PAR. monta o mês de vocês em poucos minutos: você só diz o que é cada nome, e ele
+                lembra nas próximas vezes.
+              </p>
+              <div className="first-import-actions">
+                <button type="button" className="btn btn-primary" onClick={() => setIsImportOpen(true)}>
+                  Importar extrato
+                </button>
+                <button type="button" className="btn btn-outline" onClick={firstImport.dismiss}>
+                  Prefiro lançar na mão
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
         <div className="stat-card wide">
           {/* O número grande é o saldo do mês (entrou - saiu), não o
@@ -759,10 +782,12 @@ export function DashboardPage() {
           <Link to="/transactions/new?tipo=receita" className="btn btn-outline">
             Nova receita
           </Link>
+{!firstImport.show && (
           <button type="button" className="btn btn-outline dashboard-import" onClick={() => setIsImportOpen(true)}>
             <Icon name="upload" />
             Importar extrato do banco
           </button>
+          )}
         </div>
         {isImportOpen && (
           <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { skipCache: true, silent: true })} />
@@ -1007,7 +1032,7 @@ export function DashboardPage() {
             <div className="card">
               <div className="section-header">
                 <p className="card-title">Dívidas</p>
-                <Link to="/debts" className="link">
+                <Link to="/a-pagar?aba=dividas" className="link">
                   Ver tudo
                 </Link>
               </div>
@@ -1234,4 +1259,46 @@ export function DashboardPage() {
       )}
     </AppLayout>
   );
+}
+
+// Conta nova (nenhum lançamento, nunca): o Painel abre sugerindo trazer o
+// extrato, que é o jeito mais rápido de o app ter os números do casal. Só
+// consulta o servidor quando o mês atual está vazio, e "Prefiro lançar na
+// mão" esconde de vez (por pessoa, neste aparelho).
+function useFirstImportPrompt(userId: string | undefined, token: string | null, monthIsEmpty: boolean) {
+  const key = userId ? `par:first-import-dismissed:${userId}` : null;
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return key ? localStorage.getItem(key) === "1" : true;
+    } catch {
+      return false;
+    }
+  });
+  const [neverLogged, setNeverLogged] = useState(false);
+
+  useEffect(() => {
+    if (!monthIsEmpty || dismissed || !token) {
+      setNeverLogged(false);
+      return;
+    }
+    let active = true;
+    apiRequest<unknown[]>("/transactions?limit=1", { token })
+      .then((rows) => active && setNeverLogged(rows.length === 0))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [monthIsEmpty, dismissed, token]);
+
+  return {
+    show: monthIsEmpty && neverLogged && !dismissed,
+    dismiss: () => {
+      setDismissed(true);
+      try {
+        if (key) localStorage.setItem(key, "1");
+      } catch {
+        // só conveniência
+      }
+    },
+  };
 }

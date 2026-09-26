@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { isWelcomeTourPending } from "../utils/welcomeTour";
+import { isWelcomeTourOpen, isWelcomeTourPending, subscribeWelcomeTour } from "../utils/welcomeTour";
 import { Icon, type IconName } from "./Icon";
 
 export interface Announcement {
@@ -14,11 +14,12 @@ export interface Announcement {
   bullets: string[];
   ctaLabel: string | null;
   ctaPath: string | null;
-  audience: "all" | "user";
+  audience: "all" | "couples" | "solo" | "new" | "user";
   targetUserId: string | null;
   targetName: string | null;
   active: boolean;
   seenCount: number;
+  clickCount?: number;
   createdAt: number;
 }
 
@@ -66,7 +67,8 @@ export function AnnouncementPopup() {
   const primaryRef = useRef<HTMLButtonElement>(null);
 
   const hiddenHere = HIDDEN_ON.some((prefix) => location.pathname.startsWith(prefix));
-  const tourPending = !!user && isWelcomeTourPending(user.id);
+  const tourOpen = useSyncExternalStore(subscribeWelcomeTour, () => !!user && isWelcomeTourOpen(user.id));
+  const tourPending = !!user && (tourOpen || isWelcomeTourPending(user));
 
   // Busca uma vez por conta, na primeira tela em que o pop-up pode aparecer
   // (e depois que a apresentação de boas-vindas foi fechada).
@@ -84,7 +86,7 @@ export function AnnouncementPopup() {
 
   function done(goTo?: string | null) {
     if (!current) return;
-    void apiRequest(`/announcements/${current.id}/seen`, { method: "POST", token }).catch(() => {});
+    void apiRequest(`/announcements/${current.id}/seen`, { method: "POST", token, body: { clicked: !!goTo } }).catch(() => {});
     setQueue((prev) => prev.slice(1));
     if (goTo) navigate(goTo);
   }

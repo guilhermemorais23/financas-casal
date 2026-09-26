@@ -13,6 +13,9 @@ export interface UserRow {
   groupIds: string[];
   photoDataUrl: string | null;
   phone: string | null;
+  // Apresentação de boas-vindas: true só pra conta criada agora, até ela
+  // aparecer uma vez. Contas antigas (sem o campo) contam como já vista.
+  welcomePending: boolean;
 }
 
 const usersCol = db.collection("users");
@@ -33,6 +36,7 @@ function toUserRow(id: string, data: FirebaseFirestore.DocumentData): UserRow {
     groupIds: groupIdsOf(data),
     photoDataUrl: data.photoDataUrl ?? null,
     phone: data.phone ?? null,
+    welcomePending: data.welcomePending === true,
   };
 }
 
@@ -66,6 +70,7 @@ export async function upsertUserProfile(input: {
     groupIds: [],
     photoDataUrl: null,
     phone: null,
+    welcomePending: true,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -78,6 +83,7 @@ export async function upsertUserProfile(input: {
       groupIds: [],
       photoDataUrl: null,
       phone: null,
+      welcomePending: true,
     },
     isNew: true,
   };
@@ -91,6 +97,10 @@ export async function updateUserProfile(
   await ref.update({ ...updates, updatedAt: FieldValue.serverTimestamp() });
   const doc = await ref.get();
   return toUserRow(doc.id, doc.data()!);
+}
+
+export async function markWelcomeSeen(userId: string): Promise<void> {
+  await usersCol.doc(userId).update({ welcomePending: false, welcomeSeenAt: FieldValue.serverTimestamp() });
 }
 
 // Quem está no grupo: perfis novos têm o grupo em groupIds; os de antes dos

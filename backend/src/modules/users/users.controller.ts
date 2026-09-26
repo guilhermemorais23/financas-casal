@@ -5,7 +5,7 @@ import { logAccess, type AccessEvent } from "../../utils/accessLog";
 import { sendNewSignupEmail, sendWelcomeEmail } from "../../email/mailer";
 import { auth } from "../../db/firestore";
 import { deleteAccountForUser } from "./deleteAccount.service";
-import { findUserById, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
+import { findUserById, markWelcomeSeen, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -32,6 +32,7 @@ async function toPublicUser(user: UserRow) {
     photoDataUrl: user.photoDataUrl,
     phone: user.phone,
     isAdmin: isAdminEmail(user.email),
+    welcomePending: user.welcomePending,
   };
 }
 
@@ -90,6 +91,15 @@ export async function meHandler(req: Request, res: Response) {
     return;
   }
   res.status(200).json(await toPublicUser(user));
+}
+
+// A apresentação aparece uma vez só: o app chama isto assim que ela abre
+// (não só quando a pessoa fecha), então atualizar a página ou trocar de
+// aparelho não mostra de novo. Novidades depois disso vão pelo Admin >
+// Novidades.
+export async function welcomeSeenHandler(req: Request, res: Response) {
+  await markWelcomeSeen(req.user!.id);
+  res.status(204).end();
 }
 
 export async function updateProfileHandler(req: Request, res: Response) {

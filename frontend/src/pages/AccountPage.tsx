@@ -161,6 +161,13 @@ export function AccountPage() {
     load();
   }, [token]);
 
+  // "Convidar meu par" no menu abre aqui já no convite.
+  useEffect(() => {
+    if (group && window.location.hash === "#convite") {
+      document.getElementById("convite")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [group]);
+
   async function handleSaveBudget(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -401,7 +408,7 @@ export function AccountPage() {
         </Link>
         )}
 
-        <div className="card">
+        <div className="card" id="convite">
           {isRenaming ? (
             <form onSubmit={handleRename} className="group-rename-form">
               <div className="field">

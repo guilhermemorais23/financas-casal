@@ -10,6 +10,7 @@ import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { cardsRouter } from "./modules/cards/cards.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
+import { billsRouter } from "./modules/upcoming/upcoming.routes";
 import { debtsRouter } from "./modules/debts/debts.routes";
 import { feedbackRouter } from "./modules/feedback/feedback.routes";
 import { monthCloseRouter } from "./modules/monthClose/monthClose.routes";
@@ -20,6 +21,7 @@ import { quotesRouter } from "./modules/quotes/quotes.routes";
 import { recurringBillsRouter } from "./modules/recurringBills/recurringBills.routes";
 import { remindersRouter } from "./modules/reminders/reminders.routes";
 import { maybeRunDailyJobs } from "./modules/reminders/reminders.service";
+import { maybeRunOpsChecks } from "./utils/opsAlerts";
 import { publicSharesRouter, sharesRouter } from "./modules/shares/shares.routes";
 import { openFinanceRouter } from "./modules/openFinance/openFinance.routes";
 import { statementsRouter } from "./modules/statements/statements.routes";
@@ -29,6 +31,7 @@ import {
   bootstrapHandler,
   deleteAccountHandler,
   logLoginEventHandler,
+  welcomeSeenHandler,
   meHandler,
   revokeSessionsHandler,
   updateProfileHandler,
@@ -123,17 +126,20 @@ export function createApp() {
   // a row auto-disables the cronjob even though the ping was doing its job.
   app.get("/api/health", (_req, res) => {
     void maybeRunDailyJobs();
+    void maybeRunOpsChecks();
     res.status(200).json({ status: "ok" });
   });
 
   app.get("/api/me", requireAuth, asyncHandler(meHandler));
   app.post("/api/me/bootstrap", requireAuth, asyncHandler(bootstrapHandler));
   app.post("/api/me/login-event", requireAuth, asyncHandler(logLoginEventHandler));
+  app.post("/api/me/welcome-seen", requireAuth, asyncHandler(welcomeSeenHandler));
   app.patch("/api/me", requireAuth, asyncHandler(updateProfileHandler));
   app.delete("/api/me", requireAuth, asyncHandler(deleteAccountHandler));
   app.post("/api/me/revoke-sessions", requireAuth, asyncHandler(revokeSessionsHandler));
   app.use("/api/groups", groupsRouter);
   app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/bills", billsRouter);
   app.use("/api/categories", categoriesRouter);
   app.use("/api/transactions", transactionsRouter);
   app.use("/api/goals", goalsRouter);

@@ -43,3 +43,47 @@ describe("pop-ups de novidade", () => {
     ).rejects.toThrow("pra quem vai");
   });
 });
+
+describe("pop-ups por público e cliques", () => {
+  it("casais, sozinhos e contas novas: cada um vê o seu", async () => {
+    const { userAId } = await createTestGroup();
+    const { db } = await import("../../db/firestore");
+    const { upsertUserProfile } = await import("../users/users.repository");
+    const soloId = `solo-${Date.now()}`;
+    await upsertUserProfile({ id: soloId, email: `${soloId}@par.dev`, displayName: "Solo" });
+    // Conta "antiga" pra ela existir antes dos pop-ups.
+    await db.collection("users").doc(soloId).update({ createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) });
+    await db.collection("users").doc(userAId).update({ createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) });
+
+    const couples = await createAnnouncement({ title: "Pro casal", text: "Texto", audience: "couples" }, "admin@test.com");
+    const solo = await createAnnouncement({ title: "Chame seu par", text: "Texto", audience: "solo" }, "admin@test.com");
+    const fresh = await createAnnouncement({ title: "Comece por aqui", text: "Texto", audience: "new" }, "admin@test.com");
+
+    const forCouple = (await listPendingFor(userAId)).map((a) => a.id);
+    const forSolo = (await listPendingFor(soloId)).map((a) => a.id);
+    expect(forCouple).toContain(couples.id);
+    expect(forCouple).not.toContain(solo.id);
+    expect(forSolo).toContain(solo.id);
+    expect(forSolo).not.toContain(couples.id);
+    // As duas contas têm 60 dias: não são novas.
+    expect(forCouple).not.toContain(fresh.id);
+
+    const newId = `novo-${Date.now()}`;
+    await upsertUserProfile({ id: newId, email: `${newId}@par.dev`, displayName: "Nova" });
+    expect((await listPendingFor(newId)).map((a) => a.id)).toContain(fresh.id);
+    for (const a of [couples, solo, fresh]) await setActive(a.id, false);
+  });
+
+  it("conta quem viu e quem tocou no botão, uma vez por pessoa", async () => {
+    const { userAId, userBId } = await createTestGroup();
+    const { findAnnouncement } = await import("./announcements.repository");
+    const a = await createAnnouncement({ title: "Veja", text: "Texto", ctaLabel: "Abrir", ctaPath: "/goals" }, "admin@test.com");
+    await markAnnouncementSeen(a.id, userAId, true);
+    await markAnnouncementSeen(a.id, userAId, true);
+    await markAnnouncementSeen(a.id, userBId);
+    await markAnnouncementSeen(a.id, userBId, true);
+    const after = await findAnnouncement(a.id);
+    expect(after).toMatchObject({ seenCount: 2, clickCount: 2 });
+    await setActive(a.id, false);
+  });
+});

@@ -317,9 +317,25 @@ interface AnnouncementDraft {
   bullets: string;
   ctaLabel: string;
   ctaPath: string;
-  audience: "all" | "user";
+  audience: Audience;
   targetUserId: string;
 }
+
+type Audience = "all" | "couples" | "solo" | "new" | "user";
+const AUDIENCE_LABEL: Record<Audience, string> = {
+  all: "Todo mundo",
+  couples: "Casais",
+  solo: "Quem usa sozinho",
+  new: "Contas novas",
+  user: "Uma pessoa",
+};
+// O que aparece na confirmação e na lista de enviados.
+const AUDIENCE_WHO: Record<Exclude<Audience, "user">, string> = {
+  all: "todo mundo",
+  couples: "os casais",
+  solo: "quem usa sozinho",
+  new: "as contas novas",
+};
 
 const EMPTY_DRAFT: AnnouncementDraft = {
   icon: "spark",
@@ -446,13 +462,15 @@ export function AdminAnnouncements() {
   async function handleSend(event: FormEvent) {
     event.preventDefault();
     if (missing) return;
-    const who = draft.audience === "all" ? "todo mundo" : target!.displayName || target!.email;
+    const who = draft.audience === "user" ? target!.displayName || target!.email : AUDIENCE_WHO[draft.audience];
     const ok = await confirm({
       title: `Mandar pra ${who}?`,
       body:
-        draft.audience === "all"
-          ? "O pop-up aparece uma vez pra cada pessoa, na próxima vez que ela abrir o app."
-          : "O pop-up aparece pra essa pessoa na próxima vez que ela abrir o app.",
+        draft.audience === "user"
+          ? "O pop-up aparece pra essa pessoa na próxima vez que ela abrir o app."
+          : draft.audience === "new"
+            ? "Aparece uma vez pra quem criou conta nos últimos 14 dias e pra quem criar daqui pra frente."
+            : "O pop-up aparece uma vez pra cada pessoa, na próxima vez que ela abrir o app.",
       confirmLabel: "Mandar",
       tone: "primary",
     });
@@ -517,12 +535,16 @@ export function AdminAnnouncements() {
         <div className="field">
           <span className="field-label">Pra quem</span>
           <div className="announce-row">
-            <button type="button" className={`chat-kind-pick${draft.audience === "all" ? " active" : ""}`} onClick={() => set("audience", "all")}>
-              Todo mundo
-            </button>
-            <button type="button" className={`chat-kind-pick${draft.audience === "user" ? " active" : ""}`} onClick={() => set("audience", "user")}>
-              Uma pessoa
-            </button>
+            {(Object.keys(AUDIENCE_LABEL) as Audience[]).map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`chat-kind-pick${draft.audience === value ? " active" : ""}`}
+                onClick={() => set("audience", value)}
+              >
+                {AUDIENCE_LABEL[value]}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -633,7 +655,7 @@ export function AdminAnnouncements() {
         </div>
 
         <button type="submit" className="btn btn-primary" disabled={!!missing || isSending}>
-          {isSending ? "Enviando..." : missing ?? (draft.audience === "all" ? "Mandar pra todo mundo" : `Mandar pra ${target?.displayName.split(" ")[0] || "essa pessoa"}`)}
+          {isSending ? "Enviando..." : missing ?? (draft.audience === "user" ? `Mandar pra ${target?.displayName.split(" ")[0] || "essa pessoa"}` : `Mandar pra ${AUDIENCE_WHO[draft.audience]}`)}
         </button>
       </form>
 
@@ -679,7 +701,8 @@ export function AdminAnnouncements() {
                 <span className="announce-sent-info">
                   <strong className="text-truncate">{a.title}</strong>
                   <small>
-                    {a.audience === "all" ? "Todo mundo" : `Pra ${a.targetName ?? "uma pessoa"}`} · {when(a.createdAt)} · visto por {a.seenCount}
+                    {a.audience === "user" ? `Pra ${a.targetName ?? "uma pessoa"}` : AUDIENCE_LABEL[a.audience]} · {when(a.createdAt)} · visto por {a.seenCount}
+                    {a.ctaPath ? ` · tocaram no botão ${a.clickCount ?? 0}` : ""}
                     {a.active ? "" : " · desativado"}
                   </small>
                 </span>
@@ -1201,6 +1224,7 @@ export function AdminUsers() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1213,6 +1237,7 @@ export function AdminUsers() {
 
   async function open(id: string) {
     setDetail(null);
+    setDeleteConfirm("");
     try {
       setDetail(await apiRequest<AdminUserDetail>(`/admin/users/${id}`, { token }));
     } catch (err) {
@@ -1239,6 +1264,46 @@ export function AdminUsers() {
       setUsers((prev) => prev?.map((u) => (u.id === user.id ? { ...u, blocked: blocking } : u)) ?? prev);
     } catch (err) {
       showToast("Não foi possível", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function sendPasswordReset(user: AdminUserDetail) {
+    const ok = await confirm({
+      title: `Mandar email pra ${user.displayName || user.email} trocar a senha?`,
+      body: `Vai pra ${user.email} um link pra criar uma senha nova. A senha atual continua valendo até ela trocar.`,
+      confirmLabel: "Mandar email",
+      tone: "primary",
+    });
+    if (!ok) return;
+    setIsBusy(true);
+    try {
+      await apiRequest(`/admin/users/${user.id}/password-reset`, { method: "POST", token });
+      showToast("Email enviado", { description: user.email });
+    } catch (err) {
+      showToast("O email não saiu", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function deleteUser(user: AdminUserDetail) {
+    const ok = await confirm({
+      title: `Excluir a conta de ${user.displayName || user.email}?`,
+      body: "Apaga o login, o perfil e os dados pessoais dela. Se ela divide grupo com alguém, o que é da Nossa Conta fica pra quem ficou. Não dá pra desfazer.",
+      confirmLabel: "Excluir para sempre",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setIsBusy(true);
+    try {
+      await apiRequest(`/admin/users/${user.id}/delete`, { method: "POST", token, body: { confirmEmail: deleteConfirm } });
+      showToast("Conta excluída", { description: user.email });
+      setUsers((prev) => prev?.filter((u) => u.id !== user.id) ?? prev);
+      setDetail(null);
+    } catch (err) {
+      showToast("Não foi possível excluir", { variant: "error", description: err instanceof ApiError ? err.message : undefined });
     } finally {
       setIsBusy(false);
     }
@@ -1274,7 +1339,22 @@ export function AdminUsers() {
           </div>
           <div>
             <dt>Grupo</dt>
-            <dd>{detail.group ? detail.group.members.map((m) => m.displayName || m.email).join(", ") : "Sem grupo"}</dd>
+            <dd>
+              {detail.group
+                ? detail.group.members.map((m, i) => (
+                    <span key={m.id}>
+                      {i > 0 && ", "}
+                      {m.id === detail.id ? (
+                        m.displayName || m.email
+                      ) : (
+                        <button type="button" className="link-button" onClick={() => void open(m.id)}>
+                          {m.displayName || m.email}
+                        </button>
+                      )}
+                    </span>
+                  ))
+                : "Sem grupo"}
+            </dd>
           </div>
           {detail.phone && (
             <div>
@@ -1295,10 +1375,40 @@ export function AdminUsers() {
             </ul>
           </>
         )}
-        {!detail.isAdmin && (
-          <button type="button" className={`btn ${detail.blocked ? "btn-primary" : "btn-outline"}`} disabled={isBusy} onClick={() => toggleBlock(detail)}>
-            {detail.blocked ? "Desbloquear conta" : "Bloquear conta"}
+        <div className="admin-user-actions">
+          <button type="button" className="btn btn-outline" disabled={isBusy} onClick={() => void sendPasswordReset(detail)}>
+            Mandar email pra trocar a senha
           </button>
+          {!detail.isAdmin && (
+            <button type="button" className={`btn ${detail.blocked ? "btn-primary" : "btn-outline"}`} disabled={isBusy} onClick={() => toggleBlock(detail)}>
+              {detail.blocked ? "Desbloquear conta" : "Bloquear conta"}
+            </button>
+          )}
+        </div>
+        {!detail.isAdmin && (
+          <div className="admin-user-danger">
+            <p className="admin-user-subtitle">Excluir a conta a pedido da pessoa</p>
+            <p className="field-hint">
+              Use quando a pessoa pedir pra apagar os dados dela (LGPD). Pra confirmar, digite o email: <strong>{detail.email}</strong>
+            </p>
+            <div className="admin-user-danger-row">
+              <input
+                type="email"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={detail.email}
+                aria-label="Email da pessoa, pra confirmar"
+              />
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={isBusy || deleteConfirm.trim().toLowerCase() !== detail.email.toLowerCase()}
+                onClick={() => void deleteUser(detail)}
+              >
+                Excluir conta
+              </button>
+            </div>
+          </div>
         )}
       </div>
     );
@@ -1338,6 +1448,112 @@ export function AdminUsers() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+interface ImportSourceStats {
+  source: string;
+  attempts: number;
+  ok: number;
+  unreconciled: number;
+  empty: number;
+  password: number;
+  error: number;
+  byAi: number;
+}
+
+interface ImportStats {
+  days: number;
+  sources: ImportSourceStats[];
+  committed: number;
+  committedRows: number;
+  people: number;
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  bradesco: "Bradesco",
+  nubank: "Nubank",
+  bb: "Banco do Brasil",
+  caixa: "Caixa",
+  itau: "Itaú",
+  santander: "Santander",
+  inter: "Inter",
+  outro: "Outro banco (PDF)",
+  desconhecido: "PDF sem banco reconhecido",
+  arquivo: "Arquivo (OFX/CSV)",
+  ofx: "OFX",
+  csv: "CSV",
+  openfinance: "Conectar conta (Pluggy)",
+};
+
+// Admin > Visão geral: importações de extrato por banco -- o que lê certo e
+// o que falha, pra saber qual leitor precisa de ajuste antes de alguém
+// reclamar. Só contagens; o conteúdo dos extratos nunca é guardado.
+export function AdminImports() {
+  const { token } = useAuth();
+  const [data, setData] = useState<ImportStats | null>(null);
+
+  useEffect(() => {
+    apiRequest<ImportStats>("/admin/imports", { token })
+      .then(setData)
+      .catch(() => setData(null));
+  }, [token]);
+
+  if (!data) return null;
+  const pct = (n: number, of: number) => (of > 0 ? `${Math.round((n / of) * 100)}%` : "—");
+  const attempts = data.sources.reduce((sum, s) => sum + s.attempts, 0);
+
+  return (
+    <div className="card admin-imports">
+      <p className="card-title">Importações de extrato · {data.days} dias</p>
+      <p className="card-subtitle">
+        {attempts} leituras de {data.people} {data.people === 1 ? "pessoa" : "pessoas"} · {data.committed} importadas (
+        {data.committedRows} lançamentos)
+      </p>
+      {data.sources.length === 0 ? (
+        <p className="field-hint">Ninguém importou extrato nesse período.</p>
+      ) : (
+        <div className="admin-imports-scroll">
+          <table className="admin-imports-table">
+            <thead>
+              <tr>
+                <th>Banco</th>
+                <th>Leituras</th>
+                <th>Deu certo</th>
+                <th>Saldo não bateu</th>
+                <th>Nada lido</th>
+                <th>Senha</th>
+                <th>Erro</th>
+                <th>Pela IA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.sources.map((s) => {
+                const failed = s.empty + s.error;
+                return (
+                  <tr key={s.source} className={s.attempts >= 3 && failed / s.attempts >= 0.3 ? "is-bad" : undefined}>
+                    <td>{SOURCE_LABEL[s.source] ?? s.source}</td>
+                    <td>{s.attempts}</td>
+                    <td>
+                      {s.ok} <span className="muted">({pct(s.ok, s.attempts)})</span>
+                    </td>
+                    <td>{s.unreconciled}</td>
+                    <td>{s.empty}</td>
+                    <td>{s.password}</td>
+                    <td>{s.error}</td>
+                    <td>{s.byAi}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="field-hint">
+        Em vermelho: banco com 3+ leituras e 30% ou mais sem nada lido ou com erro, ou seja, o leitor dele precisa de ajuste. "Pela IA" é quando o
+        leitor próprio não deu conta e a IA leu (custa cota).
+      </p>
     </div>
   );
 }

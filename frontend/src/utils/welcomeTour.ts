@@ -1,26 +1,45 @@
-// Qual edição da apresentação de boas-vindas / "o que tem de novo" esta conta
-// já viu. Todo mundo -- contas novas e antigas -- vê cada edição uma vez;
-// aumente TOUR_EDITION quando a apresentação tiver conteúdo novo que vale
-// mostrar de novo. Por id de usuário, então uma segunda pessoa entrando no
-// mesmo celular vê a dela. localStorage pode dar erro (modo privado,
-// armazenamento bloqueado) -- perder a apresentação não faz mal, então todo
-// acesso só ignora o erro.
-export const TOUR_EDITION = "2026-09-painel-chat";
+// A apresentação de boas-vindas aparece uma vez só, pra conta recém-criada.
+// Quem decide é o servidor (welcomePending no perfil): o app avisa que ela
+// apareceu assim que abre, então atualizar a página ou entrar por outro
+// aparelho não mostra de novo. O que tiver de novo depois disso vai pelo
+// Admin > Novidades (AnnouncementPopup).
+//
+// A marca local só cobre o intervalo até o perfil novo chegar do servidor
+// (o perfil em cache ainda diz welcomePending). localStorage pode dar erro
+// (modo privado) -- aí vale só o servidor.
+const shownKey = (userId: string) => `par:welcome-shown:${userId}`;
 
-const key = (userId: string) => `par:welcome-tour:${userId}`;
-
-export function isWelcomeTourPending(userId: string): boolean {
+export function isWelcomeTourPending(user: { id: string; welcomePending?: boolean }): boolean {
+  if (user.welcomePending !== true) return false;
   try {
-    return localStorage.getItem(key(userId)) !== TOUR_EDITION;
+    return localStorage.getItem(shownKey(user.id)) !== "1";
   } catch {
-    return false;
+    return true;
   }
 }
 
-export function markWelcomeTourDone(userId: string): void {
+export function markWelcomeTourShown(userId: string): void {
   try {
-    localStorage.setItem(key(userId), TOUR_EDITION);
+    localStorage.setItem(shownKey(userId), "1");
   } catch {
     // ignore
   }
+}
+
+// Enquanto a apresentação está na tela, os pop-ups de novidade esperam.
+let openFor: string | null = null;
+const listeners = new Set<() => void>();
+
+export function setWelcomeTourOpen(userId: string | null): void {
+  openFor = userId;
+  listeners.forEach((listener) => listener());
+}
+
+export function isWelcomeTourOpen(userId: string): boolean {
+  return openFor === userId;
+}
+
+export function subscribeWelcomeTour(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }

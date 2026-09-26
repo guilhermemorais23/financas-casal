@@ -1,9 +1,10 @@
 import { fromCents } from "../../utils/money";
-import { BANKS, parsePdfStatement, type Bank, type PdfAiOptions } from "../../utils/pdfStatement";
+import { BANKS, PdfPasswordError, parsePdfStatement, type Bank, type PdfAiOptions } from "../../utils/pdfStatement";
 import { StatementParseError, cleanStatementDescription, parseDate, parseStatement, type ParsedStatementRow } from "../../utils/statementParser";
 import { categoryIsVisibleTo, findVisibleCategories } from "../categories/categories.repository";
 import { recordAiTokens, reserveAi } from "../aiUsage/aiUsage";
 import { logError } from "../../utils/errorLog";
+import { logImport } from "../../utils/importLog";
 import { suggestCategories, type Suggestion } from "./suggestCategories";
 import { deleteRule, findRulesByGroup, normalizeStatementName, upsertRules } from "./importRules.repository";
 import { requireGroupId } from "../groups/groups.service";
@@ -139,13 +140,35 @@ export type StatementFormatOut = "ofx" | "csv" | "pdf" | "bank";
 
 export async function previewStatement(userId: string, input: StatementInput) {
   const ai = importAi(userId);
-  const read = await readInput(input, { allow: ai.allow, onTokens: ai.onTokens });
+  const isPdf = typeof input.pdfBase64 === "string" && input.pdfBase64 !== "";
+  const chosen = BANKS.includes(input.bank as Bank) ? (input.bank as Bank) : null;
+  let read: Awaited<ReturnType<typeof readInput>>;
+  try {
+    read = await readInput(input, { allow: ai.allow, onTokens: ai.onTokens });
+  } catch (err) {
+    logImport({
+      userId,
+      source: isPdf ? (chosen ?? "desconhecido") : "arquivo",
+      outcome: err instanceof PdfPasswordError ? "password" : "error",
+      rows: 0,
+      readBy: null,
+    });
+    throw err;
+  }
+  logImport({
+    userId,
+    source: read.pdf ? (read.pdf.bank ?? chosen ?? "desconhecido") : read.format,
+    outcome: read.rows.length === 0 ? "empty" : read.pdf?.reconciled === false ? "unreconciled" : "ok",
+    rows: read.rows.length,
+    readBy: read.pdf?.readBy ?? null,
+  });
   return previewRows(userId, read, ai);
 }
 
 // Lançamentos que já vêm com o sentido certo (Open Finance): mesma revisão
 // do extrato (perguntas, sugestões, nomes guardados, repetidos).
 export async function previewBankRows(userId: string, rows: ParsedStatementRow[]) {
+  logImport({ userId, source: "openfinance", outcome: rows.length === 0 ? "empty" : "ok", rows: rows.length, readBy: null });
   return previewRows(userId, { format: "bank", rows, pdf: null, signsKnown: true }, importAi(userId));
 }
 
@@ -334,6 +357,7 @@ export async function commitStatement(userId: string, accountId: string, items: 
     });
   }
   await upsertRules(groupId, userId, validRules);
+  if (created > 0) logImport({ userId, source: "commit", outcome: "committed", rows: created, readBy: null });
   return { created, rulesSaved: validRules.length };
 }
 
