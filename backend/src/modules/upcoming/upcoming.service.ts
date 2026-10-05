@@ -73,11 +73,12 @@ export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_W
       kind: "debt",
       direction: "pay",
       title: debt.name,
-      detail: `Parcela ${next.installmentNumber}/${debt.installmentsCount}`,
+      // 1 parcela = conta "só esta vez", que fica em A pagar → Contas.
+      detail: debt.installmentsCount === 1 ? "Só esta vez" : `Parcela ${next.installmentNumber}/${debt.installmentsCount}`,
       amount: Number(next.amount),
       dueDate: next.dueDate,
       daysUntil: daysBetween(today, next.dueDate),
-      link: "/debts",
+      link: debt.installmentsCount === 1 ? "/a-pagar" : "/debts",
     });
   }
 
@@ -288,7 +289,7 @@ export async function getBillsOverview(userId: string): Promise<BillsOverview> {
         daysUntil: installment.dueDate ? daysBetween(today, installment.dueDate) : null,
         isPaid: installment.isPaid,
         pay: { type: "debt", debtId: debt.id, installmentId: installment.id },
-        link: "/a-pagar?aba=dividas",
+        link: debt.installmentsCount === 1 ? "/a-pagar" : "/a-pagar?aba=dividas",
         debt: {
           installmentNumber: installment.installmentNumber,
           installmentsCount: debt.installmentsCount,
