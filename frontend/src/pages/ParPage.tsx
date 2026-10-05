@@ -17,6 +17,7 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { initialOf } from "../utils/initial";
+import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
 
 interface AccountRow {
   id: string;
@@ -48,12 +49,13 @@ interface TransactionListRow {
   categoryId: string | null;
   categoryName: string | null;
   categoryEmoji: string | null;
-  splitType: "none" | "equal";
+  splitType: "none" | "equal" | "custom";
   isSettled: boolean;
   // Transferências (cartão garantido, empréstimo) são mexidas nas próprias
   // páginas -- sem editar/excluir aqui.
   securedCardId?: string | null;
   loanId?: string | null;
+  linkKind?: LinkKind | null;
 }
 
 interface PayerSummaryRow {
@@ -416,14 +418,16 @@ export function ParPage() {
                     <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                       <Icon name="pencil" />
                     </button>
-                    <button
-                      type="button"
-                      className="btn-icon"
-                      title="Excluir"
-                      onClick={() => handleDelete(tx)}
-                    >
-                      <Icon name="trash" />
-                    </button>
+                    {!isLinkedTransaction(tx) && (
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Excluir"
+                        onClick={() => handleDelete(tx)}
+                      >
+                        <Icon name="trash" />
+                      </button>
+                    )}
                   </div>
                 )}
               </li>

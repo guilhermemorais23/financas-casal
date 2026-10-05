@@ -16,6 +16,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, u
 import { getActiveGroupId, setActiveGroupId, subscribeActiveGroup } from "../api/activeGroup";
 import { ApiError, apiRequest, setTokenRefresher, warmUpApi } from "../api/client";
 import { firebaseAuth } from "../firebase";
+import { clearCache } from "../utils/pageCache";
 
 export interface AuthUser {
   id: string;
@@ -173,6 +174,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onIdTokenChanged(firebaseAuth, async (firebaseUser) => {
       if (!firebaseUser) {
         clearCachedProfiles();
+        // Extrato, saldos e cia. guardados pra abrir rápido: não ficam no
+        // aparelho depois de sair (ou de excluir a conta).
+        clearCache();
         setActiveGroupId(null);
         setUser(null);
         setToken(null);

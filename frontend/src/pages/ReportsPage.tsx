@@ -23,6 +23,7 @@ import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
+import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
 
 interface CategorySummaryRow {
   categoryId: string | null;
@@ -60,12 +61,13 @@ interface TransactionListRow {
   categoryEmoji: string | null;
   isPrivate: boolean;
   recurringGroupId: string | null;
-  splitType: "none" | "equal";
+  splitType: "none" | "equal" | "custom";
   isSettled: boolean;
   // Guardar/resgatar de um cartão com limite garantido -- managed from the
   // card itself, so the extrato shows it without edit/delete.
   securedCardId?: string | null;
   loanId?: string | null;
+  linkKind?: LinkKind | null;
   accountId: string;
   accountType: "personal" | "joint";
   paymentMethod: PaymentMethod | null;
@@ -569,13 +571,17 @@ export function ReportsPage() {
                     icon: "repeat" as const,
                     onClick: () => navigate(repeatHref(tx)),
                   },
-                  {
-                    key: "delete",
-                    label: "Excluir",
-                    icon: "trash" as const,
-                    danger: true,
-                    onClick: () => handleDelete(tx),
-                  },
+                  ...(isLinkedTransaction(tx)
+                    ? []
+                    : [
+                        {
+                          key: "delete",
+                          label: "Excluir",
+                          icon: "trash" as const,
+                          danger: true,
+                          onClick: () => handleDelete(tx),
+                        },
+                      ]),
                 ]}
               />
             </div>
