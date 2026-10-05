@@ -14,9 +14,6 @@ import {
 import { getLoansOverview } from "./loansOverview.service";
 import { isIsoDate, isValidAmount } from "../../utils/validation";
 
-
-
-
 // % ao mês: ausente/null/0 = sem juros; senão entre 0,01 e 20.
 function readInterest(value: unknown): number | null | "invalid" {
   if (value === undefined || value === null || value === 0) return null;

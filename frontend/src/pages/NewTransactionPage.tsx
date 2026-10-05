@@ -7,7 +7,7 @@ import { useSwipeDownToClose } from "../hooks/useSwipeDownToClose";
 import { useToast } from "../components/ToastProvider";
 import { saveTransactionInBackground } from "../utils/optimisticTransactions";
 import { AppLayout } from "../layouts/AppLayout";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, todayISO } from "../utils/format";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { recentDescriptions, rememberEntry, suggestFor } from "../utils/quickEntry";
 import {
@@ -87,7 +87,7 @@ export function NewTransactionPage() {
   const [showMore, setShowMore] = useState(false);
   const [knownDescriptions] = useState(() => recentDescriptions(user?.id ?? ""));
   const [payerId, setPayerId] = useState(user?.id ?? "");
-  const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [occurredAt, setOccurredAt] = useState(() => todayISO());
   const [splitType, setSplitType] = useState<"none" | "equal">("none");
   const [isPrivate, setIsPrivate] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">(() => (prefill.get("p") as PaymentMethod | null) ?? "");
@@ -108,7 +108,7 @@ export function NewTransactionPage() {
   const asksForCard = !isIncome && paymentMethod === "credit" && cards.length > 0;
   const selectedCard = asksForCard ? cards.find((card) => card.id === cardChoice) ?? null : null;
   const moreOptionsSummary = [
-    occurredAt === new Date().toISOString().slice(0, 10)
+    occurredAt === todayISO()
       ? "Hoje"
       : new Date(`${occurredAt}T00:00:00`).toLocaleDateString("pt-BR"),
     accounts.find((a) => a.id === accountId)?.name,

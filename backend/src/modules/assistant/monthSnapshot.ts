@@ -2,6 +2,7 @@ import { getGroupForUser } from "../groups/groups.service";
 import { listLoans, todayInBrazil } from "../loans/loans.service";
 import { getMonthlyTrendForUser } from "../transactions/transactions.service";
 import { getUpcomingForUser, type UpcomingItem } from "../upcoming/upcoming.service";
+import { formatBRL } from "../../utils/money";
 
 // Os números que uma conversa de "controle do mês" sempre volta a usar, num
 // lugar só: o que tem nas contas, o que entrou e saiu no mês, quanto sobra
@@ -21,10 +22,6 @@ export interface MonthSnapshot {
   // "Eu devo": o que a pessoa pegou emprestado e ainda vai devolver.
   owedOutstanding: number;
   owed: { personName: string; remaining: number; dueDate: string | null; isOverdue: boolean }[];
-}
-
-export function brl(amount: number): string {
-  return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 export async function buildMonthSnapshot(userId: string): Promise<MonthSnapshot> {
@@ -78,22 +75,22 @@ function whenLabel(daysUntil: number): string {
 export function snapshotAsText(s: MonthSnapshot): string {
   const upcomingText = s.upcoming.length
     ? s.upcoming
-        .map((item) => `${item.direction === "pay" ? "pagar" : "receber"} ${item.title} ${brl(item.amount)} (${whenLabel(item.daysUntil)})`)
+        .map((item) => `${item.direction === "pay" ? "pagar" : "receber"} ${item.title} ${formatBRL(item.amount)} (${whenLabel(item.daysUntil)})`)
         .join("; ")
     : "nada vencendo nos próximos 7 dias";
   const loansText = s.loans.length
-    ? s.loans.map((loan) => `${loan.personName} deve ${brl(loan.remaining)}${loan.dueDate ? `, prazo ${loan.dueDate}` : ", sem prazo"}${loan.isOverdue ? " (atrasado)" : ""}`).join("; ")
+    ? s.loans.map((loan) => `${loan.personName} deve ${formatBRL(loan.remaining)}${loan.dueDate ? `, prazo ${loan.dueDate}` : ", sem prazo"}${loan.isOverdue ? " (atrasado)" : ""}`).join("; ")
     : "ninguém deve nada";
   const owedText = s.owed.length
-    ? s.owed.map((loan) => `deve ${brl(loan.remaining)} pra ${loan.personName}${loan.dueDate ? `, prazo ${loan.dueDate}` : ", sem prazo"}${loan.isOverdue ? " (atrasado)" : ""}`).join("; ")
+    ? s.owed.map((loan) => `deve ${formatBRL(loan.remaining)} pra ${loan.personName}${loan.dueDate ? `, prazo ${loan.dueDate}` : ", sem prazo"}${loan.isOverdue ? " (atrasado)" : ""}`).join("; ")
     : "não deve nada pra ninguém";
-  return `Saldo nas contas hoje: ${brl(s.balanceToday)}.
-Este mês (conta pessoal): entrou ${brl(s.income)}, saiu ${brl(s.expense)}, sobra ${brl(s.monthLeft)}.
-Faltam ${s.daysLeft} dias pro mês acabar: dá pra gastar ${brl(Math.max(0, s.dailyAllowance))} por dia.
+  return `Saldo nas contas hoje: ${formatBRL(s.balanceToday)}.
+Este mês (conta pessoal): entrou ${formatBRL(s.income)}, saiu ${formatBRL(s.expense)}, sobra ${formatBRL(s.monthLeft)}.
+Faltam ${s.daysLeft} dias pro mês acabar: dá pra gastar ${formatBRL(Math.max(0, s.dailyAllowance))} por dia.
 Vence nos próximos 7 dias: ${upcomingText}.
-Empréstimos a receber: ${loansText}. Total a receber: ${brl(s.loansOutstanding)}.
-Empréstimos que a pessoa deve devolver: ${owedText}. Total que deve: ${brl(s.owedOutstanding)}.
-Seu de verdade (contas + a receber - o que deve): ${brl(s.balanceToday + s.loansOutstanding - s.owedOutstanding)}.`;
+Empréstimos a receber: ${loansText}. Total a receber: ${formatBRL(s.loansOutstanding)}.
+Empréstimos que a pessoa deve devolver: ${owedText}. Total que deve: ${formatBRL(s.owedOutstanding)}.
+Seu de verdade (contas + a receber - o que deve): ${formatBRL(s.balanceToday + s.loansOutstanding - s.owedOutstanding)}.`;
 }
 
 // Respostas em linguagem simples direto dos números -- usadas quando a IA não
@@ -108,28 +105,28 @@ export function answerFromSnapshot(s: MonthSnapshot, question: string): string {
   if (wantsDaily || (!wantsDue && !wantsLoans)) {
     lines.push(
       s.monthLeft >= 0
-        ? `Este mês entrou ${brl(s.income)} e saiu ${brl(s.expense)}. Sobram ${brl(s.monthLeft)}, dá ${brl(s.dailyAllowance)} por dia pelos próximos ${s.daysLeft} dias.`
-        : `Este mês saiu ${brl(s.expense)} e entrou ${brl(s.income)}: você está ${brl(-s.monthLeft)} no vermelho. Vale segurar os gastos até o mês virar.`
+        ? `Este mês entrou ${formatBRL(s.income)} e saiu ${formatBRL(s.expense)}. Sobram ${formatBRL(s.monthLeft)}, dá ${formatBRL(s.dailyAllowance)} por dia pelos próximos ${s.daysLeft} dias.`
+        : `Este mês saiu ${formatBRL(s.expense)} e entrou ${formatBRL(s.income)}: você está ${formatBRL(-s.monthLeft)} no vermelho. Vale segurar os gastos até o mês virar.`
     );
   }
   if (wantsDue || (!wantsDaily && !wantsLoans)) {
     const toPay = s.upcoming.filter((item) => item.direction === "pay");
     lines.push(
       toPay.length
-        ? `Vence logo: ${toPay.map((item) => `${item.title} ${brl(item.amount)} (${whenLabel(item.daysUntil)})`).join(", ")}.`
+        ? `Vence logo: ${toPay.map((item) => `${item.title} ${formatBRL(item.amount)} (${whenLabel(item.daysUntil)})`).join(", ")}.`
         : "Nada pra pagar nos próximos 7 dias."
     );
   }
   if (wantsLoans || (!wantsDue && !wantsDaily && (s.loans.length > 0 || s.owed.length > 0))) {
     lines.push(
       s.loans.length
-        ? `Te devem ${brl(s.loansOutstanding)}${s.loansOverdue > 0 ? ` (${brl(s.loansOverdue)} atrasado)` : ""}.`
+        ? `Te devem ${formatBRL(s.loansOutstanding)}${s.loansOverdue > 0 ? ` (${formatBRL(s.loansOverdue)} atrasado)` : ""}.`
         : "Ninguém te deve nada agora."
     );
     if (s.owed.length) {
-      lines.push(`Você deve ${brl(s.owedOutstanding)}: ${s.owed.map((o) => `${brl(o.remaining)} pra ${o.personName}`).join(", ")}.`);
+      lines.push(`Você deve ${formatBRL(s.owedOutstanding)}: ${s.owed.map((o) => `${formatBRL(o.remaining)} pra ${o.personName}`).join(", ")}.`);
     }
-    lines.push(`Seu de verdade (contas + a receber - o que deve): ${brl(s.balanceToday + s.loansOutstanding - s.owedOutstanding)}.`);
+    lines.push(`Seu de verdade (contas + a receber - o que deve): ${formatBRL(s.balanceToday + s.loansOutstanding - s.owedOutstanding)}.`);
   }
   return lines.join("\n");
 }

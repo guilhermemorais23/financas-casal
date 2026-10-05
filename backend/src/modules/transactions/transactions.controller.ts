@@ -36,7 +36,6 @@ function isValidPaymentMethod(value: unknown): boolean {
   return value === undefined || value === null || PAYMENT_METHODS.includes(value as PaymentMethod);
 }
 
-
 export async function createTransactionHandler(req: Request, res: Response) {
   const {
     accountId,

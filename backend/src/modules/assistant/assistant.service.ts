@@ -26,7 +26,8 @@ import { logError } from "../../utils/errorLog";
 import { isPremiumUser } from "../billing/billing.service";
 import { hasAiLeft, recordAiTokens, reserveAi } from "../aiUsage/aiUsage";
 import { geminiModel, tokensOf } from "../../utils/gemini";
-import { answerFromSnapshot, brl, buildMonthSnapshot, parseQuickEntry, snapshotAsText, type MonthSnapshot } from "./monthSnapshot";
+import { answerFromSnapshot, buildMonthSnapshot, parseQuickEntry, snapshotAsText, type MonthSnapshot } from "./monthSnapshot";
+import { formatBRL } from "../../utils/money";
 
 export class AssistantNotConfiguredError extends Error {}
 
@@ -371,7 +372,7 @@ async function basicAnswer(
       isPrivate: false,
       splitType: "none",
     });
-    return `${entry.type === "expense" ? "💸" : "💰"} Registrado: ${entry.description} — ${brl(entry.amount)}.`;
+    return `${entry.type === "expense" ? "💸" : "💰"} Registrado: ${entry.description} — ${formatBRL(entry.amount)}.`;
   }
   return answerFromSnapshot(snapshot, text);
 }

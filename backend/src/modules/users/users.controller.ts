@@ -8,7 +8,6 @@ import { deleteAccountForUser } from "./deleteAccount.service";
 import { findUserById, markWelcomeSeen, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
 import { isNonEmptyString } from "../../utils/validation";
 
-
 // isAdmin here is what the frontend uses to decide whether to even show the
 // Admin nav item -- the backend route itself still re-checks ADMIN_EMAILS
 // independently (admin.controller.ts), so this is purely a UX gate (nobody

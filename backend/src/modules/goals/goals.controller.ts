@@ -10,7 +10,6 @@ import {
 } from "./goals.service";
 import { isNonEmptyString, isValidAmount } from "../../utils/validation";
 
-
 // Same cap as the profile avatar -- a compressed, client-resized photo
 // comfortably clears this regardless of what the original file was.
 const MAX_PHOTO_DATA_URL_LENGTH = 300_000;

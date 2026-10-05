@@ -12,7 +12,6 @@ import {
 } from "./shopping.service";
 import { isNonEmptyString, isValidAmount } from "../../utils/validation";
 
-
 export async function addItemHandler(req: Request, res: Response) {
   const { name } = req.body ?? {};
   if (!isNonEmptyString(name)) {

@@ -19,6 +19,7 @@ import {
   wasReminderSent,
   type MemberWithEmail,
 } from "./reminders.repository";
+import { formatBRL } from "../../utils/money";
 
 // A card's due-date reminder fires the first time the cron notices its
 // current statement is unpaid and within this many days of (or already
@@ -28,10 +29,6 @@ const CARD_REMINDER_WINDOW_DAYS = 7;
 function formatBRDate(isoDate: string): string {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
-}
-
-function formatBRL(amount: number): string {
-  return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 // Conta só os emails que saíram de verdade -- um lembrete só é marcado como

@@ -26,7 +26,7 @@ export class InvalidDayOfMonthError extends Error {}
 
 const SUPPORTED_SPLIT_TYPES: SplitType[] = ["none", "equal"];
 
-function isValidDayOfMonth(value: unknown): value is number {
+export function isValidDayOfMonth(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
 }
 

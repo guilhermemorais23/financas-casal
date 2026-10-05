@@ -23,7 +23,6 @@ import { isNonEmptyString } from "../../utils/validation";
 
 const TOO_MANY_GROUPS = { error: `Dá pra participar de até ${MAX_GROUPS_PER_USER} grupos.`, code: "too_many_groups" };
 
-
 export async function createGroupHandler(req: Request, res: Response) {
   try {
     const { name, emoji } = req.body ?? {};

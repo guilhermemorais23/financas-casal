@@ -35,7 +35,6 @@ export const categoriesRouter = Router();
 
 categoriesRouter.use(requireAuth);
 
-
 categoriesRouter.get(
   "/",
   asyncHandler(async (req, res) => {

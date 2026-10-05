@@ -14,13 +14,9 @@ import {
   deleteRecurringBillForUser,
   listRecurringBillsForUser,
   updateRecurringBillForUser,
+  isValidDayOfMonth,
 } from "./recurringBills.service";
 import { isNonEmptyString, isValidAmount } from "../../utils/validation";
-
-
-function isValidDayOfMonth(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
-}
 
 export async function createRecurringBillHandler(req: Request, res: Response) {
   const { accountId, categoryId, payerId, description, amount, transactionType, isPrivate, splitType, dayOfMonth } =

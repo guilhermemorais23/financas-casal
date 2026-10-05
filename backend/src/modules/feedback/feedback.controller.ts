@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import { NotAdminError, requireAdminEmail } from "../admin/admin.service";
 import { findUserById } from "../users/users.repository";
 import type { FeedbackKind } from "./feedback.repository";
 import {
@@ -12,6 +11,7 @@ import {
   replyAsTeam,
   sendUserMessage,
 } from "./feedback.service";
+import { ensureAdmin } from "../admin/adminGuard";
 
 function isFeedbackKind(value: unknown): value is FeedbackKind {
   return value === "idea" || value === "problem" || value === "praise";
@@ -28,19 +28,6 @@ function readText(value: unknown, res: Response): string | null {
     return null;
   }
   return text;
-}
-
-function isAdmin(req: Request, res: Response): boolean {
-  try {
-    requireAdminEmail(req.user!.email);
-    return true;
-  } catch (err) {
-    if (err instanceof NotAdminError) {
-      res.status(403).json({ error: "not an admin" });
-      return false;
-    }
-    throw err;
-  }
 }
 
 export async function getMyConversationHandler(req: Request, res: Response) {
@@ -66,12 +53,12 @@ export async function createFeedbackHandler(req: Request, res: Response) {
 }
 
 export async function listThreadsHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   res.json({ threads: await listThreadsForTeam() });
 }
 
 export async function getThreadHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   try {
     res.json(await getThreadForTeam(String(req.params.threadId)));
   } catch (err) {
@@ -84,7 +71,7 @@ export async function getThreadHandler(req: Request, res: Response) {
 }
 
 export async function replyHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   const text = readText(req.body?.message, res);
   if (text === null) return;
   try {

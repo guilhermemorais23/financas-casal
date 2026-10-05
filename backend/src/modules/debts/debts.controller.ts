@@ -15,7 +15,6 @@ import {
 } from "./debts.service";
 import { isNonEmptyString, isValidAmount } from "../../utils/validation";
 
-
 function isValidDueDay(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
 }

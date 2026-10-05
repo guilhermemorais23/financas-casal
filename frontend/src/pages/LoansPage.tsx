@@ -6,7 +6,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
-import { formatCurrency, parseLocalDate } from "../utils/format";
+import { formatCurrency, parseLocalDate, todayISO } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 import { Sheet } from "../components/Sheet";
 
@@ -69,12 +69,6 @@ interface AccountRow {
 }
 
 const NO_ACCOUNT = "";
-
-function todayISO(): string {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
 
 function shortDate(iso: string): string {
   return parseLocalDate(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");

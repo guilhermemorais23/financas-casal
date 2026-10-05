@@ -27,7 +27,6 @@ import {
 } from "./cards.service";
 import { isIsoDate, isNonEmptyString, isValidAmount, MAX_DESCRIPTION_LENGTH } from "../../utils/validation";
 
-
 function isValidDay(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
 }

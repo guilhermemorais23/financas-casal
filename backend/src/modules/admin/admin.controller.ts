@@ -1,7 +1,8 @@
 import type { Request, Response } from "express";
 import { emailProvider, sendEmail } from "../../email/mailer";
 import { checkAssistant } from "../assistant/assistant.service";
-import { getAdminOverview, NotAdminError, requireAdminEmail } from "./admin.service";
+import { getAdminOverview } from "./admin.service";
+import { ensureAdmin } from "./adminGuard";
 import { getAdminInsights } from "./admin.insights";
 import { buildDiagnostics } from "./admin.diagnostics";
 import { AdminUserError, deleteUserForAdmin, getUserDetailForAdmin, listUsersForAdmin, sendPasswordResetForAdmin, setUserBlocked } from "./admin.users";
@@ -11,31 +12,10 @@ import { updateAppSettings } from "../settings/appSettings";
 import { getImportStats } from "../../utils/importLog";
 
 export async function getAdminOverviewHandler(req: Request, res: Response) {
-  try {
-    requireAdminEmail(req.user!.email);
-  } catch (err) {
-    if (err instanceof NotAdminError) {
-      res.status(403).json({ error: "not an admin" });
-      return;
-    }
-    throw err;
-  }
+  if (!ensureAdmin(req, res)) return;
 
   const overview = await getAdminOverview();
   res.status(200).json(overview);
-}
-
-function ensureAdmin(req: Request, res: Response): boolean {
-  try {
-    requireAdminEmail(req.user!.email);
-    return true;
-  } catch (err) {
-    if (err instanceof NotAdminError) {
-      res.status(403).json({ error: "not an admin" });
-      return false;
-    }
-    throw err;
-  }
 }
 
 // Admin > Diagnóstico: o que está configurado em produção, sem precisar abrir
@@ -54,7 +34,6 @@ export async function testEmailHandler(req: Request, res: Response) {
   );
   res.status(result.ok ? 200 : 502).json({ ...result, to: req.user!.email });
 }
-
 
 export async function testAiHandler(req: Request, res: Response) {
   if (!ensureAdmin(req, res)) return;

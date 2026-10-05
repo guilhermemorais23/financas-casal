@@ -22,7 +22,6 @@ export async function createTelegramLinkCodeHandler(req: Request, res: Response)
   res.status(200).json({ code });
 }
 
-
 export async function chatHandler(req: Request, res: Response) {
   const { message } = req.body ?? {};
   if (!isNonEmptyString(message)) {

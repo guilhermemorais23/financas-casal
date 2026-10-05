@@ -4,6 +4,7 @@ import { listDebts } from "../debts/debts.service";
 import { requireGroupId } from "../groups/groups.service";
 import { getMonthlySummaryForUser } from "../transactions/transactions.service";
 import { addMonths, daysBetween } from "../../utils/month";
+import { formatBRL } from "../../utils/money";
 
 export type AlertSeverity = "info" | "warning" | "critical";
 
@@ -24,10 +25,6 @@ const DUE_WINDOW_DAYS = 3;
 // alert; one that went from R$200 to R$500 in Lazer is.
 const CATEGORY_SPIKE_RATIO = 0.3;
 const CATEGORY_SPIKE_MIN_REAIS = 50;
-
-function formatBRL(amount: number): string {
-  return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 function daysInMonth(monthParam: string): number {
   const [year, month] = monthParam.split("-").map(Number);

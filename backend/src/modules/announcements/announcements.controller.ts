@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import { NotAdminError, requireAdminEmail } from "../admin/admin.service";
 import { listPeople } from "./announcements.repository";
 import {
   AnnouncementNotFoundError,
@@ -10,19 +9,7 @@ import {
   markAnnouncementSeen,
   setActive,
 } from "./announcements.service";
-
-function isAdmin(req: Request, res: Response): boolean {
-  try {
-    requireAdminEmail(req.user!.email);
-    return true;
-  } catch (err) {
-    if (err instanceof NotAdminError) {
-      res.status(403).json({ error: "not an admin" });
-      return false;
-    }
-    throw err;
-  }
-}
+import { ensureAdmin } from "../admin/adminGuard";
 
 function notFound(err: unknown, res: Response): boolean {
   if (err instanceof AnnouncementNotFoundError) {
@@ -48,17 +35,17 @@ export async function markSeenHandler(req: Request, res: Response) {
 
 // Lado do admin (conferido contra ADMIN_EMAILS).
 export async function listForAdminHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   res.json({ announcements: await listAnnouncementsForAdmin() });
 }
 
 export async function listPeopleHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   res.json({ people: await listPeople() });
 }
 
 export async function createHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   try {
     res.status(201).json(await createAnnouncement(req.body ?? {}, req.user!.email));
   } catch (err) {
@@ -71,7 +58,7 @@ export async function createHandler(req: Request, res: Response) {
 }
 
 export async function setActiveHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   try {
     res.json(await setActive(String(req.params.id), req.body?.active === true));
   } catch (err) {
