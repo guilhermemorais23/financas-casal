@@ -140,6 +140,13 @@ interface NextInvoice {
   cardName: string;
   dueDate: string;
   total: string;
+  limit: string | null;
+  limitUsed: string | null;
+}
+
+function limitToneFor(used: number, limit: number): string {
+  const percent = limit > 0 ? (used / limit) * 100 : 0;
+  return percent >= 100 ? "over" : percent >= 80 ? "warning" : "";
 }
 
 interface MonthlyTrendPoint {
@@ -944,6 +951,20 @@ export function DashboardPage() {
                         >
                           {formatCurrency(Number(nextInvoice.total))} · {dueLabel(daysUntil(nextInvoice.dueDate))}
                         </p>
+                        {nextInvoice.limit !== null && nextInvoice.limitUsed !== null && (
+                          <>
+                            <div className="progress-track card-limit-track">
+                              <div
+                                className={`progress-fill ${limitToneFor(Number(nextInvoice.limitUsed), Number(nextInvoice.limit))}`}
+                                style={{ width: `${Math.min(100, (Number(nextInvoice.limitUsed) / Number(nextInvoice.limit)) * 100)}%` }}
+                              />
+                            </div>
+                            <p className="dashboard-mini-sub">
+                              Sobrou {formatCurrency(Math.max(0, Number(nextInvoice.limit) - Number(nextInvoice.limitUsed)))} de{" "}
+                              {formatCurrency(Number(nextInvoice.limit))}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </Link>
                   )}
