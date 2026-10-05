@@ -99,13 +99,17 @@ export interface PluggyTransaction {
 }
 
 export const pluggy = {
-  async createConnectToken(clientUserId: string, itemId?: string): Promise<string> {
+  // webhookUrl: o Pluggy avisa ali quando a conexão atualiza ou chegam
+  // lançamentos novos.
+  async createConnectToken(clientUserId: string, itemId?: string, webhookUrl?: string | null): Promise<string> {
     const body = await call<{ accessToken: string }>("POST", "connect_token", {
       itemId,
-      options: { clientUserId, avoidDuplicates: true },
+      options: { clientUserId, avoidDuplicates: true, ...(webhookUrl ? { webhookUrl } : {}) },
     });
     return body.accessToken;
   },
+  // Conexão feita antes do aviso existir: passa a avisar também.
+  setItemWebhook: (id: string, webhookUrl: string) => call<unknown>("PATCH", `items/${encodeURIComponent(id)}`, { webhookUrl }),
   getItem: (id: string) => call<PluggyItem>("GET", `items/${encodeURIComponent(id)}`),
   deleteItem: (id: string) => call<void>("DELETE", `items/${encodeURIComponent(id)}`),
   async listAccounts(itemId: string): Promise<PluggyAccount[]> {

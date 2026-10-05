@@ -3,7 +3,9 @@ import { requireGroupId } from "../groups/groups.service";
 import { previewBankRows } from "../statements/statements.service";
 import type { ParsedStatementRow } from "../../utils/statementParser";
 import { pluggy, pluggyConfigured, type PluggyAccount, type PluggyTransaction } from "../../utils/pluggy";
-import { deleteItem, findItem, findItemsByUser, markSynced, saveItem } from "./openFinance.repository";
+import { deleteItem, findItem, findItemsByUser, markSynced, saveItem, savePending, type OpenFinanceItem } from "./openFinance.repository";
+import { sendPushToUser } from "../push/push.service";
+import { logError } from "../../utils/errorLog";
 
 export class OpenFinanceUnavailableError extends Error {}
 export class OpenFinanceItemNotFoundError extends Error {}
@@ -46,7 +48,14 @@ export async function getOpenFinanceStatus(userId: string, email: string) {
           itemId: item.itemId,
           connectorName: live.connector?.name ?? item.connectorName,
           status: live.status,
-          accounts: accounts.map((a) => ({ id: a.id, label: accountLabel(a), type: a.type, syncedUntil: item.syncedUntil?.[a.id] ?? null })),
+          accounts: accounts.map((a) => ({
+            id: a.id,
+            label: accountLabel(a),
+            type: a.type,
+            syncedUntil: item.syncedUntil?.[a.id] ?? null,
+            // Lançamentos novos que o Pluggy avisou e ainda não foram importados.
+            pending: item.pending?.accounts?.[a.id] ?? 0,
+          })),
         };
       } catch {
         return { itemId: item.itemId, connectorName: item.connectorName, status: "UNAVAILABLE", accounts: [] };
@@ -59,7 +68,7 @@ export async function getOpenFinanceStatus(userId: string, email: string) {
 export async function createConnectToken(userId: string, email: string, itemId?: string) {
   requireAccess(email);
   if (itemId) await requireOwnItem(userId, itemId);
-  return { accessToken: await pluggy.createConnectToken(userId, itemId) };
+  return { accessToken: await pluggy.createConnectToken(userId, itemId, pluggyWebhookUrl()) };
 }
 
 // Depois da janela do Pluggy: guarda a conexão. Confere no Pluggy que ela foi
@@ -72,6 +81,10 @@ export async function registerItem(userId: string, email: string, itemId: string
   if (live.clientUserId !== userId) throw new OpenFinanceNotYoursError();
   const existing = await findItem(itemId);
   if (existing && existing.userId !== userId) throw new OpenFinanceNotYoursError();
+  const webhookUrl = pluggyWebhookUrl();
+  if (webhookUrl) {
+    await pluggy.setItemWebhook(itemId, webhookUrl).catch((err) => logError("pluggy-webhook", err, { userId }));
+  }
   await saveItem({
     itemId,
     userId,
@@ -138,6 +151,13 @@ export async function markBankSynced(userId: string, email: string, itemId: stri
   await requireOwnItem(userId, itemId);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(until)) throw new OpenFinanceItemNotFoundError();
   await markSynced(itemId, accountId, until);
+  // Importou: o que estava esperando nessa conta já entrou.
+  const item = await findItem(itemId);
+  if (item?.pending?.accounts?.[accountId]) {
+    const accounts = { ...item.pending.accounts, [accountId]: 0 };
+    const total = Object.values(accounts).reduce((sum, n) => sum + n, 0);
+    await savePending(itemId, { accounts, total, notified: Math.min(item.pending.notified, total), updatedAt: Date.now() });
+  }
 }
 
 export async function removeBankConnection(userId: string, email: string, itemId: string) {
@@ -149,4 +169,67 @@ export async function removeBankConnection(userId: string, email: string, itemId
     // já apagado no Pluggy: segue e apaga aqui
   }
   await deleteItem(itemId);
+}
+
+// ---------------------------------------------------------------------------
+// Aviso do Pluggy (webhook): quando a conexão atualiza ou chegam lançamentos,
+// conta quantos ainda não foram importados em cada conta e avisa a pessoa no
+// celular. Não importa sozinho -- a revisão (categorias, repetidos, "não é
+// gasto") continua sendo da pessoa.
+// ---------------------------------------------------------------------------
+
+// Endereço que o Pluggy chama. Precisa do endereço público do servidor (o
+// Render dá RENDER_EXTERNAL_URL sozinho) e de um segredo no próprio endereço
+// (o Pluggy não assina os avisos).
+export function pluggyWebhookUrl(): string | null {
+  const base = (process.env.API_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").trim().replace(/\/+$/, "");
+  const secret = process.env.PLUGGY_WEBHOOK_SECRET?.trim();
+  if (!base.startsWith("https://") || !secret) return null;
+  return `${base}/api/open-finance/webhook?token=${encodeURIComponent(secret)}`;
+}
+
+const WEBHOOK_EVENTS = new Set(["item/updated", "transactions/created", "transactions/updated"]);
+
+export async function countPendingForItem(item: OpenFinanceItem): Promise<Record<string, number>> {
+  const accounts = await pluggy.listAccounts(item.itemId);
+  const counts: Record<string, number> = {};
+  for (const account of accounts) {
+    const synced = item.syncedUntil?.[account.id];
+    const transactions = await pluggy.listTransactions(account.id, synced ?? daysAgo(DEFAULT_DAYS));
+    counts[account.id] = toStatementRows(transactions, account).filter((row) => !synced || row.date > synced).length;
+  }
+  return counts;
+}
+
+export async function processPluggyEvent(body: unknown): Promise<void> {
+  const event = (body ?? {}) as { event?: unknown; itemId?: unknown };
+  if (typeof event.event !== "string" || !WEBHOOK_EVENTS.has(event.event)) return;
+  if (typeof event.itemId !== "string") return;
+  const item = await findItem(event.itemId);
+  if (!item) return;
+  const accounts = await countPendingForItem(item);
+  const total = Object.values(accounts).reduce((sum, n) => sum + n, 0);
+  const notified = item.pending?.notified ?? 0;
+  await savePending(item.itemId, { accounts, total, notified: Math.max(notified, total), updatedAt: Date.now() });
+  if (total > notified) {
+    const fresh = total - notified;
+    await sendPushToUser(item.userId, {
+      title: `${fresh} ${fresh === 1 ? "lançamento novo" : "lançamentos novos"} no ${item.connectorName}`,
+      body: "Toque pra revisar e importar pro PAR.",
+      url: "/dashboard?importar=banco",
+      tag: `pluggy-${item.itemId}`,
+    });
+  }
+}
+
+// Painel: quantos lançamentos do banco estão esperando revisão. Só lê o que
+// o aviso do Pluggy já contou (não chama o Pluggy a cada abertura do app).
+export async function getPendingSummary(userId: string, email: string) {
+  if (!canUseOpenFinance(email)) return { total: 0, banks: [] as string[] };
+  const items = await findItemsByUser(userId);
+  const waiting = items.filter((item) => (item.pending?.total ?? 0) > 0);
+  return {
+    total: waiting.reduce((sum, item) => sum + (item.pending?.total ?? 0), 0),
+    banks: waiting.map((item) => item.connectorName),
+  };
 }
