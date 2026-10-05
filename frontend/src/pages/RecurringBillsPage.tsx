@@ -9,6 +9,7 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
+import { MonthBillsCard, parseMoney } from "../components/BillReminders";
 
 interface AccountRow {
   id: string;
@@ -35,12 +36,39 @@ interface RecurringBillRow {
   accountType: "personal" | "joint";
   categoryId: string | null;
   description: string;
-  amount: string;
+  // null quando é "Não sei ainda".
+  amount: string | null;
+  amountMode?: AmountMode;
+  remindDaysBefore?: number;
+  expectedAmount?: number | null;
   transactionType: "expense" | "income";
   splitType: "none" | "equal";
   dayOfMonth: number;
   isActive: boolean;
   lastGeneratedMonth: string | null;
+}
+
+type AmountMode = "fixed" | "estimate" | "unknown";
+
+const AMOUNT_MODES: { mode: AmountMode; label: string; hint: string }[] = [
+  { mode: "fixed", label: "Sei o valor", hint: "Lança sozinha no extrato no dia do vencimento." },
+  {
+    mode: "estimate",
+    label: "Mais ou menos",
+    hint: "Entra como previsão (≈). Quando a conta chegar, você confirma o valor real.",
+  },
+  { mode: "unknown", label: "Não sei ainda", hint: "O PAR. só lembra de pagar. O valor você informa quando souber." },
+];
+
+const REMIND_OPTIONS: { days: number; label: string }[] = [
+  { days: 0, label: "No dia" },
+  { days: 1, label: "1 dia antes" },
+  { days: 3, label: "3 dias antes" },
+  { days: 7, label: "1 semana antes" },
+];
+
+function remindLabel(days: number): string {
+  return days === 0 ? "avisa no dia" : days === 1 ? "avisa 1 dia antes" : days === 7 ? "avisa 1 semana antes" : `avisa ${days} dias antes`;
 }
 
 // `embedded`: dentro da aba "A pagar" (sem o próprio AppLayout e abas).
@@ -60,6 +88,8 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
   const [scope, setScope] = useState<"personal" | "joint">("personal");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [amountMode, setAmountMode] = useState<AmountMode>("fixed");
+  const [remindDays, setRemindDays] = useState(3);
   const [categoryId, setCategoryId] = useState("");
   const [payerId, setPayerId] = useState(user?.id ?? "");
   const [dayOfMonth, setDayOfMonth] = useState("");
@@ -69,6 +99,7 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState("");
+  const [editMode, setEditMode] = useState<AmountMode>("fixed");
   const [editDay, setEditDay] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -107,10 +138,11 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
     event.preventDefault();
     setError(null);
 
-    const parsedAmount = Number(amount.replace(",", "."));
+    const parsedAmount = parseMoney(amount);
     const parsedDay = Number(dayOfMonth);
-    if (!description.trim() || !(parsedAmount > 0) || !accountForScope) {
-      setError("Informe descrição, valor e o dia do mês.");
+    const needsAmount = amountMode !== "unknown";
+    if (!description.trim() || (needsAmount && !(parsedAmount > 0)) || !accountForScope) {
+      setError(needsAmount ? "Informe descrição, valor e o dia do mês." : "Informe a descrição e o dia do mês.");
       return;
     }
     if (!Number.isInteger(parsedDay) || parsedDay < 1 || parsedDay > 31) {
@@ -128,7 +160,9 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
           categoryId: categoryId || null,
           payerId: payerId || user?.id,
           description: description.trim(),
-          amount: parsedAmount,
+          amount: needsAmount ? parsedAmount : null,
+          amountMode,
+          remindDaysBefore: remindDays,
           transactionType: "expense",
           isPrivate: false,
           splitType: scope === "joint" ? splitType : "none",
@@ -137,10 +171,12 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
       });
       setDescription("");
       setAmount("");
+      setAmountMode("fixed");
+      setRemindDays(3);
       setCategoryId("");
       setDayOfMonth("");
       setSplitType("none");
-      showToast("Conta fixa criada");
+      showToast(amountMode === "fixed" ? "Conta fixa criada" : "Conta salva. O PAR. avisa antes de vencer.");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar a conta fixa");
@@ -164,14 +200,16 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
 
   function startEdit(bill: RecurringBillRow) {
     setEditingId(bill.id);
-    setEditAmount(bill.amount);
+    setEditAmount(bill.amount ? bill.amount.replace(".", ",") : "");
+    setEditMode(bill.amountMode ?? "fixed");
     setEditDay(String(bill.dayOfMonth));
   }
 
   async function saveEdit(billId: string) {
-    const parsedAmount = Number(editAmount.replace(",", "."));
+    const parsedAmount = parseMoney(editAmount);
     const parsedDay = Number(editDay);
-    if (!(parsedAmount > 0) || !Number.isInteger(parsedDay) || parsedDay < 1 || parsedDay > 31) {
+    const needsAmount = editMode !== "unknown";
+    if ((needsAmount && !(parsedAmount > 0)) || !Number.isInteger(parsedDay) || parsedDay < 1 || parsedDay > 31) {
       setError("Valor e dia do mês precisam ser válidos.");
       return;
     }
@@ -180,7 +218,7 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
       await apiRequest(`/recurring-bills/${billId}`, {
         method: "PATCH",
         token,
-        body: { amount: parsedAmount, dayOfMonth: parsedDay },
+        body: { amount: needsAmount ? parsedAmount : null, amountMode: editMode, dayOfMonth: parsedDay },
       });
       setEditingId(null);
       showToast("Conta fixa salva");
@@ -227,14 +265,26 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
           {isEditing ? (
             <div className="field-row bill-edit">
               <div className="field">
-                <label htmlFor={`edit-amount-${bill.id}`}>Valor (R$)</label>
-                <input
-                  id={`edit-amount-${bill.id}`}
-                  inputMode="decimal"
-                  value={editAmount}
-                  onChange={(e) => setEditAmount(e.target.value)}
-                />
+                <label htmlFor={`edit-mode-${bill.id}`}>Valor</label>
+                <select id={`edit-mode-${bill.id}`} value={editMode} onChange={(e) => setEditMode(e.target.value as AmountMode)}>
+                  {AMOUNT_MODES.map((option) => (
+                    <option key={option.mode} value={option.mode}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
+              {editMode !== "unknown" && (
+                <div className="field">
+                  <label htmlFor={`edit-amount-${bill.id}`}>{editMode === "estimate" ? "Estimativa (R$)" : "Valor (R$)"}</label>
+                  <input
+                    id={`edit-amount-${bill.id}`}
+                    inputMode="decimal"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                  />
+                </div>
+              )}
               <div className="field">
                 <label htmlFor={`edit-day-${bill.id}`}>Todo dia</label>
                 <input
@@ -259,11 +309,16 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
             <span className="bill-meta text-truncate">
               {category?.name ?? "Sem categoria"}
               {bill.splitType === "equal" && ", dividida igualmente"}
+              {(bill.amountMode ?? "fixed") !== "fixed" && `, ${remindLabel(bill.remindDaysBefore ?? 3)}`}
               {!bill.isActive && ", pausada"}
             </span>
           )}
         </div>
-        {!isEditing && <strong className="bill-amount">{formatCurrency(Number(bill.amount))}</strong>}
+        {!isEditing && (
+          <strong className={`bill-amount${(bill.amountMode ?? "fixed") !== "fixed" ? ` ${bill.amountMode}` : ""}`}>
+            {bill.amountMode === "unknown" ? "sem valor" : `${bill.amountMode === "estimate" ? "≈ " : ""}${formatCurrency(bill.expectedAmount ?? Number(bill.amount ?? 0))}`}
+          </strong>
+        )}
         <div className="transaction-row-actions">
           <button
             type="button"
@@ -291,7 +346,8 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
   );
   const monthlyTotal = listedBills
     .filter((b) => b.isActive && b.transactionType === "expense")
-    .reduce((sum, b) => sum + Number(b.amount), 0);
+    .reduce((sum, b) => sum + (b.expectedAmount ?? Number(b.amount ?? 0)), 0);
+  const hasVariable = listedBills.some((b) => b.isActive && (b.amountMode ?? "fixed") !== "fixed");
   // Sem nenhuma conta ainda, o formulário já aparece aberto.
   const isFormOpen = showForm || (bills !== null && bills.length === 0);
 
@@ -308,6 +364,8 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
             {isFormOpen ? "Fechar" : "Nova conta fixa"}
           </button>
         </div>
+
+        <MonthBillsCard onChanged={() => void load()} />
 
         <div className="segmented">
           <button
@@ -329,7 +387,10 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
         {listedBills.length > 0 && (
           <div className="stat-card">
             <p className="label">{listScope === "joint" ? "Todo mês, o grupo paga" : "Todo mês, você paga"}</p>
-            <p className="value">{formatCurrency(monthlyTotal)}</p>
+            <p className="value">
+              {hasVariable ? "≈ " : ""}
+              {formatCurrency(monthlyTotal)}
+            </p>
           </div>
         )}
 
@@ -345,8 +406,8 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
         <div className="card form-card">
           <p className="card-title">Nova conta fixa</p>
           <p className="card-subtitle">
-            Aluguel, assinaturas, mensalidades -- cadastre uma vez e ela mesma gera o lançamento todo mês, no dia
-            certo, até você pausar ou excluir.
+            Aluguel e assinaturas lançam sozinhas todo mês, no dia certo. Celular, água e luz, que mudam de valor,
+            o PAR. lembra antes de vencer e pergunta quanto foi.
           </p>
           <form onSubmit={handleCreate}>
             <div className="segmented">
@@ -378,16 +439,36 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
             </div>
 
             <div className="field">
-              <label htmlFor="bill-amount">Valor (R$)</label>
-              <input
-                id="bill-amount"
-                inputMode="decimal"
-                placeholder="0,00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
+              <span className="field-label" id="bill-mode-label">Valor</span>
+              <div className="segmented" role="group" aria-labelledby="bill-mode-label">
+                {AMOUNT_MODES.map((option) => (
+                  <button
+                    key={option.mode}
+                    type="button"
+                    className={`segmented-option${amountMode === option.mode ? " active" : ""}`}
+                    aria-pressed={amountMode === option.mode}
+                    onClick={() => setAmountMode(option.mode)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <p className="card-subtitle">{AMOUNT_MODES.find((option) => option.mode === amountMode)?.hint}</p>
             </div>
+
+            {amountMode !== "unknown" && (
+              <div className="field">
+                <label htmlFor="bill-amount">{amountMode === "estimate" ? "Valor estimado (R$)" : "Valor (R$)"}</label>
+                <input
+                  id="bill-amount"
+                  inputMode="decimal"
+                  placeholder={amountMode === "estimate" ? "ex: 100,00" : "0,00"}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                />
+              </div>
+            )}
 
             <div className="field">
               <label htmlFor="bill-day">Todo dia</label>
@@ -401,6 +482,23 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
                 onChange={(e) => setDayOfMonth(e.target.value)}
                 required
               />
+            </div>
+
+            <div className="field">
+              <span className="field-label" id="bill-remind-label">Me avisar</span>
+              <div className="chip-row bill-remind-chips" role="group" aria-labelledby="bill-remind-label">
+                {REMIND_OPTIONS.map((option) => (
+                  <button
+                    key={option.days}
+                    type="button"
+                    className={`filter-chip${remindDays === option.days ? " active" : ""}`}
+                    aria-pressed={remindDays === option.days}
+                    onClick={() => setRemindDays(option.days)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="field">
@@ -451,7 +549,7 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
             )}
 
             <button type="submit" className="btn btn-primary" disabled={isSubmitting || !accountForScope}>
-              {isSubmitting ? "Salvando..." : "Adicionar conta fixa"}
+              {isSubmitting ? "Salvando..." : amountMode === "fixed" ? "Adicionar conta fixa" : "Salvar conta"}
             </button>
           </form>
         </div>

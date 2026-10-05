@@ -1,7 +1,8 @@
 import { listCards } from "../cards/cards.service";
 import { listDebts } from "../debts/debts.service";
 import { listLoans, todayInBrazil } from "../loans/loans.service";
-import { listRecurringBillsForUser } from "../recurringBills/recurringBills.service";
+import { listRecurringBillsForUser, pendingMonthFor } from "../recurringBills/recurringBills.service";
+import type { AmountMode } from "../recurringBills/recurringBills.repository";
 import { addMonths, dateForDayInMonth, daysBetween } from "../../utils/month";
 
 // "Vence logo": tudo que tem data na próxima semana -- o que você tem que
@@ -22,6 +23,15 @@ export interface UpcomingItem {
   dueDate: string;
   daysUntil: number;
   link: string;
+  // Conta fixa sem valor certo: `amount` é a estimativa (ou 0 sem valor).
+  amountMode?: Exclude<AmountMode, "fixed">;
+  billId?: string;
+  month?: string;
+}
+
+// Rótulo do valor de uma conta fixa pro "Vence logo"/Contas.
+function billDetail(mode: AmountMode): string {
+  return mode === "fixed" ? "Conta fixa" : mode === "estimate" ? "Conta fixa · valor estimado" : "Conta fixa · sem valor";
 }
 
 export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_WINDOW_DAYS): Promise<UpcomingItem[]> {
@@ -73,22 +83,24 @@ export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_W
 
   for (const bill of bills) {
     if (!bill.isActive || bill.transactionType !== "expense") continue;
-    const month = bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
+    const month = pendingMonthFor(bill, today);
     const dueDate = dateForDayInMonth(month, bill.dayOfMonth);
     const daysUntil = daysBetween(today, dueDate);
-    // A conta fixa lança sozinha no dia -- depois que o dia passa ela está
-    // paga, nunca "atrasada".
-    if (daysUntil < 0 || daysUntil > windowDays) continue;
+    // A de valor certo lança sozinha no dia -- depois que o dia passa ela
+    // está paga, nunca "atrasada". As outras ficam atrasadas até alguém
+    // confirmar o valor.
+    if ((bill.amountMode === "fixed" && daysUntil < 0) || daysUntil > windowDays) continue;
     items.push({
       id: `recurring-${bill.id}-${month}`,
       kind: "recurring",
       direction: "pay",
       title: bill.description,
-      detail: "Conta fixa",
-      amount: Number(bill.amount),
+      detail: billDetail(bill.amountMode),
+      amount: bill.expectedAmount ?? 0,
       dueDate,
       daysUntil,
       link: "/recurring-bills",
+      ...(bill.amountMode === "fixed" ? {} : { amountMode: bill.amountMode, billId: bill.id, month }),
     });
   }
 
@@ -150,15 +162,18 @@ export function paymentsUntil(input: {
     }
   }
 
-  const thisMonth = today.slice(0, 7);
   for (const bill of bills) {
     if (!bill.isActive || bill.transactionType !== "expense") continue;
-    let month = bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
+    // Sem valor nenhum (nem estimativa, nem um mês já pago) não dá pra prever.
+    const amount = bill.expectedAmount ?? bill.lastPaidAmount;
+    if (amount === null) continue;
+    let month = pendingMonthFor(bill, today);
     for (;;) {
       const dueDate = dateForDayInMonth(month, bill.dayOfMonth);
       if (dueDate > until) break;
-      // Dia que já passou: a conta fixa já lançou sozinha e está no saldo.
-      if (dueDate >= today) items.push({ dueDate, amount: Number(bill.amount) });
+      // Valor certo com o dia passado: já lançou sozinha e está no saldo. Sem
+      // valor certo, atrasada ainda vai sair.
+      if (dueDate >= today || bill.amountMode !== "fixed") items.push({ dueDate, amount });
       month = addMonths(month, 1);
     }
   }
@@ -175,7 +190,9 @@ export const BILLS_WINDOW_DAYS = 30;
 
 export type BillPayAction =
   | { type: "card"; cardId: string; month: string }
-  | { type: "debt"; debtId: string; installmentId: string };
+  | { type: "debt"; debtId: string; installmentId: string }
+  // Conta fixa sem valor certo: "Já paguei" pergunta quanto foi.
+  | { type: "recurring"; billId: string; month: string };
 
 export interface BillItem {
   id: string;
@@ -186,8 +203,11 @@ export interface BillItem {
   dueDate: string | null;
   daysUntil: number | null;
   isPaid: boolean;
-  // Conta fixa lança sozinha no dia: não tem botão de pagar.
+  // Conta fixa de valor certo lança sozinha no dia: não tem botão de pagar.
   pay: BillPayAction | null;
+  amountMode?: AmountMode;
+  // Sem valor certo: o último valor pago, pra sugerir no "Já paguei".
+  lastPaidAmount?: number | null;
   link: string;
   card?: { closingDay: number; limitFree: number | null };
   debt?: { installmentNumber: number; installmentsCount: number; paidCount: number; remainingAmount: number };
@@ -281,16 +301,34 @@ export async function getBillsOverview(userId: string): Promise<BillsOverview> {
 
   for (const bill of bills) {
     if (!bill.isActive || bill.transactionType !== "expense") continue;
-    const base = { kind: "recurring" as const, title: bill.description, amount: Number(bill.amount), pay: null, link: "/a-pagar?aba=fixas" };
+    const fixed = bill.amountMode === "fixed";
+    const base = {
+      kind: "recurring" as const,
+      title: bill.description,
+      amount: bill.expectedAmount ?? 0,
+      pay: null,
+      link: "/a-pagar?aba=fixas",
+      amountMode: bill.amountMode,
+      lastPaidAmount: bill.lastPaidAmount,
+    };
     if (bill.lastGeneratedMonth === thisMonth) {
       const dueDate = dateForDayInMonth(thisMonth, bill.dayOfMonth);
-      items.push({ ...base, id: `recurring-${bill.id}-${thisMonth}`, dueDate, daysUntil: daysBetween(today, dueDate), isPaid: true });
+      // Sem valor certo, o que foi pago de verdade é o último valor guardado.
+      const paidAmount = fixed ? base.amount : bill.lastPaidAmount ?? base.amount;
+      items.push({ ...base, amount: paidAmount, id: `recurring-${bill.id}-${thisMonth}`, dueDate, daysUntil: daysBetween(today, dueDate), isPaid: true });
     }
-    const month = bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
+    const month = pendingMonthFor(bill, today);
     const dueDate = dateForDayInMonth(month, bill.dayOfMonth);
     const daysUntil = daysBetween(today, dueDate);
-    if (daysUntil < 0 || daysUntil > BILLS_WINDOW_DAYS) continue;
-    items.push({ ...base, id: `recurring-${bill.id}-${month}`, dueDate, daysUntil, isPaid: false });
+    if ((fixed && daysUntil < 0) || daysUntil > BILLS_WINDOW_DAYS) continue;
+    items.push({
+      ...base,
+      id: `recurring-${bill.id}-${month}`,
+      dueDate,
+      daysUntil,
+      isPaid: false,
+      pay: fixed ? null : { type: "recurring", billId: bill.id, month },
+    });
   }
 
   const byDate = (a: BillItem, b: BillItem) =>

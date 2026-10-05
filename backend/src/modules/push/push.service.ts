@@ -82,6 +82,9 @@ export interface PushMessage {
   url?: string;
   // Avisos com a mesma tag se substituem (não empilham).
   tag?: string;
+  // Botões (Android e computador; o iPhone ignora e abre `url`). Cada um
+  // abre a sua tela.
+  actions?: { action: string; title: string; url: string }[];
 }
 
 // Manda pra todos os aparelhos da pessoa. Endereço que o navegador jogou fora
@@ -96,6 +99,7 @@ export async function sendPushToUser(userId: string, message: PushMessage): Prom
       body: message.body.slice(0, 300),
       url: message.url && message.url.startsWith("/") ? message.url : "/dashboard",
       tag: message.tag,
+      actions: (message.actions ?? []).filter((a) => a.url.startsWith("/")).slice(0, 2),
     });
     await Promise.all(
       subs.docs.map(async (doc) => {

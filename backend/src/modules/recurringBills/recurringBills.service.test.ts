@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestGroup } from "../../test-helpers";
 import { db } from "../../db/firestore";
+import { todayInBrazil } from "../../utils/month";
 import {
   createRecurringBillForUser,
   generateDueRecurringBills,
@@ -44,7 +45,7 @@ describe("recurringBills", () => {
 
   it("generates a transaction once its day arrives, and only once per month", async () => {
     const { groupId, userAId, personalAccountId } = await createTestGroup();
-    const today = new Date().getUTCDate();
+    const today = Number(todayInBrazil().slice(8, 10));
 
     await createRecurringBillForUser(userAId, {
       accountId: personalAccountId,
@@ -81,7 +82,7 @@ describe("recurringBills", () => {
       transactionType: "expense",
       isPrivate: false,
       splitType: "none",
-      dayOfMonth: new Date().getUTCDate(),
+      dayOfMonth: Number(todayInBrazil().slice(8, 10)),
     });
 
     await updateRecurringBillForUser(userAId, bill.id, { isActive: false });
