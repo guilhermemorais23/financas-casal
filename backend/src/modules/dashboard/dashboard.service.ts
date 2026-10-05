@@ -50,24 +50,36 @@ export interface NextInvoice {
   total: string;
   limit: string | null;
   limitUsed: string | null;
+  // open: tem fatura a pagar (a atual ou, se ela já foi paga, a próxima com
+  // parcelas). paid / empty: nada a pagar agora -- o cartão continua no
+  // Painel pra mostrar o limite.
+  status: "open" | "paid" | "empty";
 }
 
-// Nearest upcoming due date among statements that actually have something on
-// them and aren't already paid -- an empty or already-settled statement
-// isn't "coming up" in any way that belongs on the Painel.
-function pickNextInvoice(cards: Awaited<ReturnType<typeof listCards>>): NextInvoice | null {
-  const pending = cards
-    .filter((card) => !card.currentStatement.isPaid && Number(card.currentStatement.total) > 0)
-    .sort((a, b) => a.currentStatement.dueDate.localeCompare(b.currentStatement.dueDate));
-  const next = pending[0];
-  if (!next) return null;
-  return {
-    cardName: next.name,
-    dueDate: next.currentStatement.dueDate,
-    total: next.currentStatement.total,
-    limit: next.limit,
-    limitUsed: next.limitUsed,
-  };
+// A fatura a pagar mais próxima entre todos os cartões. Sem nenhuma em
+// aberto, o cartão continua aparecendo (com o limite): antes o widget sumia
+// do Painel logo depois de pagar a fatura ou quando o ciclo virava sem
+// compras.
+export function pickNextInvoice(cards: Awaited<ReturnType<typeof listCards>>): NextInvoice | null {
+  if (cards.length === 0) return null;
+  const options = cards.map((card) => {
+    const statement = card.currentStatement;
+    const base = { cardName: card.name, limit: card.limit, limitUsed: card.limitUsed };
+    if (!statement.isPaid && Number(statement.total) > 0) {
+      return { ...base, dueDate: statement.dueDate, total: statement.total, status: "open" as const };
+    }
+    // Atual paga (ou vazia), mas com parcelas de outro mês em aberto.
+    const nextRelease = [...card.limitReleases]
+      .filter((release) => release.month !== statement.month && Number(release.amount) > 0)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+    if (nextRelease) {
+      return { ...base, dueDate: nextRelease.dueDate, total: nextRelease.amount, status: "open" as const };
+    }
+    return { ...base, dueDate: statement.dueDate, total: "0.00", status: statement.isPaid ? ("paid" as const) : ("empty" as const) };
+  });
+  const open = options.filter((option) => option.status === "open").sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  // Nada em aberto: o cartão com limite (é o que mais interessa ver), senão o primeiro.
+  return open[0] ?? options.find((option) => option.limit !== null) ?? options[0];
 }
 
 export { InvalidMonthError } from "../../utils/month";
