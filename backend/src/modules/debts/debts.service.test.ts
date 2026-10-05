@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createTestGroup } from "../../test-helpers";
 import { createDebt, listDebts, setInstallmentPaidForUser } from "./debts.service";
 import { findTransactionById } from "../transactions/transactions.repository";
+import { addMonths, todayInBrazil } from "../../utils/month";
 
 function currentMonthParam(): string {
   const now = new Date();
@@ -66,5 +67,45 @@ describe("setInstallmentPaidForUser", () => {
     const unpaid = await setInstallmentPaidForUser(userAId, debt.id, installment.id, false);
     expect(unpaid.isPaid).toBe(false);
     expect(unpaid.transactionId).toBeNull();
+  });
+
+  it("conta só esta vez: atrasada paga hoje entra com a data de hoje e o nome da conta", async () => {
+    const { userAId } = await createTestGroup();
+    const debt = await createDebt(userAId, {
+      name: "Academia",
+      description: null,
+      totalAmount: 129.9,
+      installmentsCount: 1,
+      scope: "personal",
+      startMonth: addMonths(currentMonthParam(), -1),
+      dueDay: 20,
+    });
+    const [found] = (await listDebts(userAId)).filter((d) => d.id === debt.id);
+
+    const paid = await setInstallmentPaidForUser(userAId, debt.id, found.installments[0].id, true);
+    const tx = await findTransactionById(paid.transactionId!);
+    expect(tx?.occurredAt).toBe(todayInBrazil());
+    expect(tx?.description).toBe("Academia");
+  });
+
+  it("parcelada continua no mês da parcela, com 'parcela N/M'", async () => {
+    const { userAId } = await createTestGroup();
+    const start = addMonths(currentMonthParam(), -1);
+    const debt = await createDebt(userAId, {
+      name: "Geladeira",
+      description: null,
+      totalAmount: 200,
+      installmentsCount: 2,
+      scope: "personal",
+      startMonth: start,
+      dueDay: 10,
+    });
+    const [found] = (await listDebts(userAId)).filter((d) => d.id === debt.id);
+    const first = found.installments.find((i) => i.installmentNumber === 1)!;
+
+    const paid = await setInstallmentPaidForUser(userAId, debt.id, first.id, true);
+    const tx = await findTransactionById(paid.transactionId!);
+    expect(tx?.occurredAt).toBe(`${start}-01`);
+    expect(tx?.description).toBe("Geladeira — parcela 1/2");
   });
 });

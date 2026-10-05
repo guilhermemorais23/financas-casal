@@ -8,7 +8,7 @@ import {
   writeNewTransaction,
 } from "../transactions/transactions.repository";
 import { splitEvenly } from "../../utils/money";
-import { addMonths, dateForDayInMonth, monthToDate } from "../../utils/month";
+import { addMonths, dateForDayInMonth, monthToDate, todayInBrazil } from "../../utils/month";
 import {
   deleteDebt,
   findDebtById,
@@ -166,6 +166,10 @@ export async function setInstallmentPaidForUser(
       throw new DebtNotFoundError();
     }
 
+    // Conta "só esta vez" (1 parcela): o gasto leva o nome da conta e a data
+    // do pagamento -- uma conta atrasada paga hoje entra no mês de hoje, não
+    // no mês em que venceu.
+    const single = debt.installmentsCount === 1;
     await runLedgerTransaction(groupId, async (t) => {
       const current = await t.get(ref);
       if (!current.exists || current.data()!.isPaid) return;
@@ -177,10 +181,10 @@ export async function setInstallmentPaidForUser(
         categoryId: null,
         payerId: userId,
         createdBy: userId,
-        description: `${debt.name} — parcela ${installment.installmentNumber}/${debt.installmentsCount}`,
+        description: single ? debt.name : `${debt.name} — parcela ${installment.installmentNumber}/${debt.installmentsCount}`,
         amount: Number(installment.amount),
         transactionType: "expense",
-        occurredAt: monthToDate(installment.referenceMonth),
+        occurredAt: single ? todayInBrazil() : monthToDate(installment.referenceMonth),
         isPrivate: false,
         splitType: "none",
         linkKind: "debt_installment",

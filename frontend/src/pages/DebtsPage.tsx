@@ -115,7 +115,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
       setInstallmentsCount("2");
       setStartMonth(currentMonthParam());
       setDueDay("");
-      showToast("Dívida cadastrada");
+      showToast(parsedCount === 1 ? "Conta salva em A pagar → Contas" : "Dívida cadastrada");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar a dívida");
@@ -236,15 +236,20 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
     );
   }
 
-  const jointDebts = useMemo(() => debts?.filter((d) => d.scope === "joint") ?? [], [debts]);
-  const personalDebts = useMemo(() => debts?.filter((d) => d.scope === "personal") ?? [], [debts]);
+  // Dívida de 1 parcela é conta "só esta vez": fica em A pagar → Contas.
+  const jointDebts = useMemo(() => debts?.filter((d) => d.scope === "joint" && d.installmentsCount > 1) ?? [], [debts]);
+  const personalDebts = useMemo(
+    () => debts?.filter((d) => d.scope === "personal" && d.installmentsCount > 1) ?? [],
+    [debts]
+  );
 
   const content = (
     <>
         <div className="card form-card">
           <h1>Dívidas</h1>
           <p className="card-subtitle">
-            Já comprou e tá pagando aos poucos? Registre aqui — parcelado ou não.
+            Comprou parcelado e tá pagando aos poucos? Registre aqui. Conta que vem uma vez só fica em Contas → Nova
+            conta.
           </p>
           <form onSubmit={handleCreate}>
             <div className="segmented">
@@ -330,6 +335,11 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
               />
               Foi parcelado?
             </label>
+            {!isInstallment && (
+              <p className="card-subtitle" style={{ marginBottom: 0 }}>
+                Sem parcelas, ela aparece em Contas → Só esta vez.
+              </p>
+            )}
 
             {isInstallment && (
               <div className="field">

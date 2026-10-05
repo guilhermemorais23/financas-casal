@@ -18,7 +18,7 @@ export function PayablesPage() {
         <div className="segmented payables-switch" role="tablist" aria-label="O que ver">
           {(
             [
-              ["fixas", "Contas fixas"],
+              ["fixas", "Contas"],
               ["dividas", "Parceladas"],
             ] as const
           ).map(([id, label]) => (

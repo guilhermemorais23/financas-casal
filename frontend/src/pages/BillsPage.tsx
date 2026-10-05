@@ -78,11 +78,17 @@ function dueText(item: BillItem): { text: string; tone: "late" | "soon" | "" } {
   return { text: `Vence ${shortDate(item.dueDate)}`, tone: "" };
 }
 
+// Dívida de 1 parcela é a conta "só esta vez" (A pagar → Contas → Nova conta).
+function isSingle(item: BillItem): boolean {
+  return item.kind === "debt" && item.debt?.installmentsCount === 1;
+}
+
 function detailText(item: BillItem): string {
   if (item.kind === "card") {
     const free = item.card?.limitFree;
     return `Fecha dia ${item.card?.closingDay}${free !== null && free !== undefined ? ` · limite livre ${formatCurrency(free)}` : ""}`;
   }
+  if (isSingle(item)) return "Só esta vez";
   if (item.kind === "debt" && item.debt) {
     const { installmentNumber, installmentsCount, remainingAmount } = item.debt;
     return `Parcela ${installmentNumber} de ${installmentsCount}${remainingAmount > 0 ? ` · faltam ${formatCurrency(remainingAmount)}` : ""}`;
@@ -194,7 +200,7 @@ export function BillsPage() {
           <span className="bill-row-text">
             <span className="bill-row-title">{item.title}</span>
             <span className="bill-row-meta">
-              {filter === "all" && <span className="bill-tag">{KIND[item.kind].label}</span>}
+              {filter === "all" && <span className="bill-tag">{isSingle(item) ? "Conta" : KIND[item.kind].label}</span>}
               {detailText(item)}
             </span>
             {!item.isPaid && <span className={`bill-row-due ${due.tone}`}>{due.text}</span>}
@@ -226,13 +232,20 @@ export function BillsPage() {
         </span>
         {isOpen && (
           <div className="bill-row-more">
-            {item.kind === "debt" && item.debt && (
+            {item.kind === "debt" && item.debt && !isSingle(item) && (
               <div className="bill-progress" role="img" aria-label={`${item.debt.paidCount} de ${item.debt.installmentsCount} parcelas pagas`}>
                 <i style={{ width: `${(item.debt.paidCount / item.debt.installmentsCount) * 100}%` }} />
               </div>
             )}
             <Link to={item.link} className="link">
-              {item.kind === "card" ? "Abrir o cartão (limite e compras)" : item.kind === "debt" ? "Ver todas as parcelas" : "Editar conta fixa"} →
+              {item.kind === "card"
+                ? "Abrir o cartão (limite e compras)"
+                : isSingle(item)
+                ? "Abrir em A pagar"
+                : item.kind === "debt"
+                ? "Ver todas as parcelas"
+                : "Editar conta fixa"}{" "}
+              →
             </Link>
           </div>
         )}
@@ -363,7 +376,7 @@ export function BillsPage() {
             <div className="bills-add">
               <span>Adicionar:</span>
               <Link to="/cards" className="bills-add-link">Cartão</Link>
-              <Link to="/a-pagar?aba=fixas" className="bills-add-link">Conta fixa</Link>
+              <Link to="/a-pagar?aba=fixas" className="bills-add-link">Conta</Link>
               <Link to="/a-pagar?aba=dividas" className="bills-add-link">Parcelada</Link>
               <Link to="/loans" className="bills-add-link">Empréstimo</Link>
             </div>

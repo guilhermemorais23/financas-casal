@@ -3,13 +3,14 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, parseLocalDate, todayISO } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
 import { MonthBillsCard, parseMoney } from "../components/BillReminders";
+import { Sheet } from "../components/Sheet";
 
 interface AccountRow {
   id: string;
@@ -48,7 +49,30 @@ interface RecurringBillRow {
   lastGeneratedMonth: string | null;
 }
 
+// Conta "só esta vez": por baixo é uma dívida de 1 parcela (POST /debts), com
+// o vencimento guardado como mês + dia.
+interface SingleBillRow {
+  id: string;
+  scope: "personal" | "joint";
+  name: string;
+  totalAmount: string;
+  installmentsCount: number;
+  installments: { id: string; isPaid: boolean; dueDate: string | null }[];
+}
+
 type AmountMode = "fixed" | "estimate" | "unknown";
+type Repeat = "once" | "month";
+
+function singleDueText(dueDate: string | null): { text: string; tone: "late" | "soon" | "" } {
+  if (!dueDate) return { text: "Sem dia de vencimento", tone: "" };
+  const days = Math.round((parseLocalDate(dueDate).getTime() - parseLocalDate(todayISO()).getTime()) / 86_400_000);
+  const short = parseLocalDate(dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  if (days < 0) return { text: `Venceu ${short}`, tone: "late" };
+  if (days === 0) return { text: "Vence hoje", tone: "soon" };
+  if (days === 1) return { text: "Vence amanhã", tone: "soon" };
+  if (days <= 7) return { text: `Vence em ${days} dias`, tone: "soon" };
+  return { text: `Vence ${short}`, tone: "" };
+}
 
 const AMOUNT_MODES: { mode: AmountMode; label: string; hint: string }[] = [
   { mode: "fixed", label: "Sei o valor", hint: "Lança sozinha no extrato no dia do vencimento." },
@@ -85,6 +109,12 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [bills, setBills] = useState<RecurringBillRow[] | null>(() => readCache(cacheKey));
 
+  const [singles, setSingles] = useState<SingleBillRow[]>([]);
+  // Pagas agora há pouco: continuam na lista como "Pago" até sair da tela.
+  const [paidNow, setPaidNow] = useState<string[]>([]);
+
+  const [repeat, setRepeat] = useState<Repeat>("once");
+  const [dueDate, setDueDate] = useState("");
   const [scope, setScope] = useState<"personal" | "joint">("personal");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -105,15 +135,18 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
 
   async function load() {
     try {
-      const [groupRes, categoriesRes, billsRes] = await Promise.all([
+      const [groupRes, categoriesRes, billsRes, debtsRes] = await Promise.all([
         apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/groups/me", { token }),
         apiRequest<CategoryRow[]>("/categories", { token }),
         apiRequest<RecurringBillRow[]>("/recurring-bills", { token }),
+        // As contas "só esta vez" são extra: se falharem, as fixas aparecem igual.
+        apiRequest<SingleBillRow[]>("/debts", { token }).catch(() => null),
       ]);
       setAccounts(groupRes.accounts);
       setMembers(groupRes.members);
       setCategories(categoriesRes);
       setBills(billsRes);
+      if (debtsRes) setSingles(debtsRes.filter((debt) => debt.installmentsCount === 1));
       writeCache(cacheKey, billsRes);
       setPayerId((current) => current || user?.id || "");
     } catch (err) {
@@ -137,6 +170,10 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (repeat === "once") {
+      await createSingle();
+      return;
+    }
 
     const parsedAmount = parseMoney(amount);
     const parsedDay = Number(dayOfMonth);
@@ -177,11 +214,86 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
       setDayOfMonth("");
       setSplitType("none");
       showToast(amountMode === "fixed" ? "Conta fixa criada" : "Conta salva. O PAR. avisa antes de vencer.");
+      setShowForm(false);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível criar a conta fixa");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function createSingle() {
+    const parsedAmount = parseMoney(amount);
+    if (!description.trim() || !(parsedAmount > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      setError("Informe a descrição, o valor e o vencimento.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await apiRequest("/debts", {
+        method: "POST",
+        token,
+        body: {
+          name: description.trim(),
+          description: null,
+          totalAmount: parsedAmount,
+          installmentsCount: 1,
+          scope,
+          startMonth: dueDate.slice(0, 7),
+          dueDay: Number(dueDate.slice(8, 10)),
+        },
+      });
+      const when = parseLocalDate(dueDate).toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
+      showToast("Conta salva", {
+        description: dueDate < todayISO() ? `Venceu em ${when}. Aparece como atrasada.` : `Vence em ${when}.`,
+      });
+      setDescription("");
+      setAmount("");
+      setDueDate("");
+      setShowForm(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar a conta");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function paySingle(single: SingleBillRow) {
+    const installment = single.installments[0];
+    if (!installment || installment.isPaid) return;
+    setBusyId(single.id);
+    try {
+      await apiRequest(`/debts/${single.id}/installments/${installment.id}`, { method: "PATCH", token, body: { isPaid: true } });
+      setPaidNow((current) => [...current, single.id]);
+      showToast(`${single.name}: paga`, { description: "Lançado hoje no extrato" });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível marcar como paga");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteSingle(single: SingleBillRow) {
+    const confirmed = await confirm({
+      title: "Excluir essa conta?",
+      body: single.installments[0]?.isPaid
+        ? "O lançamento que ela gerou também sai do extrato."
+        : "Ela some da lista de contas a pagar.",
+      confirmLabel: "Excluir conta",
+    });
+    if (!confirmed) return;
+    setBusyId(single.id);
+    try {
+      await apiRequest(`/debts/${single.id}`, { method: "DELETE", token });
+      showToast("Conta excluída");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível excluir a conta");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -348,24 +460,95 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
     .filter((b) => b.isActive && b.transactionType === "expense")
     .reduce((sum, b) => sum + (b.expectedAmount ?? Number(b.amount ?? 0)), 0);
   const hasVariable = listedBills.some((b) => b.isActive && (b.amountMode ?? "fixed") !== "fixed");
-  // Sem nenhuma conta ainda, o formulário já aparece aberto.
-  const isFormOpen = showForm || (bills !== null && bills.length === 0);
+  const listedSingles = singles.filter((single) => !single.installments[0]?.isPaid || paidNow.includes(single.id));
+  const singlesToPay = listedSingles
+    .filter((single) => !single.installments[0]?.isPaid)
+    .reduce((sum, single) => sum + Number(single.totalAmount), 0);
+
+  function openForm() {
+    setError(null);
+    setRepeat("once");
+    setShowForm(true);
+  }
 
   const content = (
     <>
         <div className="page-title-row">
-          <h1>Contas fixas</h1>
-          <button
-            type="button"
-            className="btn btn-primary btn-compact"
-            aria-expanded={isFormOpen}
-            onClick={() => setShowForm((open) => !open)}
-          >
-            {isFormOpen ? "Fechar" : "Nova conta fixa"}
+          <h1>Contas</h1>
+          <button type="button" className="btn btn-primary btn-compact" aria-haspopup="dialog" onClick={openForm}>
+            Nova conta
           </button>
         </div>
 
         <MonthBillsCard onChanged={() => void load()} />
+
+        {error && !showForm && (
+          <p className="alert" role="alert">
+            {error}
+          </p>
+        )}
+
+        {listedSingles.length > 0 && (
+          <section className="bills-section" aria-label="Só esta vez">
+            <h2 className="bills-section-title">
+              <span>Só esta vez</span>
+              <span>{formatCurrency(singlesToPay)}</span>
+            </h2>
+            <ul className="bills-list">
+              {listedSingles.map((single) => {
+                const installment = single.installments[0];
+                const isPaid = installment?.isPaid ?? false;
+                const due = singleDueText(installment?.dueDate ?? null);
+                return (
+                  <li key={single.id} className={`bill-row${isPaid ? " is-paid" : ""}`}>
+                    <div className="bill-row-main">
+                      <span className="bill-row-icon" aria-hidden="true">
+                        <Icon name="file" />
+                      </span>
+                      <span className="bill-row-text">
+                        <span className="bill-row-title">{single.name}</span>
+                        <span className="bill-row-meta">
+                          <span className="bill-tag">Conta</span>
+                          Só esta vez{single.scope === "joint" ? ", do grupo" : ""}
+                        </span>
+                        {!isPaid && <span className={`bill-row-due ${due.tone}`}>{due.text}</span>}
+                      </span>
+                    </div>
+                    <span className="bill-row-side">
+                      <span className="bill-row-amount">{formatCurrency(Number(single.totalAmount))}</span>
+                      <span className="transaction-row-actions">
+                        {isPaid ? (
+                          <span className="bill-pay done static">
+                            <Icon name="check" /> Pago
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="bill-pay"
+                            onClick={() => void paySingle(single)}
+                            disabled={busyId === single.id}
+                            aria-label={`Marcar ${single.name} como paga`}
+                          >
+                            Pagar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          title="Excluir"
+                          disabled={busyId === single.id}
+                          onClick={() => void deleteSingle(single)}
+                        >
+                          <Icon name="trash" />
+                        </button>
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         <div className="segmented">
           <button
@@ -402,14 +585,40 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
           <ul className="card bill-list">{listedBills.map(renderBillCard)}</ul>
         )}
 
-        {isFormOpen && (
-        <div className="card form-card">
-          <p className="card-title">Nova conta fixa</p>
-          <p className="card-subtitle">
-            Aluguel e assinaturas lançam sozinhas todo mês, no dia certo. Celular, água e luz, que mudam de valor,
-            o PAR. lembra antes de vencer e pergunta quanto foi.
-          </p>
+        {showForm && (
+        <Sheet onClose={() => setShowForm(false)} labelledBy="new-bill-title">
+          <h1 id="new-bill-title">Nova conta</h1>
           <form onSubmit={handleCreate}>
+            <div className="field">
+              <span className="field-label" id="bill-repeat-label">Essa conta se repete?</span>
+              <div className="segmented" role="group" aria-labelledby="bill-repeat-label">
+                {(
+                  [
+                    ["once", "Só esta vez"],
+                    ["month", "Todo mês"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`segmented-option${repeat === value ? " active" : ""}`}
+                    aria-pressed={repeat === value}
+                    onClick={() => {
+                      setRepeat(value);
+                      setError(null);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="card-subtitle">
+                {repeat === "once"
+                  ? "Uma conta que vem uma vez só: boleto, multa, mensalidade atrasada. Quando você paga, ela vira um gasto no extrato e não volta no mês seguinte."
+                  : "Aluguel e assinaturas lançam sozinhas todo mês. Celular, água e luz, que mudam de valor, o PAR. lembra antes de vencer."}
+              </p>
+            </div>
+
             <div className="segmented">
               <button
                 type="button"
@@ -433,11 +642,42 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
                 id="bill-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Aluguel, Netflix, academia..."
+                placeholder={repeat === "once" ? "Academia, multa, conserto..." : "Aluguel, Netflix, academia..."}
                 required
               />
             </div>
 
+            {repeat === "once" ? (
+              <>
+                <div className="field">
+                  <label htmlFor="bill-amount">Valor (R$)</label>
+                  <input
+                    id="bill-amount"
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="bill-due-date">Vencimento</label>
+                  <input
+                    id="bill-due-date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    required
+                  />
+                  <p className="card-subtitle" style={{ marginBottom: 0 }}>
+                    {dueDate && dueDate < todayISO()
+                      ? "Já venceu. Ela entra como atrasada, e quando você pagar o gasto fica com a data do pagamento."
+                      : "Pode ser uma data que já passou."}
+                  </p>
+                </div>
+              </>
+            ) : (
+            <>
             <div className="field">
               <span className="field-label" id="bill-mode-label">Valor</span>
               <div className="segmented" role="group" aria-labelledby="bill-mode-label">
@@ -541,6 +781,8 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
                 {scope === "joint" ? "O grupo ainda não tem conta conjunta." : "Você ainda não tem conta pessoal."}
               </p>
             )}
+            </>
+            )}
 
             {error && (
               <p className="alert" role="alert">
@@ -548,11 +790,19 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
               </p>
             )}
 
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting || !accountForScope}>
-              {isSubmitting ? "Salvando..." : amountMode === "fixed" ? "Adicionar conta fixa" : "Salvar conta"}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={isSubmitting || (repeat === "month" && !accountForScope)}
+            >
+              {isSubmitting
+                ? "Salvando..."
+                : repeat === "month" && amountMode === "fixed"
+                ? "Adicionar conta fixa"
+                : "Salvar conta"}
             </button>
           </form>
-        </div>
+        </Sheet>
         )}
     </>
   );
