@@ -48,6 +48,8 @@ export interface NextInvoice {
   cardName: string;
   dueDate: string;
   total: string;
+  limit: string | null;
+  limitUsed: string | null;
 }
 
 // Nearest upcoming due date among statements that actually have something on
@@ -59,7 +61,13 @@ function pickNextInvoice(cards: Awaited<ReturnType<typeof listCards>>): NextInvo
     .sort((a, b) => a.currentStatement.dueDate.localeCompare(b.currentStatement.dueDate));
   const next = pending[0];
   if (!next) return null;
-  return { cardName: next.name, dueDate: next.currentStatement.dueDate, total: next.currentStatement.total };
+  return {
+    cardName: next.name,
+    dueDate: next.currentStatement.dueDate,
+    total: next.currentStatement.total,
+    limit: next.limit,
+    limitUsed: next.limitUsed,
+  };
 }
 
 export { InvalidMonthError } from "../../utils/month";
