@@ -89,7 +89,7 @@ interface OpenFinanceStatus {
     itemId: string;
     connectorName: string;
     status: string;
-    accounts: { id: string; label: string; type: "BANK" | "CREDIT"; syncedUntil: string | null }[];
+    accounts: { id: string; label: string; type: "BANK" | "CREDIT"; syncedUntil: string | null; pending?: number }[];
   }[];
 }
 
@@ -793,6 +793,9 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                       onClick={() => void fetchFromBank(item.itemId, account.id, account.label)}
                     >
                       {bankBusy === account.id ? "Buscando..." : `Buscar lançamentos · ${account.label}`}
+                      {!!account.pending && bankBusy !== account.id && (
+                        <span className="import-bank-new">{account.pending} {account.pending === 1 ? "novo" : "novos"}</span>
+                      )}
                       {account.syncedUntil && (
                         <small> (até {parseLocalDate(account.syncedUntil).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })})</small>
                       )}
