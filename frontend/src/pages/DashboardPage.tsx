@@ -145,6 +145,8 @@ interface NextInvoice {
   total: string;
   limit: string | null;
   limitUsed: string | null;
+  // Ausente em resposta antiga em cache: trata como "open".
+  status?: "open" | "paid" | "empty";
 }
 
 function limitToneFor(used: number, limit: number): string {
@@ -995,15 +997,23 @@ export function DashboardPage() {
                   {nextInvoice && (
                     <Link to="/cards" className="dashboard-mini-widget">
                       <div className="dashboard-mini-text">
-                        <p className="dashboard-mini-title">Próxima fatura</p>
-                        <p className="dashboard-mini-name">{nextInvoice.cardName}</p>
-                        <p
-                          className={`dashboard-mini-sub${
-                            daysUntil(nextInvoice.dueDate) <= 3 ? " danger-text" : ""
-                          }`}
-                        >
-                          {formatCurrency(Number(nextInvoice.total))} · {dueLabel(daysUntil(nextInvoice.dueDate))}
+                        <p className="dashboard-mini-title">
+                          {(nextInvoice.status ?? "open") === "open" ? "Próxima fatura" : "Cartão"}
                         </p>
+                        <p className="dashboard-mini-name">{nextInvoice.cardName}</p>
+                        {(nextInvoice.status ?? "open") === "open" ? (
+                          <p
+                            className={`dashboard-mini-sub${
+                              daysUntil(nextInvoice.dueDate) <= 3 ? " danger-text" : ""
+                            }`}
+                          >
+                            {formatCurrency(Number(nextInvoice.total))} · {dueLabel(daysUntil(nextInvoice.dueDate))}
+                          </p>
+                        ) : (
+                          <p className="dashboard-mini-sub">
+                            {nextInvoice.status === "paid" ? "Fatura paga" : "Sem compras na fatura atual"}
+                          </p>
+                        )}
                         {nextInvoice.limit !== null && nextInvoice.limitUsed !== null && (
                           <>
                             <div className="progress-track card-limit-track">
