@@ -9,6 +9,18 @@ import type { SplitType, TransactionType } from "../transactions/transactions.re
 // date: the daily cron (generateDueRecurringBills) creates one real
 // transaction from it whenever its day comes around, month after month,
 // until someone pauses or deletes it.
+// Como é o valor da conta:
+// - fixed: sabe quanto é (aluguel, assinatura) -- lança sozinha no dia.
+// - estimate: varia (água, luz) -- `amount` é a estimativa; não lança
+//   sozinha, a pessoa confirma o valor real ("Já paguei").
+// - unknown: não sabe ainda (celular) -- `amount` é null; só lembra.
+export const AMOUNT_MODES = ["fixed", "estimate", "unknown"] as const;
+export type AmountMode = (typeof AMOUNT_MODES)[number];
+
+// Com quantos dias de antecedência avisar (Painel + notificação).
+export const REMIND_DAYS = [0, 1, 3, 7] as const;
+export const DEFAULT_REMIND_DAYS = 3;
+
 export interface RecurringBillRow {
   id: string;
   groupId: string;
@@ -19,7 +31,10 @@ export interface RecurringBillRow {
   payerId: string;
   categoryId: string | null;
   description: string;
-  amount: string;
+  // null só quando amountMode é "unknown".
+  amount: string | null;
+  amountMode: AmountMode;
+  remindDaysBefore: number;
   transactionType: TransactionType;
   isPrivate: boolean;
   splitType: SplitType;
@@ -30,6 +45,19 @@ export interface RecurringBillRow {
   // it has never fired yet. The cron's dedupe key: never generate twice for
   // the same calendar month even if it runs more than once a day.
   lastGeneratedMonth: string | null;
+  // Contas sem valor certo: primeiro mês que conta ("YYYY-MM"). Antes dele
+  // não há o que pagar (a conta foi criada depois do vencimento do mês).
+  startMonth: string | null;
+  // "Me lembre mais tarde": vale só pro mês pendente (snoozedMonth). Ou até
+  // uma data, ou até o salário cair (snoozeSalarySince = desde quando
+  // esperar uma receita de quem adiou, snoozedBy).
+  snoozedMonth: string | null;
+  snoozedUntil: string | null;
+  snoozeSalarySince: string | null;
+  snoozedBy: string | null;
+  // Últimos valores reais pagos (centavos, mais antigo primeiro, até 3): a
+  // estimativa passa a ser a média deles.
+  recentAmountsCents: number[];
 }
 
 const recurringBillsCol = db.collection("recurringBills");
@@ -46,14 +74,28 @@ function toRow(doc: FirebaseFirestore.DocumentSnapshot): RecurringBillRow {
     payerId: data.payerId,
     categoryId: data.categoryId ?? null,
     description: data.description,
-    amount: fromCents(data.amountCents),
+    amount: typeof data.amountCents === "number" ? fromCents(data.amountCents) : null,
+    amountMode: AMOUNT_MODES.includes(data.amountMode) ? data.amountMode : "fixed",
+    remindDaysBefore: typeof data.remindDaysBefore === "number" ? data.remindDaysBefore : DEFAULT_REMIND_DAYS,
     transactionType: data.transactionType,
     isPrivate: data.isPrivate ?? false,
     splitType: data.splitType ?? "none",
     dayOfMonth: data.dayOfMonth,
     isActive: data.isActive ?? true,
     lastGeneratedMonth: data.lastGeneratedMonth ?? null,
+    startMonth: data.startMonth ?? null,
+    snoozedMonth: data.snoozedMonth ?? null,
+    snoozedUntil: data.snoozedUntil ?? null,
+    snoozeSalarySince: data.snoozeSalarySince ?? null,
+    snoozedBy: data.snoozedBy ?? null,
+    recentAmountsCents: Array.isArray(data.recentAmountsCents) ? data.recentAmountsCents.filter((n: unknown) => typeof n === "number") : [],
   };
+}
+
+export { toRow as toRecurringBillRow };
+
+export function recurringBillRef(id: string): FirebaseFirestore.DocumentReference {
+  return recurringBillsCol.doc(id);
 }
 
 export async function insertRecurringBill(input: {
@@ -65,7 +107,10 @@ export async function insertRecurringBill(input: {
   payerId: string;
   categoryId: string | null;
   description: string;
-  amount: number;
+  amount: number | null;
+  amountMode: AmountMode;
+  remindDaysBefore: number;
+  startMonth: string | null;
   transactionType: TransactionType;
   isPrivate: boolean;
   splitType: SplitType;
@@ -80,7 +125,11 @@ export async function insertRecurringBill(input: {
     payerId: input.payerId,
     categoryId: input.categoryId,
     description: input.description,
-    amountCents: toCents(input.amount),
+    amountCents: input.amount === null ? null : toCents(input.amount),
+    amountMode: input.amountMode,
+    remindDaysBefore: input.remindDaysBefore,
+    startMonth: input.startMonth,
+    recentAmountsCents: [],
     transactionType: input.transactionType,
     isPrivate: input.isPrivate,
     splitType: input.splitType,
@@ -119,7 +168,10 @@ export async function updateRecurringBill(
   id: string,
   fields: {
     description?: string;
-    amount?: number;
+    amount?: number | null;
+    amountMode?: AmountMode;
+    remindDaysBefore?: number;
+    startMonth?: string | null;
     dayOfMonth?: number;
     categoryId?: string | null;
     isActive?: boolean;
@@ -127,7 +179,10 @@ export async function updateRecurringBill(
 ): Promise<RecurringBillRow> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (fields.description !== undefined) update.description = fields.description;
-  if (fields.amount !== undefined) update.amountCents = toCents(fields.amount);
+  if (fields.amount !== undefined) update.amountCents = fields.amount === null ? null : toCents(fields.amount);
+  if (fields.amountMode !== undefined) update.amountMode = fields.amountMode;
+  if (fields.remindDaysBefore !== undefined) update.remindDaysBefore = fields.remindDaysBefore;
+  if (fields.startMonth !== undefined) update.startMonth = fields.startMonth;
   if (fields.dayOfMonth !== undefined) update.dayOfMonth = fields.dayOfMonth;
   if (fields.categoryId !== undefined) update.categoryId = fields.categoryId;
   if (fields.isActive !== undefined) update.isActive = fields.isActive;
@@ -139,6 +194,20 @@ export async function updateRecurringBill(
 
 export async function markRecurringBillGenerated(id: string, month: string): Promise<void> {
   await recurringBillsCol.doc(id).update({ lastGeneratedMonth: month });
+}
+
+// "Me lembre mais tarde" do mês pendente.
+export async function setRecurringBillSnooze(
+  id: string,
+  snooze: { month: string; until: string | null; salarySince: string | null; by: string }
+): Promise<void> {
+  await recurringBillsCol.doc(id).update({
+    snoozedMonth: snooze.month,
+    snoozedUntil: snooze.until,
+    snoozeSalarySince: snooze.salarySince,
+    snoozedBy: snooze.by,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 }
 
 export async function deleteRecurringBill(id: string): Promise<void> {

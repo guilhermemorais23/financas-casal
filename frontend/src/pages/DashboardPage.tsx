@@ -38,6 +38,7 @@ import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
 import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
+import { BillRemindersCard } from "../components/BillReminders";
 
 interface AccountWithBalance {
   id: string;
@@ -205,6 +206,8 @@ interface UpcomingItem {
   dueDate: string;
   daysUntil: number;
   link: string;
+  // Conta fixa sem valor certo: amount é a estimativa (0 = sem valor).
+  amountMode?: "estimate" | "unknown";
 }
 
 interface AlertRow {
@@ -754,6 +757,7 @@ export function DashboardPage() {
             )}
           </div>
         )}
+        {month === currentMonthParam() && <BillRemindersCard onChanged={() => load(month, { skipCache: true, silent: true })} />}
         {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
         <div className="stat-card wide">
           {/* O número grande é o saldo do mês (entrou - saiu), não o
@@ -881,9 +885,11 @@ export function DashboardPage() {
                         {upcomingWhen(item)} · {item.detail}
                       </span>
                     </span>
-                    <span className={`upcoming-amount ${item.direction}`}>
+                    <span className={`upcoming-amount ${item.direction}${item.amountMode ? ` ${item.amountMode}` : ""}`}>
                       {item.direction === "receive" ? "+" : ""}
-                      {formatCurrency(item.amount)}
+                      {item.amountMode === "unknown" && item.amount === 0
+                        ? "sem valor"
+                        : `${item.amountMode ? "≈ " : ""}${formatCurrency(item.amount)}`}
                     </span>
                   </Link>
                 </li>

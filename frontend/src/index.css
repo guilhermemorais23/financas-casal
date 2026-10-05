@@ -8948,3 +8948,39 @@ select {
 .uncat-remember input { width: auto; flex: none; margin: 0; }
 .uncat-new { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .uncat-new input { flex: 1 1 12rem; min-width: 0; }
+
+/* ---- Contas a lembrar (contas fixas sem valor certo) ---- */
+.bill-reminders { display: grid; gap: 0.6rem; }
+.bill-reminder {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.8rem 0.9rem;
+  border: 1.5px solid color-mix(in srgb, var(--status-warning) 70%, var(--color-border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--status-warning) 9%, var(--color-card));
+}
+.bill-reminder.late { border-color: color-mix(in srgb, var(--status-critical) 70%, var(--color-border)); }
+.bill-reminder-top { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: 0.75rem; align-items: center; }
+.bill-reminder-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.bill-reminder-actions .btn { flex: 1 1 9rem; }
+.bill-diff { margin: 0.25rem 0 0.5rem; padding: 0.5rem 0.7rem; border-radius: 10px; font-size: 0.85rem; font-weight: 600; }
+.bill-diff.up { background: color-mix(in srgb, var(--status-warning) 16%, var(--color-card)); color: color-mix(in srgb, var(--status-warning) 55%, var(--color-text)); }
+.bill-diff.down { background: color-mix(in srgb, var(--status-good) 14%, var(--color-card)); color: color-mix(in srgb, var(--status-good) 60%, var(--color-text)); }
+.bill-snooze-options { display: grid; gap: 0.5rem; margin: 0.75rem 0; }
+.month-bills { display: grid; gap: 0.6rem; }
+.month-bills-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.month-bills-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7.5rem;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--color-border);
+}
+.month-bills-row:first-child { border-top: 0; }
+.month-bills-name { display: grid; gap: 0.1rem; min-width: 0; }
+.month-bills-name small { color: var(--color-text-muted); font-size: 0.8rem; }
+.month-bills-row input { text-align: right; }
+.bill-amount.estimate, .upcoming-amount.estimate { color: color-mix(in srgb, var(--status-warning) 60%, var(--color-text)); }
+.bill-amount.unknown, .upcoming-amount.unknown { color: var(--color-text-muted); font-weight: 600; }
+.bill-remind-chips { margin-top: 0.25rem; }

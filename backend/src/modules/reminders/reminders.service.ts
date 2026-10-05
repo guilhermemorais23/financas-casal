@@ -9,7 +9,8 @@ import { findRecurringBillsByGroupId } from "../recurringBills/recurringBills.re
 import { addMonths, daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
 import { generateDueRecurringBills } from "../recurringBills/recurringBills.service";
 import { logError } from "../../utils/errorLog";
-import { htmlToText, sendPushToUser } from "../push/push.service";
+import { htmlToText, sendPushToUser, type PushMessage } from "../push/push.service";
+import { expectedAmount, isSnoozed, pendingMonthFor } from "../recurringBills/recurringBills.service";
 import { invalidateAllReads } from "../../utils/readCache";
 import { getMonthCloseForUser, previousMonthInBrazil } from "../monthClose/monthClose.service";
 import {
@@ -35,12 +36,18 @@ function formatBRDate(isoDate: string): string {
 // Conta só os avisos que saíram de verdade (email ou notificação no
 // celular) -- um lembrete só é marcado como enviado (e nunca reenviado)
 // quando alguém realmente recebeu.
-async function sendToMembers(members: MemberWithEmail[], subject: string, bodyHtml: string, url = "/contas"): Promise<number> {
+async function sendToMembers(
+  members: MemberWithEmail[],
+  subject: string,
+  bodyHtml: string,
+  url = "/contas",
+  push: Pick<PushMessage, "actions" | "tag"> = {}
+): Promise<number> {
   const withEmail = members.filter((member) => member.email);
   const text = htmlToText(bodyHtml.replace(/<h1[^>]*>.*?<\/h1>/i, ""));
   const [emails, pushes] = await Promise.all([
     Promise.all(withEmail.map((member) => sendReminderEmail(member.email!, subject, bodyHtml))),
-    Promise.all(members.map((member) => sendPushToUser(member.id, { title: subject, body: text, url }))),
+    Promise.all(members.map((member) => sendPushToUser(member.id, { title: subject, body: text, url, ...push }))),
   ]);
   return emails.filter((result) => result.ok).length + pushes.filter((count) => count > 0).length;
 }
@@ -195,26 +202,29 @@ async function runBudgetReminder(groupId: string, members: MemberWithEmail[]): P
   return sent;
 }
 
-// Contas fixas lançam sozinhas no dia, mas um aviso alguns dias antes ajuda a
-// garantir que o dinheiro está lá. Um email por conta por mês.
-const RECURRING_REMINDER_WINDOW_DAYS = 3;
-
+// Contas fixas: as de valor certo lançam sozinhas no dia, mas um aviso alguns
+// dias antes ajuda a garantir que o dinheiro está lá. As sem valor certo
+// (celular, água, luz) só saem quando alguém diz quanto foi: o aviso pede pra
+// tocar em "Já paguei" e continua até lá (respeitando o "Me lembre mais
+// tarde"). Um aviso por conta por mês (e um de novo quando o adiamento acaba).
 async function runRecurringBillReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
   const membersById = new Map(members.map((member) => [member.id, member]));
   const today = todayInBrazil();
-  const thisMonth = today.slice(0, 7);
   const bills = (await findRecurringBillsByGroupId(groupId)).filter(
     (bill) => bill.isActive && bill.transactionType === "expense"
   );
   let emailsSent = 0;
 
   for (const bill of bills) {
-    const month = bill.lastGeneratedMonth === thisMonth ? addMonths(thisMonth, 1) : thisMonth;
+    const fixed = bill.amountMode === "fixed";
+    const month = pendingMonthFor(bill, today);
     const dueDate = dateForDayInMonth(month, bill.dayOfMonth);
     const daysUntilDue = daysBetween(today, dueDate);
-    if (daysUntilDue < 0 || daysUntilDue > RECURRING_REMINDER_WINDOW_DAYS) continue;
+    if ((fixed && daysUntilDue < 0) || daysUntilDue > bill.remindDaysBefore) continue;
+    if (!fixed && (await isSnoozed(bill, month, today))) continue;
 
-    const key = `recurring:${bill.id}:${month}`;
+    const snoozeKey = !fixed && bill.snoozedMonth === month ? `:${bill.snoozedUntil ?? `salary-${bill.snoozeSalarySince}`}` : "";
+    const key = `recurring:${bill.id}:${month}${snoozeKey}`;
     if (await wasReminderSent(key)) continue;
 
     const recipients = bill.accountOwnerId
@@ -222,15 +232,37 @@ async function runRecurringBillReminders(groupId: string, members: MemberWithEma
         ? [membersById.get(bill.accountOwnerId)!]
         : []
       : members;
-    const sent = await sendToMembers(
-      recipients,
-      `Conta fixa "${bill.description}" ${dueLabelFor(daysUntilDue)}`,
-      `
+    const when = daysUntilDue < 0 ? `venceu há ${-daysUntilDue} ${daysUntilDue === -1 ? "dia" : "dias"}` : dueLabelFor(daysUntilDue);
+    const expected = expectedAmount(bill);
+    const sent = fixed
+      ? await sendToMembers(
+          recipients,
+          `Conta fixa "${bill.description}" ${when}`,
+          `
         <h1 style="font-size: 20px;">Conta fixa chegando</h1>
-        <p><strong>${escapeHtml(bill.description)}</strong> (${formatBRL(Number(bill.amount))}) ${dueLabelFor(daysUntilDue)} (${formatBRDate(dueDate)}).</p>
+        <p><strong>${escapeHtml(bill.description)}</strong> (${formatBRL(Number(bill.amount))}) ${when} (${formatBRDate(dueDate)}).</p>
         <p>O PAR. lança sozinho no dia. Só confira se tem saldo.</p>
       `
-    );
+        )
+      : await sendToMembers(
+          recipients,
+          `${bill.description} ${when}`,
+          `
+        <h1 style="font-size: 20px;">Conta pra pagar</h1>
+        <p><strong>${escapeHtml(bill.description)}</strong> ${when} (${formatBRDate(dueDate)}). ${
+          expected !== null ? `Valor estimado: ${formatBRL(expected)}.` : "Você ainda não informou o valor."
+        }</p>
+        <p>Quando pagar, toque em <strong>Já paguei</strong> no PAR. pra lançar o valor certo.</p>
+      `,
+          `/dashboard?conta=${bill.id}`,
+          {
+            tag: `bill-${bill.id}`,
+            actions: [
+              { action: "pay", title: "Já paguei", url: `/dashboard?conta=${bill.id}&acao=pagar` },
+              { action: "later", title: "Lembrar depois", url: `/dashboard?conta=${bill.id}&acao=adiar` },
+            ],
+          }
+        );
     if (sent > 0) {
       emailsSent += sent;
       await markReminderSent(key, { groupId, kind: "recurring", billId: bill.id, month, dueDate });

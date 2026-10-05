@@ -14,7 +14,21 @@ self.addEventListener("push", (event) => {
       icon: "/icon-192.png",
       badge: "/favicon-32.png",
       tag: data.tag || undefined,
-      data: { url: typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/dashboard" },
+      // Botões ("Já paguei" / "Lembrar depois"): cada um abre a sua tela.
+      // No iPhone não aparecem; tocar na notificação abre `url`.
+      actions: Array.isArray(data.actions)
+        ? data.actions.slice(0, 2).map((a) => ({ action: String(a.action), title: String(a.title) }))
+        : [],
+      data: {
+        url: typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/dashboard",
+        actionUrls: Array.isArray(data.actions)
+          ? Object.fromEntries(
+              data.actions
+                .filter((a) => typeof a.url === "string" && a.url.startsWith("/"))
+                .map((a) => [String(a.action), a.url])
+            )
+          : {},
+      },
     })
   );
 });
@@ -22,7 +36,8 @@ self.addEventListener("push", (event) => {
 // Tocar na notificação abre (ou traz pra frente) o app na tela certa.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/dashboard";
+  const data = event.notification.data || {};
+  const url = (event.action && data.actionUrls && data.actionUrls[event.action]) || data.url || "/dashboard";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       for (const win of windows) {

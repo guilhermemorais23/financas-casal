@@ -9,6 +9,7 @@ import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { readCache, writeCache } from "../utils/pageCache";
 import { formatCurrency, parseLocalDate } from "../utils/format";
+import { PayBillSheet, type BillReminder } from "../components/BillReminders";
 
 type BillKind = "card" | "debt" | "recurring";
 
@@ -20,7 +21,14 @@ interface BillItem {
   dueDate: string | null;
   daysUntil: number | null;
   isPaid: boolean;
-  pay: { type: "card"; cardId: string; month: string } | { type: "debt"; debtId: string; installmentId: string } | null;
+  pay:
+    | { type: "card"; cardId: string; month: string }
+    | { type: "debt"; debtId: string; installmentId: string }
+    | { type: "recurring"; billId: string; month: string }
+    | null;
+  // Conta fixa: "fixed" lança sozinha; as outras esperam o valor real.
+  amountMode?: "fixed" | "estimate" | "unknown";
+  lastPaidAmount?: number | null;
   link: string;
   card?: { closingDay: number; limitFree: number | null };
   debt?: { installmentNumber: number; installmentsCount: number; paidCount: number; remainingAmount: number };
@@ -79,7 +87,14 @@ function detailText(item: BillItem): string {
     const { installmentNumber, installmentsCount, remainingAmount } = item.debt;
     return `Parcela ${installmentNumber} de ${installmentsCount}${remainingAmount > 0 ? ` · faltam ${formatCurrency(remainingAmount)}` : ""}`;
   }
+  if (item.amountMode === "estimate") return item.isPaid ? "Valor confirmado" : "Valor estimado · confirme quando pagar";
+  if (item.amountMode === "unknown") return item.isPaid ? "Valor confirmado" : "Sem valor · informe quando pagar";
   return item.isPaid ? "Lançada sozinha no dia" : "Lança sozinha no dia";
+}
+
+function amountLabel(item: BillItem): string {
+  if (!item.isPaid && item.amountMode === "unknown" && item.amount === 0) return "sem valor";
+  return `${!item.isPaid && item.amountMode === "estimate" ? "≈ " : ""}${formatCurrency(item.amount)}`;
 }
 
 // Contas: tudo que tem que pagar numa lista só, pelo que vence primeiro --
@@ -95,6 +110,7 @@ export function BillsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [showPaid, setShowPaid] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [payingBill, setPayingBill] = useState<BillReminder | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -113,6 +129,21 @@ export function BillsPage() {
 
   async function togglePaid(item: BillItem) {
     if (!item.pay) return;
+    // Sem valor certo: pergunta quanto foi (e não dá pra "despagar" por aqui).
+    if (item.pay.type === "recurring") {
+      if (item.isPaid || item.dueDate === null || item.daysUntil === null) return;
+      setPayingBill({
+        billId: item.pay.billId,
+        title: item.title,
+        month: item.pay.month,
+        dueDate: item.dueDate,
+        daysUntil: item.daysUntil,
+        amountMode: item.amountMode === "estimate" ? "estimate" : "unknown",
+        expectedAmount: item.amountMode === "estimate" ? item.amount : null,
+        lastPaidAmount: item.lastPaidAmount ?? null,
+      });
+      return;
+    }
     const isPaid = !item.isPaid;
     setBusyId(item.id);
     // Otimista: a linha muda na hora, o servidor confirma por trás.
@@ -122,7 +153,7 @@ export function BillsPage() {
     try {
       if (item.pay.type === "card") {
         await apiRequest(`/cards/${item.pay.cardId}/statements/${item.pay.month}`, { method: "PATCH", token, body: { isPaid } });
-      } else {
+      } else if (item.pay.type === "debt") {
         await apiRequest(`/debts/${item.pay.debtId}/installments/${item.pay.installmentId}`, { method: "PATCH", token, body: { isPaid } });
       }
       showToast(isPaid ? `${item.title}: paga` : `${item.title}: voltou pra em aberto`, { variant: "success" });
@@ -170,7 +201,9 @@ export function BillsPage() {
           </span>
         </button>
         <span className="bill-row-side">
-        <span className="bill-row-amount">{formatCurrency(item.amount)}</span>
+        <span className={`bill-row-amount${!item.isPaid && item.amountMode && item.amountMode !== "fixed" ? ` bill-amount ${item.amountMode}` : ""}`}>
+          {amountLabel(item)}
+        </span>
         {item.pay ? (
           <button
             type="button"
@@ -337,6 +370,7 @@ export function BillsPage() {
           </>
         )}
       </div>
+      {payingBill && <PayBillSheet reminder={payingBill} onClose={() => setPayingBill(null)} onDone={() => void load()} />}
     </AppLayout>
   );
 }
