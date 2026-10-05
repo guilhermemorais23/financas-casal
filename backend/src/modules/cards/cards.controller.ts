@@ -25,10 +25,8 @@ import {
   updateCardForUser,
   type CardScope,
 } from "./cards.service";
+import { isIsoDate, isNonEmptyString, isValidAmount, MAX_DESCRIPTION_LENGTH } from "../../utils/validation";
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 function isValidDay(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
@@ -37,11 +35,7 @@ function isValidDay(value: unknown): value is number {
 // limit is opt-in on purpose -- undefined/null both mean "no limit set",
 // only a positive number is accepted otherwise.
 function isValidLimit(value: unknown): value is number | null {
-  return value === null || value === undefined || (typeof value === "number" && value > 0);
-}
-
-function isValidDate(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(value).getTime());
+  return value === null || value === undefined || isValidAmount(value);
 }
 
 export async function createCardHandler(req: Request, res: Response) {
@@ -75,10 +69,6 @@ export async function createCardHandler(req: Request, res: Response) {
     });
     res.status(201).json(card);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidLimitError) {
       res.status(400).json({ error: "invalid limit" });
       return;
@@ -92,10 +82,6 @@ export async function listCardsHandler(req: Request, res: Response) {
     const cards = await listCards(req.user!.id);
     res.status(200).json(cards);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     throw err;
   }
 }
@@ -173,7 +159,7 @@ export async function setSecuredSourceHandler(req: Request, res: Response) {
 
 export async function adjustSecuredLimitHandler(req: Request, res: Response) {
   const { direction, amount } = req.body ?? {};
-  if ((direction !== "deposit" && direction !== "withdraw") || typeof amount !== "number" || !(amount > 0)) {
+  if ((direction !== "deposit" && direction !== "withdraw") || !isValidAmount(amount)) {
     res.status(400).json({ error: "direction (deposit | withdraw) and a positive amount are required" });
     return;
   }
@@ -251,10 +237,10 @@ export async function addPurchaseHandler(req: Request, res: Response) {
 
   if (
     !isNonEmptyString(description) ||
-    typeof amount !== "number" ||
-    amount <= 0 ||
+    description.length > MAX_DESCRIPTION_LENGTH ||
+    !isValidAmount(amount) ||
     !isNonEmptyString(buyerId) ||
-    !isValidDate(purchaseDate) ||
+    !isIsoDate(purchaseDate) ||
     (installments !== undefined && !ALLOWED_INSTALLMENT_COUNTS.includes(installments))
   ) {
     res.status(400).json({

@@ -29,25 +29,36 @@ interface Entry {
   promise: Promise<unknown>;
 }
 
-let version = 0;
-const entries = new Map<string, Entry>();
+interface GroupEntry extends Entry {
+  groupId: string | null;
+  groupVersion: number;
+}
 
-export function invalidateTransactionReads(): void {
-  version++;
+let version = 0;
+const entries = new Map<string, GroupEntry>();
+// Uma gravação num grupo só joga fora o que foi lido desse grupo -- antes
+// qualquer lançamento de qualquer pessoa zerava o cache de todo mundo.
+const groupVersions = new Map<string, number>();
+
+// Sem groupId (não se sabe de qual grupo era o lançamento), joga tudo fora.
+export function invalidateTransactionReads(groupId?: string | null): void {
+  if (groupId) groupVersions.set(groupId, (groupVersions.get(groupId) ?? 0) + 1);
+  else version++;
 }
 
 // Caches the promise itself, so concurrent identical calls (e.g. the Painel
 // and its alerts both asking for the same month at the same time) share one
 // read instead of both hitting Firestore.
-export function memoizeReads<T>(key: string, load: () => Promise<T>): Promise<T> {
+export function memoizeReads<T>(key: string, load: () => Promise<T>, groupId: string | null = null): Promise<T> {
   const now = Date.now();
+  const groupVersion = groupId ? groupVersions.get(groupId) ?? 0 : 0;
   const hit = entries.get(key);
-  if (hit && hit.version === version && now - hit.at < MAX_AGE_MS) {
+  if (hit && hit.version === version && hit.groupVersion === groupVersion && now - hit.at < MAX_AGE_MS) {
     return hit.promise as Promise<T>;
   }
 
   const promise = load();
-  const entry: Entry = { version, at: now, promise };
+  const entry: GroupEntry = { version, at: now, promise, groupId, groupVersion };
   entries.set(key, entry);
   if (entries.size > MAX_ENTRIES) {
     const oldest = entries.keys().next().value;
@@ -63,6 +74,7 @@ export function memoizeReads<T>(key: string, load: () => Promise<T>): Promise<T>
 // Test hook.
 export function clearReadCache(): void {
   entries.clear();
+  groupVersions.clear();
   scopedEntries.clear();
   version++;
 }

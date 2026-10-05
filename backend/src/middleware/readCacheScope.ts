@@ -16,7 +16,12 @@ export function readCacheScope(req: Request, res: Response, next: NextFunction) 
   if (!cacheable) {
     const family = req.path.split("/")[1] ?? "";
     const isLoginEvent = req.path === "/me/login-event";
-    res.on("finish", () => {
+    // "close" também: se o app desconectar depois que a gravação já foi
+    // feita, "finish" nunca chega e o cache velho ficava valendo.
+    let done = false;
+    const afterWrite = () => {
+      if (done) return;
+      done = true;
       if (isLoginEvent || NO_CACHED_WRITES.has(family)) return;
       const userId = req.user?.id;
       if (!userId || INVALIDATE_ALL.has(family)) {
@@ -30,7 +35,9 @@ export function readCacheScope(req: Request, res: Response, next: NextFunction) 
           invalidateScopes([`user:${userId}`, family, ...(user?.groupIds ?? []).map((id) => `group:${id}`)]);
         })
         .catch(() => invalidateAllReads());
-    });
+    };
+    res.on("finish", afterWrite);
+    res.on("close", afterWrite);
   }
   runWithReadScope(cacheable, next);
 }

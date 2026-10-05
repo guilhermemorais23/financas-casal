@@ -8,10 +8,8 @@ import {
   listGoals,
   removeGoal,
 } from "./goals.service";
+import { isNonEmptyString, isValidAmount } from "../../utils/validation";
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 // Same cap as the profile avatar -- a compressed, client-resized photo
 // comfortably clears this regardless of what the original file was.
@@ -20,7 +18,7 @@ const MAX_PHOTO_DATA_URL_LENGTH = 300_000;
 export async function createGoalHandler(req: Request, res: Response) {
   const { name, emoji, photoDataUrl, targetAmount, deadline } = req.body ?? {};
 
-  if (!isNonEmptyString(name) || typeof targetAmount !== "number" || targetAmount <= 0) {
+  if (!isNonEmptyString(name) || !isValidAmount(targetAmount)) {
     res.status(400).json({ error: "name and targetAmount are required" });
     return;
   }
@@ -36,40 +34,24 @@ export async function createGoalHandler(req: Request, res: Response) {
     }
   }
 
-  try {
-    const goal = await createGoal(req.user!.id, {
-      name: name.trim(),
-      emoji: isNonEmptyString(emoji) ? emoji : null,
-      photoDataUrl: photoDataUrl ?? null,
-      targetAmount,
-      deadline: isNonEmptyString(deadline) ? deadline : null,
-    });
-    res.status(201).json(goal);
-  } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
-    throw err;
-  }
+  const goal = await createGoal(req.user!.id, {
+    name: name.trim(),
+    emoji: isNonEmptyString(emoji) ? emoji : null,
+    photoDataUrl: photoDataUrl ?? null,
+    targetAmount,
+    deadline: isNonEmptyString(deadline) ? deadline : null,
+  });
+  res.status(201).json(goal);
 }
 
 export async function listGoalsHandler(req: Request, res: Response) {
-  try {
-    const goals = await listGoals(req.user!.id);
-    res.status(200).json(goals);
-  } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
-    throw err;
-  }
+  const goals = await listGoals(req.user!.id);
+  res.status(200).json(goals);
 }
 
 export async function contributeToGoalHandler(req: Request, res: Response) {
   const { amount } = req.body ?? {};
-  if (typeof amount !== "number" || amount <= 0) {
+  if (!isValidAmount(amount)) {
     res.status(400).json({ error: "amount is required" });
     return;
   }

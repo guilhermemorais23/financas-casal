@@ -1,10 +1,12 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { categoryIsVisibleTo } from "../categories/categories.repository";
-import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
+import { findDebtsByGroupId, findInstallmentsByDebtIds } from "../debts/debts.repository";
+import { findMembersByGroupId, findUsableAccount, type MemberRow } from "../groups/groups.repository";
+import { isShoppingTransaction } from "../shopping/shopping.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { addMonths, addMonthsToDate, parseMonthRange } from "../../utils/month";
-import { fromCents, splitEvenly } from "../../utils/money";
+import { addMonths, addMonthsToDate, parseMonthRange, todayInBrazil } from "../../utils/month";
+import { fromCents, splitEvenly, toCents } from "../../utils/money";
 import {
-  deleteSplitsForTransaction,
   deleteTransaction,
   deleteTransactionsBatch,
   findOwnDocsForRange,
@@ -15,14 +17,19 @@ import {
   getDailySeries,
   getMonthlySummary,
   getYearlySummary,
-  insertSplits,
-  insertTransaction,
   insertTransactionSeries,
-  setTransactionSettled,
+  isSettlementTransaction,
+  prepareTransactionDelete,
+  runLedgerTransaction,
+  transactionDocRef,
   updateTransaction,
+  writeNewTransaction,
+  type LinkKind,
   type PaymentMethod,
+  type SplitInput,
   type SplitType,
   type SummaryScope,
+  type TransactionRow,
   type TransactionType,
 } from "./transactions.repository";
 
@@ -36,6 +43,43 @@ export class InvalidRecurrenceError extends Error {}
 // Guardar/resgatar de um cartão com limite garantido -- only changes from the
 // card itself, so the card's limit and the account never disagree.
 export class SecuredCardTransferError extends Error {}
+// Lançamento criado por outra tela (fatura paga, parcela, reembolso, lista de
+// compras): só dá pra desfazer por lá.
+export class LinkedTransactionError extends Error {
+  constructor(readonly kind: LinkKind) {
+    super(kind);
+  }
+}
+
+// Divisão igual entre todo mundo do grupo (o centavo que sobra vai pros
+// primeiros). Sozinho no grupo não há divisão: undefined (nas edições, deixa
+// as divisões que já existiam como estão).
+function equalSplits(amount: number, members: MemberRow[]): SplitInput[] | undefined {
+  if (members.length < 2) return undefined;
+  const shares = splitEvenly(amount, members.length);
+  return members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }));
+}
+
+// De qual tela veio o lançamento (null = lançamento normal). Os novos trazem
+// linkKind; os de antes dele são reconhecidos procurando quem aponta pra ele.
+export async function linkKindOf(groupId: string, transaction: TransactionRow): Promise<LinkKind | null> {
+  if (transaction.linkKind) return transaction.linkKind;
+  // Só o pagamento de fatura usa divisão "custom".
+  if (transaction.splitType === "custom") return "card_statement";
+  const [settlement, shopping, installment] = await Promise.all([
+    isSettlementTransaction(transaction.id),
+    isShoppingTransaction(transaction.id),
+    findDebtsByGroupId(groupId).then(async (debts) =>
+      debts.length === 0
+        ? false
+        : (await findInstallmentsByDebtIds(debts.map((debt) => debt.id))).some((i) => i.transactionId === transaction.id)
+    ),
+  ]);
+  if (settlement) return "settlement";
+  if (shopping) return "shopping";
+  if (installment) return "debt_installment";
+  return null;
+}
 
 const SUPPORTED_SPLIT_TYPES: SplitType[] = ["none", "equal"];
 
@@ -66,11 +110,10 @@ export interface CreateTransactionInput {
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
   const groupId = await requireGroupId(userId);
 
-  const [accounts, members] = await Promise.all([
-    findAccountsByGroupId(groupId),
+  const [account, members] = await Promise.all([
+    findUsableAccount(groupId, userId, input.accountId),
     findMembersByGroupId(groupId),
   ]);
-  const account = accounts.find((a) => a.id === input.accountId);
   if (!account) {
     throw new InvalidAccountError();
   }
@@ -112,24 +155,12 @@ export async function createTransaction(userId: string, input: CreateTransaction
       splitType: input.splitType,
       paymentMethod: input.paymentMethod ?? null,
     },
-    occurredAtDates
+    occurredAtDates,
+    // Splits model who owes whom on a shared expense; income has no such debt.
+    // Divides evenly across however many members the group actually has. Every
+    // occurrence of a recurring series gets its own splits, same as a one-off.
+    (input.transactionType === "expense" && input.splitType === "equal" ? equalSplits(input.amount, members) : undefined) ?? []
   );
-
-  // Splits model who owes whom on a shared expense; income has no such debt.
-  // Divides evenly across however many members the group actually has. Every
-  // occurrence of a recurring series gets its own splits, same as a one-off.
-  if (input.transactionType === "expense" && input.splitType === "equal" && members.length > 1) {
-    const shares = splitEvenly(input.amount, members.length);
-    await Promise.all(
-      transactions.map((transaction) =>
-        insertSplits(
-          groupId,
-          transaction.id,
-          members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
-        )
-      )
-    );
-  }
 
   return transactions[0];
 }
@@ -281,6 +312,10 @@ export async function deleteTransactionForUser(userId: string, transactionId: st
   if (transaction.securedCardId || transaction.loanId) {
     throw new SecuredCardTransferError(transaction.loanId ? "loan" : "card");
   }
+  const linkKind = await linkKindOf(groupId, transaction);
+  if (linkKind) {
+    throw new LinkedTransactionError(linkKind);
+  }
   await deleteTransaction(transactionId);
 }
 
@@ -309,32 +344,45 @@ export async function setSplitSettledForUser(
     throw new NotSplitError();
   }
 
+  const originalRef = transactionDocRef(transactionId);
+  // Tudo numa transação do Firestore: dois cliques em "pago" (ou a rede
+  // repetindo o pedido) não criam dois reembolsos.
   if (isSettled) {
-    if (typeof amount !== "number" || amount <= 0) {
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
       throw new InvalidSettlementAmountError();
     }
-    const settlementTx = await insertTransaction({
-      groupId: transaction.groupId,
-      accountId: transaction.accountId,
-      accountType: transaction.accountType,
-      accountOwnerId: transaction.accountOwnerId,
-      categoryId: null,
-      payerId: userId,
-      createdBy: userId,
-      description: `Reembolso: ${transaction.description}`,
-      amount,
-      transactionType: "income",
-      occurredAt: new Date().toISOString().slice(0, 10),
-      isPrivate: false,
-      splitType: "none",
+    await runLedgerTransaction(groupId, async (t) => {
+      const current = await t.get(originalRef);
+      if (!current.exists || current.data()!.isSettled) return;
+      const settlementId = writeNewTransaction(t, {
+        groupId: transaction.groupId,
+        accountId: transaction.accountId,
+        accountType: transaction.accountType,
+        accountOwnerId: transaction.accountOwnerId,
+        categoryId: null,
+        payerId: userId,
+        createdBy: userId,
+        description: `Reembolso: ${transaction.description}`,
+        amount,
+        transactionType: "income",
+        occurredAt: todayInBrazil(),
+        isPrivate: false,
+        splitType: "none",
+        linkKind: "settlement",
+      });
+      t.update(originalRef, { isSettled: true, settlementTransactionId: settlementId, updatedAt: FieldValue.serverTimestamp() });
     });
-    return setTransactionSettled(transactionId, true, settlementTx.id);
+  } else {
+    await runLedgerTransaction(groupId, async (t) => {
+      const current = await t.get(originalRef);
+      if (!current.exists || !current.data()!.isSettled) return;
+      const settlementId = current.data()!.settlementTransactionId as string | null;
+      const removal = settlementId ? await prepareTransactionDelete(t, settlementId) : null;
+      removal?.apply();
+      t.update(originalRef, { isSettled: false, settlementTransactionId: null, updatedAt: FieldValue.serverTimestamp() });
+    });
   }
-
-  if (transaction.settlementTransactionId) {
-    await deleteTransaction(transaction.settlementTransactionId);
-  }
-  return setTransactionSettled(transactionId, false, null);
+  return (await findTransactionById(transactionId))!;
 }
 
 // "Cancel this subscription/rent/salary" -- deletes this occurrence and
@@ -394,22 +442,19 @@ export async function updateRecurringForUser(
 
   const members = input.amount !== undefined ? await findMembersByGroupId(groupId) : [];
   await Promise.all(
-    futureOccurrences.map(async (occurrence) => {
-      await updateTransaction(occurrence.id, { amount: input.amount, description: input.description });
+    futureOccurrences.map((occurrence) =>
       // Each occurrence carries its own splits (independent docs, created
       // per-occurrence when the series was first generated) -- an amount
       // change has to resync every one of them individually, same as a
       // regular single-transaction edit does for its own splits.
-      if (input.amount !== undefined && occurrence.splitType === "equal" && members.length > 1) {
-        const shares = splitEvenly(input.amount, members.length);
-        await deleteSplitsForTransaction(occurrence.id);
-        await insertSplits(
-          groupId,
-          occurrence.id,
-          members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
-        );
-      }
-    })
+      updateTransaction(
+        occurrence.id,
+        { amount: input.amount, description: input.description },
+        input.amount !== undefined && occurrence.splitType === "equal" && occurrence.transactionType === "expense"
+          ? equalSplits(input.amount, members)
+          : undefined
+      )
+    )
   );
 
   return { updatedCount: futureOccurrences.length };
@@ -440,6 +485,19 @@ export async function updateTransactionForUser(
     throw new SecuredCardTransferError(transaction.loanId ? "loan" : "card");
   }
 
+  // Lançamento de outra tela: dá pra mudar nome, categoria e forma de
+  // pagamento; valor, tipo, data, conta e quem pagou só por lá.
+  const changesMoney =
+    (input.amount !== undefined && toCents(input.amount) !== toCents(Number(transaction.amount))) ||
+    (input.transactionType !== undefined && input.transactionType !== transaction.transactionType) ||
+    (input.occurredAt !== undefined && input.occurredAt !== transaction.occurredAt) ||
+    (input.payerId !== undefined && input.payerId !== transaction.payerId) ||
+    (input.accountId !== undefined && input.accountId !== transaction.accountId);
+  if (changesMoney) {
+    const linkKind = await linkKindOf(groupId, transaction);
+    if (linkKind) throw new LinkedTransactionError(linkKind);
+  }
+
   if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {
     throw new InvalidCategoryError();
   }
@@ -452,8 +510,7 @@ export async function updateTransactionForUser(
   // refreshed together whenever accountId changes.
   let accountFields: { accountId?: string; accountType?: "personal" | "joint"; accountOwnerId?: string | null } = {};
   if (input.accountId !== undefined && input.accountId !== transaction.accountId) {
-    const accounts = await findAccountsByGroupId(groupId);
-    const account = accounts.find((a) => a.id === input.accountId);
+    const account = await findUsableAccount(groupId, userId, input.accountId);
     if (!account) {
       throw new InvalidAccountError();
     }
@@ -467,36 +524,34 @@ export async function updateTransactionForUser(
     }
   }
 
-  const updated = await updateTransaction(transactionId, {
-    description: input.description,
-    amount: input.amount,
-    transactionType: input.transactionType,
-    categoryId: input.categoryId,
-    occurredAt: input.occurredAt,
-    payerId: input.payerId,
-    paymentMethod: input.paymentMethod,
-    ...accountFields,
-  });
-
   // Keep "who owes whom" consistent with the edited amount/type: income has
-  // no debt, and an equal-split expense's shares must track the new amount.
+  // no debt, and an equal-split expense's shares must track the new amount
+  // (or appear, when an income becomes an expense). Vai no mesmo lote da edição.
   const nextType = input.transactionType ?? transaction.transactionType;
+  let splits: SplitInput[] | undefined;
   if (nextType === "income") {
-    if (transaction.splitType !== "none") {
-      await deleteSplitsForTransaction(transactionId);
-    }
-  } else if (transaction.splitType === "equal" && input.amount !== undefined) {
-    const members = await findMembersByGroupId(groupId);
-    if (members.length > 1) {
-      const shares = splitEvenly(input.amount, members.length);
-      await deleteSplitsForTransaction(transactionId);
-      await insertSplits(
-        groupId,
-        transactionId,
-        members.map((member, index) => ({ userId: member.id, shareAmountCents: shares[index] }))
-      );
-    }
+    if (transaction.splitType !== "none") splits = [];
+  } else if (
+    transaction.splitType === "equal" &&
+    (input.amount !== undefined || transaction.transactionType === "income")
+  ) {
+    splits = equalSplits(input.amount ?? Number(transaction.amount), await findMembersByGroupId(groupId));
   }
+
+  const updated = await updateTransaction(
+    transactionId,
+    {
+      description: input.description,
+      amount: input.amount,
+      transactionType: input.transactionType,
+      categoryId: input.categoryId,
+      occurredAt: input.occurredAt,
+      payerId: input.payerId,
+      paymentMethod: input.paymentMethod,
+      ...accountFields,
+    },
+    splits
+  );
 
   return updated;
 }

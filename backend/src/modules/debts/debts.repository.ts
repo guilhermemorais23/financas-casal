@@ -178,16 +178,8 @@ export async function findInstallmentById(
   return toInstallmentRow(debtId, doc);
 }
 
-export async function setInstallmentPaid(
-  debtId: string,
-  installmentId: string,
-  isPaid: boolean,
-  transactionId: string | null
-): Promise<DebtInstallmentRow> {
-  const ref = debtsCol.doc(debtId).collection("installments").doc(installmentId);
-  await ref.update({ isPaid, paidAt: isPaid ? FieldValue.serverTimestamp() : null, transactionId });
-  const doc = await ref.get();
-  return toInstallmentRow(debtId, doc);
+export function installmentRef(debtId: string, installmentId: string): FirebaseFirestore.DocumentReference {
+  return debtsCol.doc(debtId).collection("installments").doc(installmentId);
 }
 
 export async function updateInstallmentReferenceMonth(

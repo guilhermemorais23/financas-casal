@@ -1,14 +1,17 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { categoryIsVisibleTo } from "../categories/categories.repository";
-import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
+import { findAccountForOwner, findMembersByGroupId } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
 import {
-  deleteTransaction,
   deleteTransactionsBatch,
   findSecuredCardTransferIds,
-  insertSplits,
   insertTransaction,
+  prepareTransactionDelete,
+  runLedgerTransaction,
+  writeNewTransaction,
+  type NewTransactionInput,
 } from "../transactions/transactions.repository";
-import { addMonths, dateForDayInMonth } from "../../utils/month";
+import { addMonths, dateForDayInMonth, todayInBrazil } from "../../utils/month";
 import {
   deleteCard,
   deletePurchase,
@@ -18,11 +21,13 @@ import {
   findPurchaseById,
   findPurchasesByCardAndStatement,
   findStatement,
-  incrementCardLimit,
+  findStatementsByCardId,
+  cardRef,
   setCardSecuredFromAccount,
   insertCard,
   insertPurchaseSeries,
-  setStatementPaid,
+  statementRef,
+  toCardRow,
   updateCard,
   type CardRow,
   type LimitType,
@@ -100,9 +105,8 @@ async function computeUnpaidByMonth(cardId: string): Promise<Map<string, number>
   const byMonth = new Map<string, number>();
   if (purchases.length === 0) return byMonth;
 
-  const months = [...new Set(purchases.map((purchase) => purchase.statementMonth))];
-  const statements = await Promise.all(months.map((month) => findStatement(cardId, month)));
-  const paidMonths = new Set(months.filter((_, index) => statements[index]?.isPaid));
+  const statements = await findStatementsByCardId(cardId);
+  const paidMonths = new Set([...statements.entries()].filter(([, statement]) => statement.isPaid).map(([month]) => month));
 
   for (const purchase of purchases) {
     if (paidMonths.has(purchase.statementMonth)) continue;
@@ -145,7 +149,7 @@ function statementMonthFor(purchaseDate: string, closingDay: number): string {
 
 // Exported for the same reason as dueDateFor below.
 export function currentStatementMonth(closingDay: number): string {
-  return statementMonthFor(new Date().toISOString().slice(0, 10), closingDay);
+  return statementMonthFor(todayInBrazil(), closingDay);
 }
 
 // dueDay is normally earlier in the calendar than closingDay (closes the
@@ -224,10 +228,7 @@ export async function createCard(userId: string, input: CreateCardInput) {
 // for a personal card, "Nossa Conta" for a joint one. Same rule the fatura
 // payment uses.
 async function accountForCard(groupId: string, card: CardRow) {
-  const accounts = await findAccountsByGroupId(groupId);
-  const account = card.ownerUserId
-    ? accounts.find((a) => a.type === "personal" && a.ownerUserId === card.ownerUserId)
-    : accounts.find((a) => a.type === "joint");
+  const account = await findAccountForOwner(groupId, card.ownerUserId);
   if (!account) {
     throw new CardNotFoundError();
   }
@@ -238,15 +239,15 @@ async function accountForCard(groupId: string, card: CardRow) {
 // extrato on the day it happened); resgatar = it comes back. Booked as a
 // transfer (securedCardId), so it moves the balance without counting as a
 // gasto/receita anywhere.
-async function recordSecuredTransfer(
+async function securedTransferInput(
   userId: string,
   groupId: string,
   card: CardRow,
   direction: "deposit" | "withdraw",
   amount: number
-) {
+): Promise<NewTransactionInput> {
   const account = await accountForCard(groupId, card);
-  await insertTransaction({
+  return {
     groupId,
     accountId: account.id,
     accountType: account.type,
@@ -257,11 +258,21 @@ async function recordSecuredTransfer(
     description: direction === "deposit" ? `Guardado no cartão ${card.name}` : `Resgatado do cartão ${card.name}`,
     amount,
     transactionType: direction === "deposit" ? "expense" : "income",
-    occurredAt: new Date().toISOString().slice(0, 10),
+    occurredAt: todayInBrazil(),
     isPrivate: false,
     splitType: "none",
     securedCardId: card.id,
-  });
+  };
+}
+
+async function recordSecuredTransfer(
+  userId: string,
+  groupId: string,
+  card: CardRow,
+  direction: "deposit" | "withdraw",
+  amount: number
+) {
+  await insertTransaction(await securedTransferInput(userId, groupId, card, direction, amount));
 }
 
 // Dinheiro parado em cartões com limite garantido -- saiu das contas
@@ -407,7 +418,11 @@ export async function setStatementPaidForUser(
 ) {
   const { groupId, card } = await requireManageableCard(userId, cardId);
   const existing = await findStatement(cardId, month);
+  const ref = statementRef(cardId, month);
 
+  // Lançamento, divisões e a fatura marcada como paga vão juntos numa
+  // transação do Firestore, que relê a fatura: dois cliques em "Pagar" (ou a
+  // rede repetindo o pedido) não lançam a fatura duas vezes.
   if (isPaid && !existing?.isPaid) {
     const purchases = await findPurchasesByCardAndStatement(cardId, month);
     if (purchases.length === 0) {
@@ -417,44 +432,50 @@ export async function setStatementPaidForUser(
     const account = await accountForCard(groupId, card);
 
     const totalAmount = purchases.reduce((sum, purchase) => sum + Number(purchase.amount), 0);
-    const transaction = await insertTransaction({
-      groupId,
-      accountId: account.id,
-      accountType: account.type,
-      accountOwnerId: account.ownerUserId,
-      categoryId: null,
-      payerId: userId,
-      createdBy: userId,
-      description: `Fatura ${card.name} — ${month}`,
-      amount: totalAmount,
-      transactionType: "expense",
-      occurredAt: dueDateFor(month, card.closingDay, card.dueDay),
-      isPrivate: false,
-      splitType: "custom",
-    });
-
     const byBuyerCents = new Map<string, number>();
     for (const purchase of purchases) {
       const cents = Math.round(Number(purchase.amount) * 100);
       byBuyerCents.set(purchase.buyerId, (byBuyerCents.get(purchase.buyerId) ?? 0) + cents);
     }
-    await insertSplits(
-      groupId,
-      transaction.id,
-      Array.from(byBuyerCents.entries()).map(([userId2, shareAmountCents]) => ({
-        userId: userId2,
-        shareAmountCents,
-      }))
-    );
 
-    return setStatementPaid(cardId, month, true, transaction.id);
+    await runLedgerTransaction(groupId, async (t) => {
+      const current = await t.get(ref);
+      if (current.exists && current.data()!.isPaid) return;
+      const transactionId = writeNewTransaction(
+        t,
+        {
+          groupId,
+          accountId: account.id,
+          accountType: account.type,
+          accountOwnerId: account.ownerUserId,
+          categoryId: null,
+          payerId: userId,
+          createdBy: userId,
+          description: `Fatura ${card.name} — ${month}`,
+          amount: totalAmount,
+          transactionType: "expense",
+          occurredAt: dueDateFor(month, card.closingDay, card.dueDay),
+          isPrivate: false,
+          splitType: "custom",
+          linkKind: "card_statement",
+        },
+        Array.from(byBuyerCents.entries()).map(([buyerId, shareAmountCents]) => ({ userId: buyerId, shareAmountCents }))
+      );
+      t.set(ref, { isPaid: true, paidAt: FieldValue.serverTimestamp(), transactionId }, { merge: true });
+    });
+    return (await findStatement(cardId, month))!;
   }
 
   if (!isPaid && existing?.isPaid) {
-    if (existing.transactionId) {
-      await deleteTransaction(existing.transactionId);
-    }
-    return setStatementPaid(cardId, month, false, null);
+    await runLedgerTransaction(groupId, async (t) => {
+      const current = await t.get(ref);
+      if (!current.exists || !current.data()!.isPaid) return;
+      const transactionId = current.data()!.transactionId as string | null;
+      const removal = transactionId ? await prepareTransactionDelete(t, transactionId) : null;
+      removal?.apply();
+      t.set(ref, { isPaid: false, paidAt: null, transactionId: null }, { merge: true });
+    });
+    return (await findStatement(cardId, month))!;
   }
 
   return existing ?? { isPaid: false, paidAt: null, transactionId: null };
@@ -495,17 +516,28 @@ export async function adjustSecuredLimit(
   }
 
   const amountCents = Math.round(input.amount * 100);
-  if (input.direction === "withdraw") {
-    const availableCents = Math.round(Number(card.limit ?? 0) * 100) - sumCents(await computeUnpaidByMonth(cardId));
-    if (amountCents > availableCents) {
-      throw new InsufficientAvailableLimitError();
+  const deltaCents = input.direction === "deposit" ? amountCents : -amountCents;
+  // O quanto as compras em aberto prendem do limite (lido fora da transação:
+  // compras novas não mudam o que já estava preso).
+  const heldCents = input.direction === "withdraw" ? sumCents(await computeUnpaidByMonth(cardId)) : 0;
+  const transfer = card.securedFromAccount
+    ? await securedTransferInput(userId, groupId, card, input.direction, amountCents / 100)
+    : null;
+
+  // O limite é relido dentro da transação: dois resgates ao mesmo tempo não
+  // tiram mais do que está livre.
+  await runLedgerTransaction(groupId, async (t) => {
+    const current = toCardRow(await t.get(cardRef(cardId)));
+    if (input.direction === "withdraw") {
+      const availableCents = Math.round(Number(current.limit ?? 0) * 100) - heldCents;
+      if (amountCents > availableCents) {
+        throw new InsufficientAvailableLimitError();
+      }
     }
-  }
-  const updated = await incrementCardLimit(cardId, input.direction === "deposit" ? amountCents : -amountCents);
-  if (card.securedFromAccount) {
-    await recordSecuredTransfer(userId, groupId, card, input.direction, amountCents / 100);
-  }
-  return updated;
+    t.update(cardRef(cardId), { limitCents: FieldValue.increment(deltaCents), updatedAt: FieldValue.serverTimestamp() });
+    if (transfer) writeNewTransaction(t, transfer);
+  });
+  return (await findCardById(cardId))!;
 }
 
 // "Esse dinheiro saiu da minha conta?" -- fixable after the fact. Turning it
@@ -536,6 +568,5 @@ export async function removeCard(userId: string, cardId: string) {
   // guardar/resgatar entries disappear along with the card.
   const transferIds = await findSecuredCardTransferIds(cardId);
   const linkedTransactionIds = await deleteCard(cardId);
-  await Promise.all(linkedTransactionIds.map((transactionId) => deleteTransaction(transactionId)));
-  await deleteTransactionsBatch(transferIds);
+  await deleteTransactionsBatch([...linkedTransactionIds, ...transferIds]);
 }

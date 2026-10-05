@@ -8,6 +8,7 @@ import {
   findAccountsByGroupId,
   findGroupById,
   findMembersByGroupId,
+  joinGroupByInvite,
   addUserToGroup,
   removeUserFromGroup,
   updateGroupFinancialProfile,
@@ -16,12 +17,7 @@ import {
   type GroupRow,
   type MemberRow,
 } from "./groups.repository";
-import {
-  createInvite,
-  findInviteByToken,
-  findPendingInviteByGroupId,
-  markInviteAccepted,
-} from "./invites.repository";
+import { createInvite, findPendingInviteByGroupId } from "./invites.repository";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // Casal, família, república... cinco dá e sobra, e segura o custo de leitura.
@@ -115,23 +111,23 @@ export async function acceptInvite(userId: string, token: string) {
   const user = await findUserById(userId);
   if (!user) throw new NoGroupError();
 
-  const invite = await findInviteByToken(token);
-  if (!invite) throw new InviteNotFoundError();
-  if (invite.status !== "pending") throw new InviteNotPendingError();
-  if (invite.expiresAt.getTime() < Date.now()) throw new InviteExpiredError();
-  if (user.groupIds.includes(invite.groupId)) throw new AlreadyInGroupError();
-  if (user.groupIds.length >= MAX_GROUPS_PER_USER) throw new TooManyGroupsError();
+  const result = await joinGroupByInvite(userId, token, `Conta de ${user.displayName}`, MAX_GROUPS_PER_USER);
+  if (!result.ok) {
+    switch (result.reason) {
+      case "not_found":
+        throw new InviteNotFoundError();
+      case "not_pending":
+        throw new InviteNotPendingError();
+      case "expired":
+        throw new InviteExpiredError();
+      case "already_member":
+        throw new AlreadyInGroupError();
+      case "too_many":
+        throw new TooManyGroupsError();
+    }
+  }
 
-  await addUserToGroup(user, invite.groupId);
-  await createAccount({
-    groupId: invite.groupId,
-    ownerUserId: userId,
-    type: "personal",
-    name: `Conta de ${user.displayName}`,
-  });
-  await markInviteAccepted(invite.token, userId);
-
-  const group = await findGroupById(invite.groupId);
+  const group = await findGroupById(result.groupId);
   return { group };
 }
 

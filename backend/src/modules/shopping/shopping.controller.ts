@@ -10,10 +10,8 @@ import {
   removeItem,
   uncheckItem,
 } from "./shopping.service";
+import { isNonEmptyString, isValidAmount } from "../../utils/validation";
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 export async function addItemHandler(req: Request, res: Response) {
   const { name } = req.body ?? {};
@@ -22,29 +20,13 @@ export async function addItemHandler(req: Request, res: Response) {
     return;
   }
 
-  try {
-    const item = await addItem(req.user!.id, name.trim());
-    res.status(201).json(item);
-  } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
-    throw err;
-  }
+  const item = await addItem(req.user!.id, name.trim());
+  res.status(201).json(item);
 }
 
 export async function listItemsHandler(req: Request, res: Response) {
-  try {
-    const items = await listItems(req.user!.id);
-    res.status(200).json(items);
-  } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
-    throw err;
-  }
+  const items = await listItems(req.user!.id);
+  res.status(200).json(items);
 }
 
 export async function checkItemHandler(req: Request, res: Response) {
@@ -56,7 +38,7 @@ export async function checkItemHandler(req: Request, res: Response) {
 
   try {
     if (isChecked) {
-      if (!isNonEmptyString(accountId) || typeof amount !== "number" || amount <= 0) {
+      if (!isNonEmptyString(accountId) || !isValidAmount(amount)) {
         res.status(400).json({ error: "accountId and amount are required to check an item" });
         return;
       }

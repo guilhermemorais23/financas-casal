@@ -1,14 +1,13 @@
+import { todayInBrazil } from "../../utils/month";
 import { categoryIsVisibleTo } from "../categories/categories.repository";
-import { findAccountsByGroupId } from "../groups/groups.repository";
+import { findUsableAccount } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { deleteTransaction, insertTransaction } from "../transactions/transactions.repository";
 import {
-  deleteItem,
-  findItemById,
-  findItemsByGroupId,
-  insertItem,
-  setItemChecked,
-} from "./shopping.repository";
+  prepareTransactionDelete,
+  runLedgerTransaction,
+  writeNewTransaction,
+} from "../transactions/transactions.repository";
+import { findItemById, findItemsByGroupId, insertItem, shoppingItemRef } from "./shopping.repository";
 
 export class ItemNotFoundError extends Error {}
 export class InvalidAccountError extends Error {}
@@ -48,8 +47,7 @@ export async function checkItem(userId: string, itemId: string, input: CheckItem
   const { groupId, item } = await requireItemInGroup(userId, itemId);
   if (item.isChecked) return item;
 
-  const accounts = await findAccountsByGroupId(groupId);
-  const account = accounts.find((a) => a.id === input.accountId);
+  const account = await findUsableAccount(groupId, userId, input.accountId);
   if (!account) {
     throw new InvalidAccountError();
   }
@@ -57,38 +55,58 @@ export async function checkItem(userId: string, itemId: string, input: CheckItem
     throw new InvalidCategoryError();
   }
 
-  const transaction = await insertTransaction({
-    groupId,
-    accountId: account.id,
-    accountType: account.type,
-    accountOwnerId: account.ownerUserId,
-    categoryId: input.categoryId,
-    payerId: userId,
-    createdBy: userId,
-    description: item.name,
-    amount: input.amount,
-    transactionType: "expense",
-    occurredAt: new Date().toISOString().slice(0, 10),
-    isPrivate: false,
-    splitType: "none",
+  // Item e gasto mudam juntos (transação do Firestore que relê o item): dois
+  // toques não viram dois gastos.
+  const ref = shoppingItemRef(itemId);
+  await runLedgerTransaction(groupId, async (t) => {
+    const current = await t.get(ref);
+    if (!current.exists || current.data()!.isChecked) return;
+    const transactionId = writeNewTransaction(t, {
+      groupId,
+      accountId: account.id,
+      accountType: account.type,
+      accountOwnerId: account.ownerUserId,
+      categoryId: input.categoryId,
+      payerId: userId,
+      createdBy: userId,
+      description: item.name,
+      amount: input.amount,
+      transactionType: "expense",
+      occurredAt: todayInBrazil(),
+      isPrivate: false,
+      splitType: "none",
+      linkKind: "shopping",
+    });
+    t.update(ref, { isChecked: true, checkedBy: userId, transactionId });
   });
-
-  return setItemChecked(itemId, true, userId, transaction.id);
+  return (await findItemById(itemId))!;
 }
 
 export async function uncheckItem(userId: string, itemId: string) {
-  const { item } = await requireItemInGroup(userId, itemId);
+  const { groupId, item } = await requireItemInGroup(userId, itemId);
   if (!item.isChecked) return item;
-  if (item.transactionId) {
-    await deleteTransaction(item.transactionId);
-  }
-  return setItemChecked(itemId, false, null, null);
+  const ref = shoppingItemRef(itemId);
+  await runLedgerTransaction(groupId, async (t) => {
+    const current = await t.get(ref);
+    if (!current.exists || !current.data()!.isChecked) return;
+    const transactionId = current.data()!.transactionId as string | null;
+    const removal = transactionId ? await prepareTransactionDelete(t, transactionId) : null;
+    removal?.apply();
+    t.update(ref, { isChecked: false, checkedBy: null, transactionId: null });
+  });
+  return (await findItemById(itemId))!;
 }
 
 export async function removeItem(userId: string, itemId: string) {
-  const { item } = await requireItemInGroup(userId, itemId);
-  if (item.transactionId) {
-    await deleteTransaction(item.transactionId);
-  }
-  await deleteItem(itemId);
+  const { groupId } = await requireItemInGroup(userId, itemId);
+  // Item e o gasto dele saem juntos.
+  const ref = shoppingItemRef(itemId);
+  await runLedgerTransaction(groupId, async (t) => {
+    const current = await t.get(ref);
+    if (!current.exists) return;
+    const transactionId = current.data()!.transactionId as string | null;
+    const removal = transactionId ? await prepareTransactionDelete(t, transactionId) : null;
+    removal?.apply();
+    t.delete(ref);
+  });
 }

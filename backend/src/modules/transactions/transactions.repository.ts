@@ -60,7 +60,16 @@ export interface TransactionRow {
   // saldo, nunca conta como gasto/receita. Pertence ao empréstimo
   // (editado/excluído só por ele).
   loanId: string | null;
+  // Lançamento criado por outra tela (fatura paga, parcela de dívida,
+  // reembolso de despesa dividida, item da lista de compras). Quem é dono
+  // dele é essa tela: apagar ou mudar o valor por aqui deixaria a fatura
+  // "paga" sem o dinheiro ter saído. Null nos lançamentos normais (e nos
+  // antigos, de antes desse campo -- ver isLinkedTransaction no service).
+  linkKind: LinkKind | null;
 }
+
+export const LINK_KINDS = ["card_statement", "debt_installment", "settlement", "shopping"] as const;
+export type LinkKind = (typeof LINK_KINDS)[number];
 
 // Transferências movem dinheiro entre a conta e outro lugar (um cartão
 // garantido, alguém que te deve) sem ser receita nem gasto.
@@ -100,6 +109,7 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
     settlementTransactionId: data.settlementTransactionId ?? null,
     securedCardId: data.securedCardId ?? null,
     loanId: data.loanId ?? null,
+    linkKind: data.linkKind ?? null,
   };
 }
 
@@ -125,74 +135,181 @@ export interface NewTransactionInput {
   paymentMethod?: PaymentMethod | null;
   securedCardId?: string | null;
   loanId?: string | null;
+  linkKind?: LinkKind | null;
 }
 
-export async function insertTransaction(input: NewTransactionInput): Promise<TransactionRow> {
-  const [row] = await insertTransactionSeries(input, [input.occurredAt]);
+export interface SplitInput {
+  userId: string;
+  shareAmountCents: number;
+}
+
+// O que o lote (batch) e a transação do Firestore têm em comum pra gravar.
+interface Writer {
+  set(ref: FirebaseFirestore.DocumentReference, data: FirebaseFirestore.DocumentData): unknown;
+  delete(ref: FirebaseFirestore.DocumentReference): unknown;
+}
+
+function transactionData(
+  base: Omit<NewTransactionInput, "occurredAt">,
+  occurredAt: string,
+  recurring: { groupId: string; index: number; total: number } | null
+): FirebaseFirestore.DocumentData {
+  return {
+    groupId: base.groupId,
+    accountId: base.accountId,
+    accountType: base.accountType,
+    accountOwnerId: base.accountOwnerId,
+    categoryId: base.categoryId,
+    payerId: base.payerId,
+    createdBy: base.createdBy,
+    description: base.description,
+    amountCents: toCents(base.amount),
+    transactionType: base.transactionType,
+    occurredAt,
+    isPrivate: base.isPrivate,
+    splitType: base.splitType,
+    paymentMethod: base.paymentMethod ?? null,
+    recurringGroupId: recurring?.groupId ?? null,
+    recurringIndex: recurring?.index ?? null,
+    recurringTotal: recurring?.total ?? null,
+    isSettled: false,
+    settlementTransactionId: null,
+    securedCardId: base.securedCardId ?? null,
+    loanId: base.loanId ?? null,
+    linkKind: base.linkKind ?? null,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+// Doc ID = userId within the subcollection -- matches SQL's
+// UNIQUE(transaction_id, user_id). groupId/transactionId are denormalized
+// onto each split so the balance ledger can collection-group query them.
+function writeSplits(writer: Writer, groupId: string, ref: FirebaseFirestore.DocumentReference, splits: SplitInput[]) {
+  for (const split of splits) {
+    writer.set(ref.collection("splits").doc(split.userId), {
+      groupId,
+      transactionId: ref.id,
+      userId: split.userId,
+      shareAmountCents: split.shareAmountCents,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
+}
+
+// Lote do Firestore aceita até 500 gravações; acima disso divide em vários.
+const BATCH_LIMIT = 450;
+async function commitInChunks(ops: ((writer: Writer) => void)[]): Promise<void> {
+  for (let start = 0; start < ops.length; start += BATCH_LIMIT) {
+    const batch = db.batch();
+    ops.slice(start, start + BATCH_LIMIT).forEach((op) => op(batch));
+    await batch.commit();
+  }
+}
+
+export async function insertTransaction(input: NewTransactionInput, splits: SplitInput[] = []): Promise<TransactionRow> {
+  const [row] = await insertTransactionSeries(input, [input.occurredAt], splits);
   return row;
 }
 
 // Writes every occurrence of a recurring series (or, with a single-element
 // `occurredAtDates`, one plain transaction -- insertTransaction above is
-// exactly that case) in one batch. Doc refs are allocated up front so the
-// first occurrence's id is known before the write, which is what every
-// occurrence (including that first one) stores as recurringGroupId -- the
-// handle later used to find/cancel "this and every future occurrence".
+// exactly that case) in one batch, each with its own copy of `splits`. Doc
+// refs are allocated up front so the first occurrence's id is known before
+// the write, which is what every occurrence (including that first one)
+// stores as recurringGroupId -- the handle later used to find/cancel "this
+// and every future occurrence". Lançamento e divisões vão no mesmo lote:
+// nunca fica uma despesa dividida sem as divisões.
 export async function insertTransactionSeries(
   base: Omit<NewTransactionInput, "occurredAt">,
-  occurredAtDates: string[]
+  occurredAtDates: string[],
+  splits: SplitInput[] = []
 ): Promise<TransactionRow[]> {
   const refs = occurredAtDates.map(() => transactionsCol.doc());
   const isRecurring = occurredAtDates.length > 1;
   const recurringGroupId = isRecurring ? refs[0].id : null;
-  const amountCents = toCents(base.amount);
 
-  const batch = db.batch();
-  refs.forEach((ref, index) => {
-    batch.set(ref, {
-      groupId: base.groupId,
-      accountId: base.accountId,
-      accountType: base.accountType,
-      accountOwnerId: base.accountOwnerId,
-      categoryId: base.categoryId,
-      payerId: base.payerId,
-      createdBy: base.createdBy,
-      description: base.description,
-      amountCents,
-      transactionType: base.transactionType,
-      occurredAt: occurredAtDates[index],
-      isPrivate: base.isPrivate,
-      splitType: base.splitType,
-      paymentMethod: base.paymentMethod ?? null,
-      recurringGroupId,
-      recurringIndex: isRecurring ? index + 1 : null,
-      recurringTotal: isRecurring ? occurredAtDates.length : null,
-      isSettled: false,
-      settlementTransactionId: null,
-      securedCardId: base.securedCardId ?? null,
-      loanId: base.loanId ?? null,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  });
-  await batch.commit();
-  invalidateTransactionReads();
+  await commitInChunks(
+    refs.map((ref, index) => (writer: Writer) => {
+      const recurring = recurringGroupId ? { groupId: recurringGroupId, index: index + 1, total: occurredAtDates.length } : null;
+      writer.set(ref, transactionData(base, occurredAtDates[index], recurring));
+      writeSplits(writer, base.groupId, ref, splits);
+    })
+  );
+  invalidateTransactionReads(base.groupId);
 
-  const docs = await Promise.all(refs.map((ref) => ref.get()));
+  const docs = await db.getAll(...refs);
   return docs.map(toTransactionRow);
 }
 
-export async function setTransactionSettled(
-  transactionId: string,
-  isSettled: boolean,
-  settlementTransactionId: string | null
-): Promise<TransactionRow> {
-  const ref = transactionsCol.doc(transactionId);
-  await ref.update({ isSettled, settlementTransactionId, updatedAt: FieldValue.serverTimestamp() });
-  invalidateTransactionReads();
-  const doc = await ref.get();
-  return toTransactionRow(doc);
+// Vários lançamentos soltos (não é uma série) de uma vez, em lotes -- a
+// importação de extrato chega a 500 de uma vez.
+export async function insertTransactionsBatch(inputs: NewTransactionInput[]): Promise<number> {
+  if (inputs.length === 0) return 0;
+  await commitInChunks(inputs.map((input) => (writer: Writer) => writer.set(transactionsCol.doc(), transactionData(input, input.occurredAt, null))));
+  new Set(inputs.map((input) => input.groupId)).forEach((groupId) => invalidateTransactionReads(groupId));
+  return inputs.length;
 }
+
+// O mesmo envio de importação duas vezes (clique duplo, rede repetindo) em
+// poucos minutos: só o primeiro grava.
+const importCommitsCol = db.collection("importCommits");
+const IMPORT_DEDUPE_MS = 10 * 60 * 1000;
+export async function claimImportCommit(fingerprint: string): Promise<boolean> {
+  const ref = importCommitsCol.doc(fingerprint);
+  return db.runTransaction(async (t) => {
+    const doc = await t.get(ref);
+    if (doc.exists && (doc.data()!.at as number) > Date.now() - IMPORT_DEDUPE_MS) return false;
+    t.set(ref, { at: Date.now() });
+    return true;
+  });
+}
+
+export async function releaseImportCommit(fingerprint: string): Promise<void> {
+  await importCommitsCol.doc(fingerprint).delete();
+}
+
+// Pra usar dentro de db.runTransaction: grava um lançamento novo (e as
+// divisões) junto com o que mais a transação gravar -- a fatura marcada como
+// paga, a parcela, o empréstimo... Ou vai tudo, ou nada. Quem chama invalida
+// o cache (invalidateTransactionReads) depois do commit.
+export function writeNewTransaction(t: FirebaseFirestore.Transaction, input: NewTransactionInput, splits: SplitInput[] = []): string {
+  const ref = transactionsCol.doc();
+  t.set(ref, transactionData(input, input.occurredAt, null));
+  writeSplits(t, input.groupId, ref, splits);
+  return ref.id;
+}
+
+// Também dentro de db.runTransaction: lê o lançamento e as divisões (a
+// transação do Firestore exige ler tudo antes de gravar) e devolve a função
+// que apaga os dois. Lançamento que já não existe: não apaga nada.
+export async function prepareTransactionDelete(
+  t: FirebaseFirestore.Transaction,
+  transactionId: string
+): Promise<{ groupId: string | null; apply: () => void }> {
+  const ref = transactionsCol.doc(transactionId);
+  const [doc, splits] = await Promise.all([t.get(ref), t.get(ref.collection("splits"))]);
+  return {
+    groupId: doc.exists ? (doc.data()!.groupId as string) : null,
+    apply: () => {
+      splits.docs.forEach((split) => t.delete(split.ref));
+      if (doc.exists) t.delete(ref);
+    },
+  };
+}
+
+// db.runTransaction + limpar o cache de leituras do grupo depois do commit.
+export async function runLedgerTransaction<T>(groupId: string, fn: (t: FirebaseFirestore.Transaction) => Promise<T>): Promise<T> {
+  const result = await db.runTransaction(fn);
+  invalidateTransactionReads(groupId);
+  return result;
+}
+
+export function transactionDocRef(transactionId: string): FirebaseFirestore.DocumentReference {
+  return transactionsCol.doc(transactionId);
+}
+
+export { toTransactionRow };
 
 // Every occurrence sharing a recurringGroupId -- a single equality filter,
 // no composite index needed. The caller (cancelRecurringForUser) filters
@@ -208,45 +325,26 @@ export async function findSecuredCardTransferIds(cardId: string): Promise<string
   return snapshot.docs.map((doc) => doc.id);
 }
 
+// Lançamentos de antes do linkKind: é o reembolso de alguma despesa dividida?
+export async function isSettlementTransaction(transactionId: string): Promise<boolean> {
+  const snapshot = await transactionsCol.where("settlementTransactionId", "==", transactionId).limit(1).select().get();
+  return !snapshot.empty;
+}
+
+// Apaga lançamentos junto com as divisões deles, em lote.
 export async function deleteTransactionsBatch(transactionIds: string[]): Promise<void> {
   if (transactionIds.length === 0) return;
-  await Promise.all(transactionIds.map((id) => deleteSplitsForTransaction(id)));
-  const batch = db.batch();
-  transactionIds.forEach((id) => batch.delete(transactionsCol.doc(id)));
-  await batch.commit();
-  invalidateTransactionReads();
-}
-
-// Doc ID = userId within the subcollection -- matches SQL's
-// UNIQUE(transaction_id, user_id). groupId/transactionId are denormalized
-// onto each split so the balance ledger can collection-group query them.
-export async function insertSplits(
-  groupId: string,
-  transactionId: string,
-  splits: { userId: string; shareAmountCents: number }[]
-): Promise<void> {
-  const splitsCol = transactionsCol.doc(transactionId).collection("splits");
-  const batch = db.batch();
-  for (const split of splits) {
-    batch.set(splitsCol.doc(split.userId), {
-      groupId,
-      transactionId,
-      userId: split.userId,
-      shareAmountCents: split.shareAmountCents,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-  }
-  await batch.commit();
-  invalidateTransactionReads();
-}
-
-export async function deleteSplitsForTransaction(transactionId: string): Promise<void> {
-  const snapshot = await transactionsCol.doc(transactionId).collection("splits").get();
-  if (snapshot.empty) return;
-  const batch = db.batch();
-  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-  await batch.commit();
-  invalidateTransactionReads();
+  const refs = transactionIds.map((id) => transactionsCol.doc(id));
+  const [docs, splitSnaps] = await Promise.all([
+    db.getAll(...refs),
+    Promise.all(refs.map((ref) => ref.collection("splits").get())),
+  ]);
+  const ops: ((writer: Writer) => void)[] = [];
+  splitSnaps.forEach((snap) => snap.docs.forEach((split) => ops.push((writer) => writer.delete(split.ref))));
+  refs.forEach((ref) => ops.push((writer) => writer.delete(ref)));
+  await commitInChunks(ops);
+  const groupIds = new Set(docs.filter((doc) => doc.exists).map((doc) => doc.data()!.groupId as string));
+  groupIds.forEach((groupId) => invalidateTransactionReads(groupId));
 }
 
 export async function findTransactionsVisibleTo(
@@ -309,9 +407,7 @@ export async function findTransactionById(transactionId: string): Promise<Transa
 }
 
 export async function deleteTransaction(transactionId: string): Promise<void> {
-  await deleteSplitsForTransaction(transactionId);
-  await transactionsCol.doc(transactionId).delete();
-  invalidateTransactionReads();
+  await deleteTransactionsBatch([transactionId]);
 }
 
 export async function updateTransaction(
@@ -333,7 +429,10 @@ export async function updateTransaction(
     accountId?: string;
     accountType?: "personal" | "joint";
     accountOwnerId?: string | null;
-  }
+  },
+  // undefined: as divisões ficam como estão; uma lista (vazia inclusive):
+  // troca todas, no mesmo lote da edição.
+  splits?: SplitInput[]
 ): Promise<TransactionRow> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (fields.description !== undefined) update.description = fields.description;
@@ -347,9 +446,17 @@ export async function updateTransaction(
   if (fields.accountType !== undefined) update.accountType = fields.accountType;
   if (fields.accountOwnerId !== undefined) update.accountOwnerId = fields.accountOwnerId;
 
-  await transactionsCol.doc(transactionId).update(update);
-  invalidateTransactionReads();
-  const doc = await transactionsCol.doc(transactionId).get();
+  const ref = transactionsCol.doc(transactionId);
+  const batch = db.batch();
+  batch.update(ref, update);
+  if (splits !== undefined) {
+    const [current, existing] = await Promise.all([ref.get(), ref.collection("splits").get()]);
+    existing.docs.forEach((split) => batch.delete(split.ref));
+    if (current.exists) writeSplits(batch, current.data()!.groupId, ref, splits);
+  }
+  await batch.commit();
+  const doc = await ref.get();
+  invalidateTransactionReads(doc.data()?.groupId);
   return toTransactionRow(doc);
 }
 
@@ -361,7 +468,7 @@ export interface AccountBalanceRow {
 // Net of income minus expense per account, computed fresh from the
 // transaction log each time (no stored running balance -- see schema notes).
 export function getAccountBalances(groupId: string): Promise<AccountBalanceRow[]> {
-  return memoizeReads(`balances:${groupId}`, () => loadAccountBalances(groupId));
+  return memoizeReads(`balances:${groupId}`, () => loadAccountBalances(groupId), groupId);
 }
 
 async function loadAccountBalances(groupId: string): Promise<AccountBalanceRow[]> {
@@ -405,6 +512,8 @@ function fetchExpenseDocsForSummary(
 ): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
   return memoizeReads(`summaryDocs:${groupId}:${requestingUserId}:${monthStart}:${monthEnd}:${scope}`, () =>
     loadExpenseDocsForSummary(groupId, requestingUserId, monthStart, monthEnd, scope)
+,
+    groupId
   );
 }
 
@@ -520,6 +629,8 @@ function fetchDocsForDateRange(
 ): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
   return memoizeReads(`rangeDocs:${groupId}:${requestingUserId}:${monthStart}:${monthEnd}:${scope}`, () =>
     loadDocsForDateRange(groupId, requestingUserId, monthStart, monthEnd, scope)
+,
+    groupId
   );
 }
 
@@ -577,6 +688,8 @@ export function findOwnDocsForRange(
 ): Promise<OwnRangeDoc[]> {
   return memoizeReads(`ownDocs:${groupId}:${userId}:${rangeStart}:${rangeEnd}`, () =>
     loadOwnDocsForRange(groupId, userId, rangeStart, rangeEnd)
+,
+    groupId
   );
 }
 
@@ -736,7 +849,7 @@ export interface BalanceRow {
 // but N here is "unsettled equal-split expenses in the group", nowhere
 // near a scale where that matters for a couple/small-group app.
 export function getBalanceRows(groupId: string): Promise<BalanceRow[]> {
-  return memoizeReads(`balanceRows:${groupId}`, () => loadBalanceRows(groupId));
+  return memoizeReads(`balanceRows:${groupId}`, () => loadBalanceRows(groupId), groupId);
 }
 
 async function loadBalanceRows(groupId: string): Promise<BalanceRow[]> {

@@ -6,10 +6,8 @@ import { sendNewSignupEmail, sendWelcomeEmail } from "../../email/mailer";
 import { auth } from "../../db/firestore";
 import { deleteAccountForUser } from "./deleteAccount.service";
 import { findUserById, markWelcomeSeen, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
+import { isNonEmptyString } from "../../utils/validation";
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 // isAdmin here is what the frontend uses to decide whether to even show the
 // Admin nav item -- the backend route itself still re-checks ADMIN_EMAILS

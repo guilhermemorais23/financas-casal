@@ -37,6 +37,14 @@ function randomCode(): string {
   return Array.from({ length: 8 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
 }
 
+// Qualquer mensagem de quem ainda não vinculou chega aqui; só o que tem cara
+// de código vira leitura no banco (texto com "/" nem é um id válido).
+const CODE_PATTERN = new RegExp(`^[${CODE_ALPHABET}]{8}$`);
+function asLinkCode(text: string | undefined): string | null {
+  const code = text?.trim().toUpperCase() ?? "";
+  return CODE_PATTERN.test(code) ? code : null;
+}
+
 // Codes expire quickly -- they only need to survive the few seconds between
 // tapping "gerar código" in the app and pasting it into the bot.
 const LINK_CODE_TTL_MS = 10 * 60 * 1000;
@@ -239,7 +247,7 @@ const UNLINKED_GROUP_MESSAGE =
   "Você não faz mais parte do grupo ligado a este chat. No app PAR., abra o grupo certo, vá em Conta → assistente e gere um código novo.";
 
 async function handleTelegramLinking(chatId: string, text: string | undefined): Promise<void> {
-  const code = text?.trim().toUpperCase();
+  const code = asLinkCode(text);
   const redeemed = code ? await consumeLinkCode(code) : null;
 
   if (redeemed) {
@@ -293,7 +301,7 @@ export async function handleTelegramMessage(
 // so the same "Gerar código" button in Conta works to link either channel,
 // whichever one the code actually gets sent to.
 async function handleWhatsappLinking(waId: string, text: string | undefined): Promise<void> {
-  const code = text?.trim().toUpperCase();
+  const code = asLinkCode(text);
   const redeemed = code ? await consumeLinkCode(code) : null;
 
   if (redeemed) {

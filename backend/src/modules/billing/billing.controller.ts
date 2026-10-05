@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { NotAdminError, requireAdminEmail } from "../admin/admin.service";
 import { logError } from "../../utils/errorLog";
+import { safeEqual } from "../../utils/safeEqual";
 import { AsaasError, AsaasNotConfiguredError } from "./asaas.client";
 import { billingConfig } from "./billing.config";
 import {
@@ -76,7 +77,7 @@ export async function cancelHandler(req: Request, res: Response) {
 // pausa a fila de webhooks.
 export async function webhookHandler(req: Request, res: Response) {
   const expected = billingConfig().webhookToken;
-  if (!expected || req.header("asaas-access-token") !== expected) {
+  if (!expected || !safeEqual(req.header("asaas-access-token") ?? "", expected)) {
     res.status(401).json({ error: "invalid token" });
     return;
   }

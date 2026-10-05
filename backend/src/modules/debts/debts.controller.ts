@@ -13,10 +13,8 @@ import {
   updateInstallmentMonth,
   type DebtScope,
 } from "./debts.service";
+import { isNonEmptyString, isValidAmount } from "../../utils/validation";
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 function isValidDueDay(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
@@ -27,8 +25,7 @@ export async function createDebtHandler(req: Request, res: Response) {
 
   if (
     !isNonEmptyString(name) ||
-    typeof totalAmount !== "number" ||
-    totalAmount <= 0 ||
+    !isValidAmount(totalAmount) ||
     (installmentsCount !== undefined &&
       (typeof installmentsCount !== "number" || !Number.isInteger(installmentsCount) || installmentsCount < 1)) ||
     (scope !== undefined && scope !== "personal" && scope !== "joint") ||
@@ -42,37 +39,21 @@ export async function createDebtHandler(req: Request, res: Response) {
     return;
   }
 
-  try {
-    const debt = await createDebt(req.user!.id, {
-      name: name.trim(),
-      description: isNonEmptyString(description) ? description.trim() : null,
-      totalAmount,
-      installmentsCount: installmentsCount ?? 1,
-      scope: (scope as DebtScope) ?? "personal",
-      startMonth,
-      dueDay: dueDay ?? null,
-    });
-    res.status(201).json(debt);
-  } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
-    throw err;
-  }
+  const debt = await createDebt(req.user!.id, {
+    name: name.trim(),
+    description: isNonEmptyString(description) ? description.trim() : null,
+    totalAmount,
+    installmentsCount: installmentsCount ?? 1,
+    scope: (scope as DebtScope) ?? "personal",
+    startMonth,
+    dueDay: dueDay ?? null,
+  });
+  res.status(201).json(debt);
 }
 
 export async function listDebtsHandler(req: Request, res: Response) {
-  try {
-    const debts = await listDebts(req.user!.id);
-    res.status(200).json(debts);
-  } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
-    throw err;
-  }
+  const debts = await listDebts(req.user!.id);
+  res.status(200).json(debts);
 }
 
 export async function setInstallmentPaidHandler(req: Request, res: Response) {

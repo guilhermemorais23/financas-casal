@@ -10,6 +10,7 @@ import {
   insertCategory,
   updateCategory,
 } from "./categories.repository";
+import { isNonEmptyString } from "../../utils/validation";
 
 export class CategoryNotFoundError extends Error {}
 export class DefaultCategoryError extends Error {}
@@ -34,23 +35,11 @@ export const categoriesRouter = Router();
 
 categoriesRouter.use(requireAuth);
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 categoriesRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    let groupId: string;
-    try {
-      groupId = await requireGroupId(req.user!.id);
-    } catch (err) {
-      if (err instanceof NoGroupError) {
-        res.status(404).json({ error: "no group yet" });
-        return;
-      }
-      throw err;
-    }
+    const groupId = await requireGroupId(req.user!.id);
     const categories = await findVisibleCategories(groupId);
     res.status(200).json(categories);
   })
@@ -65,16 +54,7 @@ categoriesRouter.post(
       return;
     }
 
-    let groupId: string;
-    try {
-      groupId = await requireGroupId(req.user!.id);
-    } catch (err) {
-      if (err instanceof NoGroupError) {
-        res.status(404).json({ error: "no group yet" });
-        return;
-      }
-      throw err;
-    }
+    const groupId = await requireGroupId(req.user!.id);
 
     try {
       const category = await insertCategory({

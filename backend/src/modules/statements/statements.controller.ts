@@ -1,8 +1,8 @@
 import type { Request, Response } from "express";
-import { NoGroupError } from "../groups/groups.service";
 import { InvalidAccountError, InvalidCategoryError } from "../transactions/transactions.service";
 import { PdfPasswordError } from "../../utils/pdfStatement";
 import {
+  DuplicateImportError,
   InvalidImportItemError,
   InvalidRuleError,
   listImportRules,
@@ -26,10 +26,6 @@ export async function previewStatementHandler(req: Request, res: Response) {
     }
     if (err instanceof StatementParseError) {
       res.status(422).json({ error: err.message });
-      return;
-    }
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
       return;
     }
     throw err;
@@ -62,8 +58,8 @@ export async function commitStatementHandler(req: Request, res: Response) {
     const result = await commitStatement(req.user!.id, accountId, normalized, normalizedRules);
     res.status(201).json(result);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
+    if (err instanceof DuplicateImportError) {
+      res.status(409).json({ error: "Essa importação já foi salva agora há pouco.", code: "duplicate_import" });
       return;
     }
     if (err instanceof InvalidImportItemError || err instanceof InvalidAccountError || err instanceof InvalidCategoryError) {
@@ -78,10 +74,6 @@ export async function listImportRulesHandler(req: Request, res: Response) {
   try {
     res.status(200).json({ rules: await listImportRules(req.user!.id) });
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     throw err;
   }
 }
@@ -94,10 +86,6 @@ export async function saveImportRuleHandler(req: Request, res: Response) {
       res.status(400).json({ error: "Escolha uma categoria ou marque \"Não é gasto\"." });
       return;
     }
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     throw err;
   }
 }
@@ -107,10 +95,6 @@ export async function deleteImportRuleHandler(req: Request, res: Response) {
     await removeImportRule(req.user!.id, String(req.params.key ?? ""));
     res.status(204).end();
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     throw err;
   }
 }

@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import { NoGroupError } from "../groups/groups.service";
 import {
   InvalidCapAmountError,
   InvalidCategoryError,
@@ -9,6 +8,7 @@ import {
   setCategoryBudget,
   setCurrentBudget,
 } from "./budgets.service";
+import { isValidAmount } from "../../utils/validation";
 
 function monthParam(req: Request): string | undefined {
   const value = req.query.month;
@@ -20,10 +20,6 @@ export async function getCurrentBudgetHandler(req: Request, res: Response) {
     const result = await getCurrentBudget(req.user!.id, monthParam(req));
     res.status(200).json(result);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "invalid month" });
       return;
@@ -34,7 +30,7 @@ export async function getCurrentBudgetHandler(req: Request, res: Response) {
 
 export async function setCurrentBudgetHandler(req: Request, res: Response) {
   const { capAmount } = req.body ?? {};
-  if (typeof capAmount !== "number" || capAmount <= 0) {
+  if (!isValidAmount(capAmount)) {
     res.status(400).json({ error: "capAmount is required" });
     return;
   }
@@ -43,10 +39,6 @@ export async function setCurrentBudgetHandler(req: Request, res: Response) {
     const budget = await setCurrentBudget(req.user!.id, capAmount, monthParam(req));
     res.status(200).json(budget);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidMonthError || err instanceof InvalidCapAmountError) {
       res.status(400).json({ error: "invalid request" });
       return;
@@ -60,10 +52,6 @@ export async function getCategoryBudgetsHandler(req: Request, res: Response) {
     const result = await getCategoryBudgets(req.user!.id, monthParam(req));
     res.status(200).json(result);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "invalid month" });
       return;
@@ -74,7 +62,7 @@ export async function getCategoryBudgetsHandler(req: Request, res: Response) {
 
 export async function setCategoryBudgetHandler(req: Request, res: Response) {
   const { capAmount } = req.body ?? {};
-  if (capAmount !== null && (typeof capAmount !== "number" || capAmount <= 0)) {
+  if (capAmount !== null && !isValidAmount(capAmount)) {
     res.status(400).json({ error: "capAmount must be a positive number or null" });
     return;
   }
@@ -83,10 +71,6 @@ export async function setCategoryBudgetHandler(req: Request, res: Response) {
     const result = await setCategoryBudget(req.user!.id, req.params.categoryId, capAmount, monthParam(req));
     res.status(200).json(result);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidCategoryError) {
       res.status(400).json({ error: "invalid category" });
       return;

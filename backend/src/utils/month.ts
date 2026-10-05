@@ -1,8 +1,13 @@
 export class InvalidMonthError extends Error {}
 
-export function currentMonthParam(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+// "Hoje" no Brasil, "YYYY-MM-DD". Em UTC, depois das 21h já seria amanhã:
+// um lançamento feito na noite do dia 31 caía no mês seguinte.
+export function todayInBrazil(now: Date | number = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
+}
+
+export function currentMonthParam(now: Date | number = new Date()): string {
+  return todayInBrazil(now).slice(0, 7);
 }
 
 export function monthParamFromDate(date: Date): string {

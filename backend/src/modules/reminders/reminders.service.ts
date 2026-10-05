@@ -1,3 +1,4 @@
+import { pruneInboundMessages } from "../assistant/assistant.repository";
 import { findCardsByGroupId, findStatement } from "../cards/cards.repository";
 import { currentStatementMonth, dueDateFor } from "../cards/cards.service";
 import { findGroupBudget, getMonthlyExpenseTotal } from "../budgets/budgets.repository";
@@ -389,8 +390,12 @@ export async function maybeRunDailyJobs(now = new Date()): Promise<void> {
     return; // already claimed today (here or on another instance)
   }
   try {
-    const [reminders, recurringBills] = await Promise.all([runDueReminders(), generateDueRecurringBills()]);
-    console.log("[daily jobs]", today, JSON.stringify({ reminders, recurringBills }));
+    const [reminders, recurringBills, prunedMessages] = await Promise.all([
+      runDueReminders(),
+      generateDueRecurringBills(),
+      pruneInboundMessages().catch(() => 0),
+    ]);
+    console.log("[daily jobs]", today, JSON.stringify({ reminders, recurringBills, prunedMessages }));
     // Os jobs lançam contas fixas e marcam lembretes: o que estava em cache
     // pode ter ficado velho.
     invalidateAllReads();

@@ -1,5 +1,5 @@
 import { categoryIsVisibleTo } from "../categories/categories.repository";
-import { findAccountsByGroupId, findMembersByGroupId } from "../groups/groups.repository";
+import { findMembersByGroupId, findUsableAccount } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
 import {
   createTransaction,
@@ -49,8 +49,10 @@ export async function createRecurringBillForUser(userId: string, input: CreateRe
     throw new InvalidDayOfMonthError();
   }
 
-  const [accounts, members] = await Promise.all([findAccountsByGroupId(groupId), findMembersByGroupId(groupId)]);
-  const account = accounts.find((a) => a.id === input.accountId);
+  const [account, members] = await Promise.all([
+    findUsableAccount(groupId, userId, input.accountId),
+    findMembersByGroupId(groupId),
+  ]);
   if (!account) {
     throw new InvalidAccountError();
   }

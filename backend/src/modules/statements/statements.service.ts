@@ -8,11 +8,21 @@ import { logImport } from "../../utils/importLog";
 import { suggestCategories, type Suggestion } from "./suggestCategories";
 import { deleteRule, findRulesByGroup, normalizeStatementName, upsertRules } from "./importRules.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { createTransaction } from "../transactions/transactions.service";
-import { findTransactionsVisibleTo, type TransactionListRow } from "../transactions/transactions.repository";
+import { createHash } from "node:crypto";
+import { findUsableAccount } from "../groups/groups.repository";
+import { InvalidAccountError, InvalidCategoryError } from "../transactions/transactions.service";
+import {
+  claimImportCommit,
+  findTransactionsVisibleTo,
+  insertTransactionsBatch,
+  releaseImportCommit,
+  type TransactionListRow,
+} from "../transactions/transactions.repository";
+import { isValidAmount } from "../../utils/validation";
 
 export { StatementParseError };
 export class InvalidImportItemError extends Error {}
+export class DuplicateImportError extends Error {}
 
 export const MAX_STATEMENT_CHARS = 900_000;
 export const MAX_IMPORT_ITEMS = 500;
@@ -312,8 +322,7 @@ export async function commitStatement(userId: string, accountId: string, items: 
     if (
       typeof item.description !== "string" ||
       item.description.trim() === "" ||
-      typeof item.amount !== "number" ||
-      !(item.amount > 0) ||
+      !isValidAmount(item.amount) ||
       (item.transactionType !== "expense" && item.transactionType !== "income") ||
       parseDate(item.occurredAt) !== item.occurredAt
     ) {
@@ -321,28 +330,50 @@ export async function commitStatement(userId: string, accountId: string, items: 
     }
   }
 
-  // One by one on purpose: createTransaction owns the account/category
-  // validation and every side effect a normal save has.
+  // Conta, categorias e grupo conferidos uma vez só; depois tudo vai em
+  // lotes (antes era um createTransaction por linha -- milhares de leituras
+  // e risco de cair no meio deixando metade importada).
+  const groupId = await requireGroupId(userId);
+  const account = await findUsableAccount(groupId, userId, accountId);
+  if (!account && items.length > 0) throw new InvalidAccountError();
+  const categoryIds = [...new Set(items.map((item) => item.categoryId).filter((id): id is string => Boolean(id)))];
+  const visible = await Promise.all(categoryIds.map((id) => categoryIsVisibleTo(id, groupId)));
+  if (visible.some((ok) => !ok)) throw new InvalidCategoryError();
+
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify([groupId, userId, accountId, items, rules]))
+    .digest("hex");
+  if (!(await claimImportCommit(fingerprint))) throw new DuplicateImportError();
+
   let created = 0;
-  for (const item of items) {
-    await createTransaction(userId, {
-      accountId,
-      categoryId: item.categoryId,
-      payerId: userId,
-      description: item.description.trim().slice(0, 120),
-      amount: item.amount,
-      transactionType: item.transactionType,
-      occurredAt: item.occurredAt,
-      isPrivate: false,
-      splitType: "none",
-      paymentMethod: null,
-    });
-    created++;
+  try {
+    created = await insertTransactionsBatch(
+      account
+        ? items.map((item) => ({
+            groupId,
+            accountId: account.id,
+            accountType: account.type,
+            accountOwnerId: account.ownerUserId,
+            categoryId: item.categoryId,
+            payerId: userId,
+            createdBy: userId,
+            description: item.description.trim().slice(0, 120),
+            amount: item.amount,
+            transactionType: item.transactionType,
+            occurredAt: item.occurredAt,
+            isPrivate: false,
+            splitType: "none" as const,
+            paymentMethod: null,
+          }))
+        : []
+    );
+  } catch (err) {
+    await releaseImportCommit(fingerprint).catch(() => {});
+    throw err;
   }
 
   // As respostas viram regras pra próxima importação (só com categoria que o
   // grupo enxerga; "Não é gasto" vale sem categoria).
-  const groupId = await requireGroupId(userId);
   const validRules: RuleInput[] = [];
   for (const rule of rules.slice(0, 300)) {
     if (typeof rule.key !== "string" || !rule.key.trim()) continue;
