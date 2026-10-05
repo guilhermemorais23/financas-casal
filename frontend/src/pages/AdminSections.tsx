@@ -6,6 +6,7 @@ import { AnnouncementContent, type Announcement } from "../components/Announceme
 import { useConfirm } from "../components/ConfirmDialog";
 import { Icon, type IconName } from "../components/Icon";
 import { useToast } from "../components/ToastProvider";
+import { formatCurrency } from "../utils/format";
 
 interface FeedbackThread {
   id: string;
@@ -765,10 +766,6 @@ const EVENT_LABELS: Record<string, string> = {
   SUBSCRIPTION_INACTIVATED: "Assinatura desativada",
 };
 
-function brl(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
 export function AdminBilling() {
   const { token, refreshUser } = useAuth();
   const [isSwitching, setIsSwitching] = useState(false);
@@ -848,7 +845,7 @@ export function AdminBilling() {
           <Check ok={config.webhookConfigured} label="Webhook do Asaas" hint="ASAAS_WEBHOOK_TOKEN, o mesmo token cadastrado no painel do Asaas" />
         </ul>
         <p className="field-hint">
-          Preços: {brl(config.prices.monthly)}/mês ou {brl(config.prices.yearly)}/ano · teste de {config.trialDays} dias.
+          Preços: {formatCurrency(config.prices.monthly)}/mês ou {formatCurrency(config.prices.yearly)}/ano · teste de {config.trialDays} dias.
         </p>
         <button
           type="button"
@@ -866,7 +863,7 @@ export function AdminBilling() {
       <div className="stat-row wrap">
         <div className="stat-box tone-accent">
           <p className="label">Receita por mês (MRR)</p>
-          <p className="value-sm">{brl(totals.mrr)}</p>
+          <p className="value-sm">{formatCurrency(totals.mrr)}</p>
         </div>
         <div className="stat-box">
           <p className="label">Assinantes</p>
@@ -948,7 +945,7 @@ export function AdminBilling() {
                   <strong>{EVENT_LABELS[ev.event] ?? ev.event}</strong>
                   <small>
                     {when(ev.receivedAt)}
-                    {ev.value !== null ? ` · ${brl(ev.value)}` : ""}
+                    {ev.value !== null ? ` · ${formatCurrency(ev.value)}` : ""}
                   </small>
                 </span>
               </li>
@@ -1139,11 +1136,11 @@ export function AdminInsights() {
           <div className="stat-row wrap">
             <div className="stat-box">
               <p className="label">Custo estimado</p>
-              <p className="value-sm">{ai.costBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+              <p className="value-sm">{formatCurrency(ai.costBrl)}</p>
             </div>
             <div className="stat-box">
               <p className="label">Por pessoa</p>
-              <p className="value-sm">{ai.costPerPersonBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+              <p className="value-sm">{formatCurrency(ai.costPerPersonBrl)}</p>
             </div>
             <div className="stat-box">
               <p className="label">Pessoas usando</p>

@@ -5,15 +5,10 @@ import { getAppSettings, isBillingEnabled } from "../settings/appSettings";
 import { getFirestoreUsage } from "../../utils/firestoreUsage";
 import { getAiUsageSummary } from "../aiUsage/aiUsage";
 import { GEMINI_MODEL } from "../../utils/gemini";
+import { toMillis } from "../../utils/timestamp";
 
 const DAY = 24 * 60 * 60 * 1000;
 const usersCol = db.collection("users");
-
-function millis(value: unknown): number | null {
-  if (typeof value === "number") return value;
-  if (value && typeof (value as { toMillis?: () => number }).toMillis === "function") return (value as { toMillis: () => number }).toMillis();
-  return null;
-}
 
 // Admin > Visão geral: uso, retenção, funil, banco e as chaves do app.
 // Tudo num select dos campos pequenos dos usuários (1 leitura por pessoa),
@@ -28,8 +23,8 @@ export async function getAdminInsights() {
   ]);
   const users = usersSnap.docs.map((doc) => ({
     groupId: (doc.data().groupId as string | null) ?? null,
-    createdAt: millis(doc.data().createdAt),
-    lastSeenAt: millis(doc.data().lastSeenAt),
+    createdAt: toMillis(doc.data().createdAt),
+    lastSeenAt: toMillis(doc.data().lastSeenAt),
   }));
 
   const seenSince = (ms: number) => users.filter((u) => u.lastSeenAt !== null && u.lastSeenAt >= now - ms).length;

@@ -115,17 +115,28 @@ export async function findLoansByGroupId(groupId: string): Promise<LoanRow[]> {
   return snapshot.docs.map(toLoanRow);
 }
 
-export async function updateLoan(
-  id: string,
-  patch: Partial<{
-    personName: string;
-    dueDate: string | null;
-    note: string | null;
-    status: LoanStatus;
-    repayments: RepaymentRow[];
-    interestRateMonthly: number | null;
-  }>
-): Promise<LoanRow> {
+export type LoanPatch = Partial<{
+  personName: string;
+  dueDate: string | null;
+  note: string | null;
+  status: LoanStatus;
+  repayments: RepaymentRow[];
+  interestRateMonthly: number | null;
+}>;
+
+export function loanRef(id: string): FirebaseFirestore.DocumentReference {
+  return loansCol.doc(id);
+}
+
+export { toLoanRow };
+
+export async function updateLoan(id: string, patch: LoanPatch): Promise<LoanRow> {
+  const ref = loansCol.doc(id);
+  await ref.update(loanPatchData(patch));
+  return toLoanRow(await ref.get());
+}
+
+export function loanPatchData(patch: LoanPatch): Record<string, unknown> {
   const { repayments, ...rest } = patch;
   const data: Record<string, unknown> = { ...rest, updatedAt: FieldValue.serverTimestamp() };
   if (repayments) {
@@ -137,9 +148,7 @@ export async function updateLoan(
       transactionId: r.transactionId,
     }));
   }
-  const ref = loansCol.doc(id);
-  await ref.update(data);
-  return toLoanRow(await ref.get());
+  return data;
 }
 
 export async function deleteLoan(id: string): Promise<void> {

@@ -1,5 +1,6 @@
 import { escapeHtml, sendOwnerEmail } from "../../email/mailer";
 import { isValidCpfCnpj, onlyDigits } from "../../utils/cpfCnpj";
+import { todayInBrazil } from "../../utils/month";
 import { invalidateScopes } from "../../utils/readCache";
 import { findMembersByGroupId } from "../groups/groups.repository";
 import { findActiveGroupId, requireGroupId, resolveActiveGroupId } from "../groups/groups.service";
@@ -8,7 +9,9 @@ import * as asaas from "./asaas.client";
 import { isBillingEnabled } from "../settings/appSettings";
 import { billingConfig, priceFor, TERMS_VERSION, type Plan } from "./billing.config";
 import {
+  claimCheckoutLock,
   createTrialIfMissing,
+  forgetEvent,
   findSubscription,
   findSubscriptionByAsaasId,
   listAdminActions,
@@ -16,6 +19,7 @@ import {
   listSubscriptions,
   recordAdminAction,
   recordEventOnce,
+  releaseCheckoutLock,
   updateSubscription,
   type SubscriptionRow,
 } from "./billing.repository";
@@ -117,10 +121,6 @@ export async function getBillingForUser(userId: string) {
   };
 }
 
-function todayInBrazil(now = Date.now()): string {
-  return new Date(now - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
 export async function startCheckout(
   userId: string,
   input: { plan: unknown; cpfCnpj: unknown; acceptTerms: unknown; termsVersion: unknown }
@@ -136,7 +136,27 @@ export async function startCheckout(
   const user = await findUserById(userId);
   const groupId = user ? resolveActiveGroupId(user) : null;
   if (!user || !groupId) throw new BillingError("Crie ou entre num grupo antes de assinar.");
-  const sub = await loadOrStartSubscription(groupId);
+  await loadOrStartSubscription(groupId);
+  if (!(await claimCheckoutLock(groupId))) {
+    throw new BillingError("Já estamos gerando a cobrança do grupo. Espere uns segundos e tente de novo.", 409);
+  }
+  try {
+    return await createCheckout(user, groupId, plan, document);
+  } finally {
+    await releaseCheckoutLock(groupId).catch(() => {});
+  }
+}
+
+async function createCheckout(
+  user: NonNullable<Awaited<ReturnType<typeof findUserById>>>,
+  groupId: string,
+  plan: Plan,
+  document: string
+): Promise<{ invoiceUrl: string }> {
+  const userId = user.id;
+  // Relido depois de pegar a trava: pode ter mudado enquanto outro clique
+  // gerava a cobrança.
+  const sub = (await findSubscription(groupId))!;
   const access = describeAccess(sub);
   if (access.state === "active" || access.state === "courtesy" || access.state === "past_due") {
     throw new BillingError("O grupo já tem o Premium.", 409);
@@ -250,6 +270,19 @@ export async function handleAsaasWebhook(body: AsaasWebhook): Promise<{ applied:
   });
   if (!fresh) return { applied: false };
 
+  try {
+    return await applyAsaasEvent(event, payment, sub);
+  } catch (err) {
+    await forgetEvent(eventKey).catch(() => {});
+    throw err;
+  }
+}
+
+async function applyAsaasEvent(
+  event: string,
+  payment: asaas.AsaasPayment | undefined,
+  sub: SubscriptionRow
+): Promise<{ applied: boolean }> {
   switch (event) {
     case "PAYMENT_CONFIRMED":
     case "PAYMENT_RECEIVED": {

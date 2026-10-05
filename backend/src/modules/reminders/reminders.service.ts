@@ -1,3 +1,4 @@
+import { pruneInboundMessages } from "../assistant/assistant.repository";
 import { findCardsByGroupId, findStatement } from "../cards/cards.repository";
 import { currentStatementMonth, dueDateFor } from "../cards/cards.service";
 import { findGroupBudget, getMonthlyExpenseTotal } from "../budgets/budgets.repository";
@@ -19,6 +20,7 @@ import {
   wasReminderSent,
   type MemberWithEmail,
 } from "./reminders.repository";
+import { formatBRL } from "../../utils/money";
 
 // A card's due-date reminder fires the first time the cron notices its
 // current statement is unpaid and within this many days of (or already
@@ -28,10 +30,6 @@ const CARD_REMINDER_WINDOW_DAYS = 7;
 function formatBRDate(isoDate: string): string {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
-}
-
-function formatBRL(amount: number): string {
-  return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 // Conta só os avisos que saíram de verdade (email ou notificação no
@@ -399,8 +397,12 @@ export async function maybeRunDailyJobs(now = new Date()): Promise<void> {
     return; // already claimed today (here or on another instance)
   }
   try {
-    const [reminders, recurringBills] = await Promise.all([runDueReminders(), generateDueRecurringBills()]);
-    console.log("[daily jobs]", today, JSON.stringify({ reminders, recurringBills }));
+    const [reminders, recurringBills, prunedMessages] = await Promise.all([
+      runDueReminders(),
+      generateDueRecurringBills(),
+      pruneInboundMessages().catch(() => 0),
+    ]);
+    console.log("[daily jobs]", today, JSON.stringify({ reminders, recurringBills, prunedMessages }));
     // Os jobs lançam contas fixas e marcam lembretes: o que estava em cache
     // pode ter ficado velho.
     invalidateAllReads();

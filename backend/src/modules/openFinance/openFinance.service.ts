@@ -6,6 +6,7 @@ import { pluggy, pluggyConfigured, type PluggyAccount, type PluggyTransaction } 
 import { deleteItem, findItem, findItemsByUser, markSynced, saveItem, savePending, type OpenFinanceItem } from "./openFinance.repository";
 import { sendPushToUser } from "../push/push.service";
 import { logError } from "../../utils/errorLog";
+import { todayInBrazil } from "../../utils/month";
 
 export class OpenFinanceUnavailableError extends Error {}
 export class OpenFinanceItemNotFoundError extends Error {}
@@ -100,12 +101,12 @@ const DEFAULT_DAYS = 60;
 const OVERLAP_DAYS = 3; // o banco às vezes lança com atraso; os repetidos o app já marca
 
 function daysAgo(n: number, from = new Date()): string {
-  return new Date(from.getTime() - n * 86_400_000).toISOString().slice(0, 10);
+  return todayInBrazil(from.getTime() - n * 86_400_000);
 }
 
 // Data no fuso do Brasil (a API manda em UTC, 03:00Z = meia-noite aqui).
 function brazilDate(iso: string): string {
-  return new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return todayInBrazil(new Date(iso));
 }
 
 // Transação do Pluggy -> linha da importação. DEBIT = saiu, CREDIT = entrou.

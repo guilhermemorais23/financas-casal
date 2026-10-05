@@ -1,7 +1,15 @@
+import { todayInBrazil } from "../../utils/month";
 import { randomUUID } from "node:crypto";
-import { findAccountsByGroupId, type AccountRow } from "../groups/groups.repository";
+import { findAccountsByGroupId, findUsableAccount, type AccountRow } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { deleteTransactionsBatch, insertTransaction } from "../transactions/transactions.repository";
+import {
+  deleteTransactionsBatch,
+  insertTransaction,
+  prepareTransactionDelete,
+  runLedgerTransaction,
+  writeNewTransaction,
+  type NewTransactionInput,
+} from "../transactions/transactions.repository";
 import { fromCents, toCents } from "../../utils/money";
 import {
   deleteLoan,
@@ -13,6 +21,9 @@ import {
   type LoanDirection,
   type LoanRow,
   type LoanStatus,
+  loanPatchData,
+  loanRef,
+  toLoanRow,
 } from "./loans.repository";
 
 export class LoanNotFoundError extends Error {}
@@ -58,10 +69,8 @@ export interface LoansSummary {
 }
 
 // "Hoje" no Brasil -- um prazo fica atrasado a partir do dia seguinte, no
-// horário local.
-export function todayInBrazil(now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
-}
+// horário local. Fica exportado daqui também pra quem já importava.
+export { todayInBrazil };
 
 function addDays(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T12:00:00Z`);
@@ -200,15 +209,14 @@ export async function findLoansByGroup(groupId: string): Promise<LoanWithTotals[
 // pessoa.
 async function resolveAccount(groupId: string, userId: string, accountId: string | null): Promise<AccountRow | null> {
   if (accountId === null) return null;
-  const accounts = await findAccountsByGroupId(groupId);
-  const account = accounts.find((a) => a.id === accountId);
-  if (!account || (account.type === "personal" && account.ownerUserId !== userId)) {
+  const account = await findUsableAccount(groupId, userId, accountId);
+  if (!account) {
     throw new InvalidLoanAccountError();
   }
   return account;
 }
 
-async function bookTransfer(
+function transferInput(
   userId: string,
   groupId: string,
   account: AccountRow,
@@ -217,8 +225,8 @@ async function bookTransfer(
   personName: string,
   amount: number,
   occurredAt: string
-): Promise<string> {
-  const row = await insertTransaction({
+): NewTransactionInput {
+  return {
     groupId,
     accountId: account.id,
     accountType: account.type,
@@ -239,8 +247,11 @@ async function bookTransfer(
     isPrivate: false,
     splitType: "none",
     loanId,
-  });
-  return row.id;
+  };
+}
+
+async function bookTransfer(...args: Parameters<typeof transferInput>): Promise<string> {
+  return (await insertTransaction(transferInput(...args))).id;
 }
 
 async function requireOwnLoan(userId: string, loanId: string) {
@@ -295,13 +306,9 @@ export interface RepaymentInput {
 
 export async function addRepayment(userId: string, loanId: string, input: RepaymentInput): Promise<LoanWithTotals> {
   const { groupId, loan } = await requireOwnLoan(userId, loanId);
-  const remaining = remainingCents(loan);
-  if (toCents(input.amount) > remaining) {
-    throw new RepaymentTooLargeError(fromCents(remaining));
-  }
   const account = await resolveAccount(groupId, userId, input.accountId);
-  const transactionId = account
-    ? await bookTransfer(
+  const transfer = account
+    ? transferInput(
         userId,
         groupId,
         account,
@@ -312,31 +319,52 @@ export async function addRepayment(userId: string, loanId: string, input: Repaym
         input.receivedAt
       )
     : null;
-  const repayments = [
-    ...loan.repayments,
-    {
-      id: randomUUID(),
-      amount: input.amount.toFixed(2),
-      receivedAt: input.receivedAt,
-      accountId: account?.id ?? null,
-      transactionId,
-    },
-  ];
-  const fullyPaid = toCents(input.amount) === remaining;
-  const updated = await updateLoan(loan.id, { repayments, ...(fullyPaid ? { status: "paid" as LoanStatus } : {}) });
-  return withTotals(updated, todayInBrazil());
+  // O empréstimo é relido dentro da transação do Firestore: dois recebimentos
+  // ao mesmo tempo não se sobrescrevem (a lista é regravada inteira) nem
+  // passam do que falta receber.
+  const ref = loanRef(loan.id);
+  await runLedgerTransaction(groupId, async (t) => {
+    const current = toLoanRow(await t.get(ref));
+    const remaining = remainingCents(current);
+    if (toCents(input.amount) > remaining) {
+      throw new RepaymentTooLargeError(fromCents(remaining));
+    }
+    const transactionId = transfer ? writeNewTransaction(t, transfer) : null;
+    const repayments = [
+      ...current.repayments,
+      {
+        id: randomUUID(),
+        amount: input.amount.toFixed(2),
+        receivedAt: input.receivedAt,
+        accountId: account?.id ?? null,
+        transactionId,
+      },
+    ];
+    const fullyPaid = toCents(input.amount) === remaining;
+    t.update(ref, loanPatchData({ repayments, ...(fullyPaid ? { status: "paid" as LoanStatus } : {}) }));
+  });
+  return withTotals((await findLoanById(loan.id))!, todayInBrazil());
 }
 
 export async function removeRepayment(userId: string, loanId: string, repaymentId: string): Promise<LoanWithTotals> {
-  const { loan } = await requireOwnLoan(userId, loanId);
-  const repayment = loan.repayments.find((r) => r.id === repaymentId);
-  if (!repayment) throw new RepaymentNotFoundError();
-  if (repayment.transactionId) await deleteTransactionsBatch([repayment.transactionId]);
-  const updated = await updateLoan(loan.id, {
-    repayments: loan.repayments.filter((r) => r.id !== repaymentId),
-    ...(loan.status === "paid" ? { status: "open" as LoanStatus } : {}),
+  const { groupId, loan } = await requireOwnLoan(userId, loanId);
+  if (!loan.repayments.some((r) => r.id === repaymentId)) throw new RepaymentNotFoundError();
+  const ref = loanRef(loan.id);
+  await runLedgerTransaction(groupId, async (t) => {
+    const current = toLoanRow(await t.get(ref));
+    const repayment = current.repayments.find((r) => r.id === repaymentId);
+    if (!repayment) return;
+    const removal = repayment.transactionId ? await prepareTransactionDelete(t, repayment.transactionId) : null;
+    removal?.apply();
+    t.update(
+      ref,
+      loanPatchData({
+        repayments: current.repayments.filter((r) => r.id !== repaymentId),
+        ...(current.status === "paid" ? { status: "open" as LoanStatus } : {}),
+      })
+    );
   });
-  return withTotals(updated, todayInBrazil());
+  return withTotals((await findLoanById(loan.id))!, todayInBrazil());
 }
 
 export interface UpdateLoanInput {

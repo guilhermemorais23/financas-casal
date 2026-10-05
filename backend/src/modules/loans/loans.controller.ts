@@ -12,16 +12,7 @@ import {
   updateLoanForUser,
 } from "./loans.service";
 import { getLoansOverview } from "./loansOverview.service";
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-function isIsoDate(value: unknown): value is string {
-  return typeof value === "string" && ISO_DATE.test(value) && !Number.isNaN(Date.parse(value));
-}
-
-function isPositiveAmount(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 && value < 100_000_000;
-}
+import { isIsoDate, isValidAmount } from "../../utils/validation";
 
 // % ao mês: ausente/null/0 = sem juros; senão entre 0,01 e 20.
 function readInterest(value: unknown): number | null | "invalid" {
@@ -83,7 +74,7 @@ export async function createLoanHandler(req: Request, res: Response) {
     res.status(400).json({ error: borrowed ? "Quem te emprestou?" : "Pra quem você emprestou?" });
     return;
   }
-  if (!isPositiveAmount(amount)) {
+  if (!isValidAmount(amount)) {
     res.status(400).json({ error: "Informe um valor válido." });
     return;
   }
@@ -118,7 +109,7 @@ export async function createLoanHandler(req: Request, res: Response) {
 
 export async function addRepaymentHandler(req: Request, res: Response) {
   const { amount, receivedAt, accountId } = req.body ?? {};
-  if (!isPositiveAmount(amount)) {
+  if (!isValidAmount(amount)) {
     res.status(400).json({ error: "Informe um valor válido." });
     return;
   }

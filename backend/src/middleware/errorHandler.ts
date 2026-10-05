@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { GroupAccessError } from "../modules/groups/groups.service";
+import { GroupAccessError, NoGroupError } from "../modules/groups/groups.service";
 import { isQuotaError, logError } from "../utils/errorLog";
 
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
@@ -7,6 +7,12 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // aparelho). Não é erro do servidor: o app volta pro grupo padrão.
   if (err instanceof GroupAccessError) {
     res.status(403).json({ error: "Você não faz mais parte desse grupo.", code: "group_access" });
+    return;
+  }
+  // Rota de grupo chamada por quem ainda não tem grupo -- antes cada
+  // controller repetia esse mesmo if.
+  if (err instanceof NoGroupError) {
+    res.status(404).json({ error: "no group yet" });
     return;
   }
   console.error(err);

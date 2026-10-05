@@ -21,3 +21,8 @@ export function splitEvenly(totalAmount: number, count: number): number[] {
 
   return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
 }
+
+// "R$ 1.234,56" -- pra mensagens (e-mail, Telegram, alertas).
+export function formatBRL(amount: number): string {
+  return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}

@@ -37,6 +37,7 @@ import { readCache, writeCache } from "../utils/pageCache";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
+import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
 
 interface AccountWithBalance {
   id: string;
@@ -67,12 +68,13 @@ interface TransactionListRow {
   categoryName: string | null;
   categoryEmoji: string | null;
   recurringGroupId: string | null;
-  splitType: "none" | "equal";
+  splitType: "none" | "equal" | "custom";
   isSettled: boolean;
   // Guardar/resgatar de um cartão com limite garantido -- managed from the
   // card itself, so the extrato shows it without edit/delete.
   securedCardId?: string | null;
   loanId?: string | null;
+  linkKind?: LinkKind | null;
   accountId: string;
   paymentMethod: PaymentMethod | null;
   payerId: string;
@@ -1292,13 +1294,17 @@ export function DashboardPage() {
                                     icon: "repeat" as const,
                                     onClick: () => navigate(repeatHref(tx)),
                                   },
-                                  {
-                                    key: "delete",
-                                    label: "Excluir",
-                                    icon: "trash" as const,
-                                    danger: true,
-                                    onClick: () => handleDelete(tx),
-                                  },
+                                  ...(isLinkedTransaction(tx)
+                                    ? []
+                                    : [
+                                        {
+                                          key: "delete",
+                                          label: "Excluir",
+                                          icon: "trash" as const,
+                                          danger: true,
+                                          onClick: () => handleDelete(tx),
+                                        },
+                                      ]),
                                 ]}
                               />
                             </div>

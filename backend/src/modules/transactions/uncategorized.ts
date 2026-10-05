@@ -1,6 +1,7 @@
+import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { findRulesByGroup, normalizeStatementName, upsertRules } from "../statements/importRules.repository";
-import { InvalidCategoryError, canManageTransaction, listTransactions, updateTransactionForUser } from "./transactions.service";
+import { canManageTransaction, listTransactions, updateTransactionForUser } from "./transactions.service";
 
 // "Sem categoria": gastos do mês sem categoria, agrupados pelo nome (como na
 // importação), pra pessoa dizer o que é cada nome uma vez só. Só entra o que
@@ -56,15 +57,18 @@ export async function categorizeTransactions(
     throw new InvalidCategorizeError();
   }
   const groupId = await requireGroupId(userId);
+  // Categoria que o grupo não vê: pára tudo antes de mexer em qualquer um.
+  if (!(await categoryIsVisibleTo(input.categoryId, groupId))) throw new InvalidCategorizeError();
+  const categoryId = input.categoryId;
+  const unique = [...new Set(ids)];
   let updated = 0;
-  for (const id of [...new Set(ids)]) {
-    try {
-      await updateTransactionForUser(userId, id, { categoryId: input.categoryId });
-      updated++;
-    } catch (err) {
-      // Categoria que o grupo não vê: pára tudo (é erro de quem chamou).
-      if (err instanceof InvalidCategoryError) throw new InvalidCategorizeError();
-    }
+  // De 20 em 20 em paralelo (antes era um por vez, até 300).
+  for (let start = 0; start < unique.length; start += 20) {
+    const results = await Promise.allSettled(
+      unique.slice(start, start + 20).map((id) => updateTransactionForUser(userId, id, { categoryId }))
+    );
+    // Lançamento que a pessoa não pode editar (ou que sumiu) é pulado.
+    updated += results.filter((result) => result.status === "fulfilled").length;
   }
   const label = typeof input.label === "string" ? input.label.trim().slice(0, 120) : "";
   if (input.remember === true && label && updated > 0) {

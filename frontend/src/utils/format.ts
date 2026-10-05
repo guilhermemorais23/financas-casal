@@ -2,6 +2,13 @@ export function formatCurrency(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// "Hoje" (YYYY-MM-DD) no fuso do aparelho. `new Date().toISOString()` é UTC:
+// no Brasil, depois das 21h já seria amanhã.
+export function todayISO(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 export function currentMonthParam(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

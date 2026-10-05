@@ -125,6 +125,30 @@ export async function recordEventOnce(eventKey: string, data: Record<string, unk
   }
 }
 
+// O evento falhou no meio: esquece que chegou, pra que o reenvio do Asaas
+// seja aplicado (senão o pagamento ficava marcado como visto e nunca valia).
+export async function forgetEvent(eventKey: string): Promise<void> {
+  await eventsCol.doc(eventKey.replace(/\//g, "_")).delete();
+}
+
+// Trava de um minuto no checkout do grupo: dois cliques em "Assinar" criavam
+// duas assinaturas no Asaas (e a primeira continuava cobrando).
+const CHECKOUT_LOCK_MS = 60 * 1000;
+export async function claimCheckoutLock(groupId: string): Promise<boolean> {
+  const ref = col.doc(groupId);
+  return db.runTransaction(async (tx) => {
+    const doc = await tx.get(ref);
+    const lockedUntil = doc.exists ? (doc.data()!.checkoutLockUntil as number | undefined) ?? 0 : 0;
+    if (lockedUntil > Date.now()) return false;
+    tx.set(ref, { checkoutLockUntil: Date.now() + CHECKOUT_LOCK_MS }, { merge: true });
+    return true;
+  });
+}
+
+export async function releaseCheckoutLock(groupId: string): Promise<void> {
+  await col.doc(groupId).set({ checkoutLockUntil: 0 }, { merge: true });
+}
+
 export interface BillingEventRow {
   id: string;
   event: string;

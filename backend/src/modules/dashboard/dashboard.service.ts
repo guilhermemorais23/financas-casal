@@ -11,7 +11,7 @@ import {
   getMonthlyTrendForUser,
   listTransactions,
 } from "../transactions/transactions.service";
-import { parseMonthRange } from "../../utils/month";
+import { currentMonthParam, parseMonthRange } from "../../utils/month";
 import { listLoans } from "../loans/loans.service";
 import { getUpcomingForUser } from "../upcoming/upcoming.service";
 
@@ -93,7 +93,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   // about *today*, not whatever month the Painel happens to be showing --
   // computing them while browsing March makes no sense, so they're only
   // fetched at all when `month` is the real current month.
-  const isCurrentMonth = month === new Date().toISOString().slice(0, 7);
+  const isCurrentMonth = month === currentMonthParam();
 
   const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts, loans, upcoming] =
     await Promise.all([

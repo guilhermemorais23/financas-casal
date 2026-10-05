@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import { NoGroupError } from "../groups/groups.service";
 import { InvalidMonthError } from "../../utils/month";
 import { ShareNotFoundError, createShare, getPublicShare, revokeShare } from "./shares.service";
 
@@ -10,10 +9,6 @@ export async function createShareHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "month must be YYYY-MM" });
-      return;
-    }
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
       return;
     }
     throw err;

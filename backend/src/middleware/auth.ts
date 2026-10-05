@@ -4,6 +4,7 @@ import { isAdminEmail } from "../modules/admin/admin.service";
 import { getAppSettings } from "../modules/settings/appSettings";
 import type { AuthenticatedUser } from "../types/express";
 import { parseGroupIdHeader, runWithActiveGroup } from "../utils/activeGroup";
+import { todayInBrazil } from "../utils/month";
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
@@ -58,7 +59,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 // por dia -- é o que alimenta ativos por dia/semana/mês e retenção no Admin.
 const seenDay = new Map<string, string>();
 function markSeenToday(userId: string): void {
-  const today = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const today = todayInBrazil();
   if (seenDay.get(userId) === today) return;
   seenDay.set(userId, today);
   if (seenDay.size > 20000) seenDay.clear();

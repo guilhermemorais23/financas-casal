@@ -52,12 +52,6 @@ export async function createInvite(input: {
   };
 }
 
-export async function findInviteByToken(token: string): Promise<InviteRow | null> {
-  const doc = await invitesCol.doc(token).get();
-  if (!doc.exists) return null;
-  return toInviteRow(doc.id, doc.data()!);
-}
-
 export async function findPendingInviteByGroupId(groupId: string): Promise<InviteRow | null> {
   const snapshot = await invitesCol
     .where("groupId", "==", groupId)
@@ -69,10 +63,3 @@ export async function findPendingInviteByGroupId(groupId: string): Promise<Invit
   return toInviteRow(snapshot.docs[0].id, snapshot.docs[0].data());
 }
 
-export async function markInviteAccepted(token: string, userId: string): Promise<void> {
-  await invitesCol.doc(token).update({
-    status: "accepted",
-    acceptedBy: userId,
-    acceptedAt: FieldValue.serverTimestamp(),
-  });
-}

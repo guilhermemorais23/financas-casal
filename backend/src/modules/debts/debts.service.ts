@@ -1,6 +1,12 @@
-import { findAccountsByGroupId } from "../groups/groups.repository";
+import { FieldValue } from "firebase-admin/firestore";
+import { findAccountForOwner } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { deleteTransaction, insertTransaction, updateTransaction } from "../transactions/transactions.repository";
+import {
+  prepareTransactionDelete,
+  runLedgerTransaction,
+  updateTransaction,
+  writeNewTransaction,
+} from "../transactions/transactions.repository";
 import { splitEvenly } from "../../utils/money";
 import { addMonths, dateForDayInMonth, monthToDate } from "../../utils/month";
 import {
@@ -11,10 +17,10 @@ import {
   findInstallmentsByDebtIds,
   insertDebt,
   insertInstallments,
-  setInstallmentPaid,
   updateDebt,
   updateInstallmentReferenceMonth,
   type DebtInstallmentRow,
+  installmentRef,
 } from "./debts.repository";
 
 export class DebtNotFoundError extends Error {}
@@ -151,38 +157,49 @@ export async function setInstallmentPaidForUser(
     throw new InstallmentNotFoundError();
   }
 
+  const ref = installmentRef(debtId, installmentId);
+  // Parcela e lançamento mudam juntos numa transação do Firestore, que relê a
+  // parcela: dois cliques em "paga" não lançam a parcela duas vezes.
   if (isPaid && !installment.isPaid) {
-    const accounts = await findAccountsByGroupId(groupId);
-    const account = debt.ownerUserId
-      ? accounts.find((a) => a.type === "personal" && a.ownerUserId === debt.ownerUserId)
-      : accounts.find((a) => a.type === "joint");
+    const account = await findAccountForOwner(groupId, debt.ownerUserId);
     if (!account) {
       throw new DebtNotFoundError();
     }
 
-    const transaction = await insertTransaction({
-      groupId,
-      accountId: account.id,
-      accountType: account.type,
-      accountOwnerId: account.ownerUserId,
-      categoryId: null,
-      payerId: userId,
-      createdBy: userId,
-      description: `${debt.name} — parcela ${installment.installmentNumber}/${debt.installmentsCount}`,
-      amount: Number(installment.amount),
-      transactionType: "expense",
-      occurredAt: monthToDate(installment.referenceMonth),
-      isPrivate: false,
-      splitType: "none",
+    await runLedgerTransaction(groupId, async (t) => {
+      const current = await t.get(ref);
+      if (!current.exists || current.data()!.isPaid) return;
+      const transactionId = writeNewTransaction(t, {
+        groupId,
+        accountId: account.id,
+        accountType: account.type,
+        accountOwnerId: account.ownerUserId,
+        categoryId: null,
+        payerId: userId,
+        createdBy: userId,
+        description: `${debt.name} — parcela ${installment.installmentNumber}/${debt.installmentsCount}`,
+        amount: Number(installment.amount),
+        transactionType: "expense",
+        occurredAt: monthToDate(installment.referenceMonth),
+        isPrivate: false,
+        splitType: "none",
+        linkKind: "debt_installment",
+      });
+      t.update(ref, { isPaid: true, paidAt: FieldValue.serverTimestamp(), transactionId });
     });
-    return setInstallmentPaid(debtId, installmentId, true, transaction.id);
+    return (await findInstallmentById(debtId, installmentId))!;
   }
 
   if (!isPaid && installment.isPaid) {
-    if (installment.transactionId) {
-      await deleteTransaction(installment.transactionId);
-    }
-    return setInstallmentPaid(debtId, installmentId, false, null);
+    await runLedgerTransaction(groupId, async (t) => {
+      const current = await t.get(ref);
+      if (!current.exists || !current.data()!.isPaid) return;
+      const transactionId = current.data()!.transactionId as string | null;
+      const removal = transactionId ? await prepareTransactionDelete(t, transactionId) : null;
+      removal?.apply();
+      t.update(ref, { isPaid: false, paidAt: null, transactionId: null });
+    });
+    return (await findInstallmentById(debtId, installmentId))!;
   }
 
   return installment;

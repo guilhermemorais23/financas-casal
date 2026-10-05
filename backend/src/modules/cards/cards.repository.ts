@@ -184,19 +184,22 @@ export async function updateCard(
 // an increment, so two people moving money at once don't overwrite each
 // other. The "can't withdraw more than what's free" check lives in the
 // service, which knows how much of the limit purchases are holding.
-export async function incrementCardLimit(cardId: string, deltaCents: number): Promise<CardRow> {
-  const ref = cardsCol.doc(cardId);
-  await ref.update({ limitCents: FieldValue.increment(deltaCents), updatedAt: FieldValue.serverTimestamp() });
-  const doc = await ref.get();
-  return toCardRow(doc);
-}
-
 export async function setCardSecuredFromAccount(cardId: string, securedFromAccount: boolean): Promise<CardRow> {
   const ref = cardsCol.doc(cardId);
   await ref.update({ securedFromAccount, updatedAt: FieldValue.serverTimestamp() });
   const doc = await ref.get();
   return toCardRow(doc);
 }
+
+export function cardRef(cardId: string): FirebaseFirestore.DocumentReference {
+  return cardsCol.doc(cardId);
+}
+
+export function statementRef(cardId: string, statementMonth: string): FirebaseFirestore.DocumentReference {
+  return cardsCol.doc(cardId).collection("statements").doc(statementMonth);
+}
+
+export { toCardRow };
 
 export async function deleteCard(cardId: string): Promise<string[]> {
   const purchasesSnap = await cardsCol.doc(cardId).collection("purchases").get();
@@ -205,11 +208,16 @@ export async function deleteCard(cardId: string): Promise<string[]> {
     .map((doc) => doc.data().transactionId as string | null)
     .filter((id): id is string => Boolean(id));
 
-  const batch = db.batch();
-  purchasesSnap.docs.forEach((doc) => batch.delete(doc.ref));
-  statementsSnap.docs.forEach((doc) => batch.delete(doc.ref));
-  batch.delete(cardsCol.doc(cardId));
-  await batch.commit();
+  // Cartão com anos de parcelas passa fácil das 500 gravações de um lote; o
+  // cartão em si vai por último, então se algo falhar no meio dá pra tentar
+  // de novo.
+  const refs = [...purchasesSnap.docs.map((doc) => doc.ref), ...statementsSnap.docs.map((doc) => doc.ref)];
+  for (let start = 0; start < refs.length; start += 450) {
+    const batch = db.batch();
+    refs.slice(start, start + 450).forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
+  await cardsCol.doc(cardId).delete();
 
   return linkedTransactionIds;
 }
@@ -298,6 +306,14 @@ export async function deletePurchase(cardId: string, purchaseId: string): Promis
   await cardsCol.doc(cardId).collection("purchases").doc(purchaseId).delete();
 }
 
+// Todas as faturas do cartão numa consulta só (antes era uma leitura por mês).
+export function findStatementsByCardId(cardId: string): Promise<Map<string, StatementRow>> {
+  return memoizeScoped(`statements:${cardId}`, ["cards"], async () => {
+    const snapshot = await cardsCol.doc(cardId).collection("statements").get();
+    return new Map(snapshot.docs.map((doc) => [doc.id, toStatementRow(doc)]));
+  });
+}
+
 export function findStatement(cardId: string, statementMonth: string): Promise<StatementRow | null> {
   return memoizeScoped(`statement:${cardId}:${statementMonth}`, ["cards"], () => loadFindStatement(cardId, statementMonth));
 }
@@ -308,17 +324,3 @@ async function loadFindStatement(cardId: string, statementMonth: string): Promis
   return toStatementRow(doc);
 }
 
-export async function setStatementPaid(
-  cardId: string,
-  statementMonth: string,
-  isPaid: boolean,
-  transactionId: string | null
-): Promise<StatementRow> {
-  const ref = cardsCol.doc(cardId).collection("statements").doc(statementMonth);
-  await ref.set(
-    { isPaid, paidAt: isPaid ? FieldValue.serverTimestamp() : null, transactionId },
-    { merge: true }
-  );
-  const doc = await ref.get();
-  return toStatementRow(doc);
-}

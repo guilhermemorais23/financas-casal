@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import { NotAdminError, requireAdminEmail } from "../admin/admin.service";
 import { logError } from "../../utils/errorLog";
+import { safeEqual } from "../../utils/safeEqual";
 import { AsaasError, AsaasNotConfiguredError } from "./asaas.client";
 import { billingConfig } from "./billing.config";
 import {
@@ -14,6 +14,7 @@ import {
   startCheckout,
   type AsaasWebhook,
 } from "./billing.service";
+import { ensureAdmin } from "../admin/adminGuard";
 
 function sendError(err: unknown, res: Response): boolean {
   if (err instanceof BillingError) {
@@ -30,19 +31,6 @@ function sendError(err: unknown, res: Response): boolean {
     return true;
   }
   return false;
-}
-
-function isAdmin(req: Request, res: Response): boolean {
-  try {
-    requireAdminEmail(req.user!.email);
-    return true;
-  } catch (err) {
-    if (err instanceof NotAdminError) {
-      res.status(403).json({ error: "not an admin" });
-      return false;
-    }
-    throw err;
-  }
 }
 
 export async function getBillingHandler(req: Request, res: Response) {
@@ -76,7 +64,7 @@ export async function cancelHandler(req: Request, res: Response) {
 // pausa a fila de webhooks.
 export async function webhookHandler(req: Request, res: Response) {
   const expected = billingConfig().webhookToken;
-  if (!expected || req.header("asaas-access-token") !== expected) {
+  if (!expected || !safeEqual(req.header("asaas-access-token") ?? "", expected)) {
     res.status(401).json({ error: "invalid token" });
     return;
   }
@@ -90,12 +78,12 @@ export async function webhookHandler(req: Request, res: Response) {
 }
 
 export async function adminOverviewHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   res.json(await getBillingAdminOverview());
 }
 
 export async function adminGrantHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   try {
     await grantCourtesy(req.user!.email, req.body ?? {});
     res.status(204).end();
@@ -105,7 +93,7 @@ export async function adminGrantHandler(req: Request, res: Response) {
 }
 
 export async function adminRevokeHandler(req: Request, res: Response) {
-  if (!isAdmin(req, res)) return;
+  if (!ensureAdmin(req, res)) return;
   try {
     await revokeCourtesy(req.user!.email, req.body ?? {});
     res.status(204).end();

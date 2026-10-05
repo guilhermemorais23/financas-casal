@@ -3,7 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
-import { currentMonthParam, formatCurrency, monthYearLabel, parseLocalDate } from "../utils/format";
+import { currentMonthParam, formatCurrency, monthYearLabel, parseLocalDate, todayISO } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -111,7 +111,7 @@ export function CardsPage() {
   const [purchaseAmount, setPurchaseAmount] = useState("");
   const [purchaseCategoryId, setPurchaseCategoryId] = useState("");
   const [purchaseBuyerId, setPurchaseBuyerId] = useState(user?.id ?? "");
-  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [purchaseDate, setPurchaseDate] = useState(() => todayISO());
   const [purchaseInstallments, setPurchaseInstallments] = useState("1");
   const [isAddingPurchase, setIsAddingPurchase] = useState(false);
 

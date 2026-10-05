@@ -21,6 +21,7 @@ import {
   getDailySeriesForUser,
   getYearlySummaryForUser,
   InvalidYearError,
+  LinkedTransactionError,
   getMonthlySummaryForUser,
   listTransactions,
   setSplitSettledForUser,
@@ -28,14 +29,11 @@ import {
   updateTransactionForUser,
 } from "./transactions.service";
 import { PAYMENT_METHODS, type PaymentMethod, type SplitType, type TransactionType } from "./transactions.repository";
+import { isIsoDate, isNonEmptyString, isValidAmount, MAX_DESCRIPTION_LENGTH } from "../../utils/validation";
 
 // undefined = not sent, null = "não informado" (clears it on update).
 function isValidPaymentMethod(value: unknown): boolean {
   return value === undefined || value === null || PAYMENT_METHODS.includes(value as PaymentMethod);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
 }
 
 export async function createTransactionHandler(req: Request, res: Response) {
@@ -57,9 +55,9 @@ export async function createTransactionHandler(req: Request, res: Response) {
     !isNonEmptyString(accountId) ||
     !isNonEmptyString(payerId) ||
     !isNonEmptyString(description) ||
-    !isNonEmptyString(occurredAt) ||
-    typeof amount !== "number" ||
-    amount <= 0 ||
+    description.length > MAX_DESCRIPTION_LENGTH ||
+    !isIsoDate(occurredAt) ||
+    !isValidAmount(amount) ||
     (transactionType !== undefined && transactionType !== "expense" && transactionType !== "income") ||
     (recurringMonths !== undefined && recurringMonths !== null && typeof recurringMonths !== "number") ||
     !isValidPaymentMethod(paymentMethod)
@@ -86,10 +84,6 @@ export async function createTransactionHandler(req: Request, res: Response) {
     });
     res.status(201).json(transaction);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (
       err instanceof InvalidAccountError ||
       err instanceof InvalidPayerError ||
@@ -115,10 +109,6 @@ export async function listTransactionsHandler(req: Request, res: Response) {
     const transactions = await listTransactions(req.user!.id, limit, month, accountId);
     res.status(200).json(transactions);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "invalid month" });
       return;
@@ -132,10 +122,6 @@ export async function getBalanceHandler(req: Request, res: Response) {
     const balance = await getBalance(req.user!.id);
     res.status(200).json(balance);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     throw err;
   }
 }
@@ -148,10 +134,6 @@ export async function getSummaryHandler(req: Request, res: Response) {
     const summary = await getMonthlySummaryForUser(req.user!.id, month, scope);
     res.status(200).json(summary);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "invalid month" });
       return;
@@ -168,10 +150,6 @@ export async function getDailySeriesHandler(req: Request, res: Response) {
     const points = await getDailySeriesForUser(req.user!.id, month, scope);
     res.status(200).json(points);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "invalid month" });
       return;
@@ -188,10 +166,6 @@ export async function getYearlySummaryHandler(req: Request, res: Response) {
     const summary = await getYearlySummaryForUser(req.user!.id, year, scope);
     res.status(200).json(summary);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidYearError) {
       res.status(400).json({ error: "invalid year" });
       return;
@@ -232,10 +206,6 @@ export async function exportTransactionsHandler(req: Request, res: Response) {
     // UTF-8 BOM so Excel (which otherwise guesses Latin-1) shows acentos right.
     res.status(200).send("﻿" + csv);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "invalid month" });
       return;
@@ -249,10 +219,10 @@ export async function updateTransactionHandler(req: Request, res: Response) {
     req.body ?? {};
 
   if (
-    (description !== undefined && !isNonEmptyString(description)) ||
-    (amount !== undefined && (typeof amount !== "number" || amount <= 0)) ||
+    (description !== undefined && (!isNonEmptyString(description) || description.length > MAX_DESCRIPTION_LENGTH)) ||
+    (amount !== undefined && !isValidAmount(amount)) ||
     (transactionType !== undefined && transactionType !== "expense" && transactionType !== "income") ||
-    (occurredAt !== undefined && !isNonEmptyString(occurredAt)) ||
+    (occurredAt !== undefined && !isIsoDate(occurredAt)) ||
     (categoryId !== undefined && categoryId !== null && !isNonEmptyString(categoryId)) ||
     (payerId !== undefined && !isNonEmptyString(payerId)) ||
     (accountId !== undefined && !isNonEmptyString(accountId)) ||
@@ -277,6 +247,10 @@ export async function updateTransactionHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
       res.status(404).json({ error: "transaction not found" });
+      return;
+    }
+    if (err instanceof LinkedTransactionError) {
+      res.status(409).json({ error: LINKED_MESSAGES[err.kind], code: "linked_transaction" });
       return;
     }
     if (err instanceof SecuredCardTransferError) {
@@ -305,6 +279,13 @@ function transferLockedMessage(err: Error): string {
     : "Esse valor foi guardado no cartão. Use Resgatar na página Cartões.";
 }
 
+const LINKED_MESSAGES: Record<LinkedTransactionError["kind"], string> = {
+  card_statement: "Esse lançamento é o pagamento de uma fatura. Pra desfazer, desmarque a fatura como paga na página Cartões.",
+  debt_installment: "Esse lançamento é uma parcela de dívida. Pra desfazer, desmarque a parcela na página Dívidas.",
+  settlement: "Esse lançamento é um reembolso. Pra desfazer, marque a despesa dividida original como em aberto de novo.",
+  shopping: "Esse lançamento veio da lista de compras. Pra desfazer, desmarque o item na lista.",
+};
+
 export async function deleteTransactionHandler(req: Request, res: Response) {
   try {
     await deleteTransactionForUser(req.user!.id, req.params.id);
@@ -312,6 +293,10 @@ export async function deleteTransactionHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
       res.status(404).json({ error: "transaction not found" });
+      return;
+    }
+    if (err instanceof LinkedTransactionError) {
+      res.status(409).json({ error: LINKED_MESSAGES[err.kind], code: "linked_transaction" });
       return;
     }
     if (err instanceof SecuredCardTransferError) {
@@ -343,8 +328,8 @@ export async function cancelRecurringHandler(req: Request, res: Response) {
 export async function updateRecurringHandler(req: Request, res: Response) {
   const { amount, description } = req.body ?? {};
   if (
-    (amount !== undefined && (typeof amount !== "number" || amount <= 0)) ||
-    (description !== undefined && !isNonEmptyString(description))
+    (amount !== undefined && !isValidAmount(amount)) ||
+    (description !== undefined && (!isNonEmptyString(description) || description.length > MAX_DESCRIPTION_LENGTH))
   ) {
     res.status(400).json({ error: "invalid recurring update" });
     return;
@@ -379,7 +364,7 @@ export async function setSplitSettledHandler(req: Request, res: Response) {
   }
   // amount only matters (and is required) when settling -- reopening never
   // needs one, it just deletes the reembolso transaction created earlier.
-  if (isSettled && (typeof amount !== "number" || amount <= 0)) {
+  if (isSettled && !isValidAmount(amount)) {
     res.status(400).json({ error: "amount is required and must be a positive number when isSettled is true" });
     return;
   }

@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import type { Request, Response } from "express";
 import { requireGroupId } from "../groups/groups.service";
 import {
@@ -9,18 +9,17 @@ import {
   handleTelegramMessage,
   handleWhatsappMessage,
 } from "./assistant.service";
+import { claimInboundMessage } from "./assistant.repository";
 import { downloadTelegramVoice } from "./telegram.client";
 import { downloadWhatsappAudio } from "./whatsapp.client";
 import { logError } from "../../utils/errorLog";
+import { safeEqual } from "../../utils/safeEqual";
+import { isNonEmptyString } from "../../utils/validation";
 
 export async function createTelegramLinkCodeHandler(req: Request, res: Response) {
   const groupId = await requireGroupId(req.user!.id);
   const code = await createTelegramLinkCode(req.user!.id, groupId);
   res.status(200).json({ code });
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
 }
 
 export async function chatHandler(req: Request, res: Response) {
@@ -56,6 +55,7 @@ export async function greetingHandler(req: Request, res: Response) {
 }
 
 interface TelegramUpdate {
+  update_id?: number;
   message?: {
     chat: { id: number | string };
     text?: string;
@@ -76,8 +76,13 @@ export async function telegramWebhookHandler(req: Request, res: Response) {
     return;
   }
 
-  const message = (req.body as TelegramUpdate).message;
+  const update = req.body as TelegramUpdate;
+  const message = update.message;
   if (!message) {
+    res.status(200).end();
+    return;
+  }
+  if (typeof update.update_id === "number" && !(await claimInboundMessage("telegram", String(update.update_id)))) {
     res.status(200).end();
     return;
   }
@@ -121,6 +126,7 @@ interface WhatsappWebhookPayload {
     changes?: Array<{
       value?: {
         messages?: Array<{
+          id?: string;
           from: string;
           type: string;
           text?: { body?: string };
@@ -149,6 +155,10 @@ export async function whatsappWebhookHandler(req: Request, res: Response) {
     res.status(200).end();
     return;
   }
+  if (message.id && !(await claimInboundMessage("whatsapp", message.id))) {
+    res.status(200).end();
+    return;
+  }
   const waId = message.from;
 
   try {
@@ -164,12 +174,6 @@ export async function whatsappWebhookHandler(req: Request, res: Response) {
   }
 
   res.status(200).end();
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 // X-Hub-Signature-256: "sha256=" + HMAC-SHA256(App Secret, corpo cru).

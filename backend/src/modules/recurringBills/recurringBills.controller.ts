@@ -14,15 +14,9 @@ import {
   deleteRecurringBillForUser,
   listRecurringBillsForUser,
   updateRecurringBillForUser,
+  isValidDayOfMonth,
 } from "./recurringBills.service";
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function isValidDayOfMonth(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
-}
+import { isNonEmptyString, isValidAmount } from "../../utils/validation";
 
 export async function createRecurringBillHandler(req: Request, res: Response) {
   const { accountId, categoryId, payerId, description, amount, transactionType, isPrivate, splitType, dayOfMonth } =
@@ -32,8 +26,7 @@ export async function createRecurringBillHandler(req: Request, res: Response) {
     !isNonEmptyString(accountId) ||
     !isNonEmptyString(payerId) ||
     !isNonEmptyString(description) ||
-    typeof amount !== "number" ||
-    amount <= 0 ||
+    !isValidAmount(amount) ||
     !isValidDayOfMonth(dayOfMonth) ||
     (transactionType !== undefined && transactionType !== "expense" && transactionType !== "income") ||
     (splitType !== undefined && splitType !== "none" && splitType !== "equal")
@@ -58,10 +51,6 @@ export async function createRecurringBillHandler(req: Request, res: Response) {
     });
     res.status(201).json(bill);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     if (
       err instanceof InvalidAccountError ||
       err instanceof InvalidPayerError ||
@@ -81,10 +70,6 @@ export async function listRecurringBillsHandler(req: Request, res: Response) {
     const bills = await listRecurringBillsForUser(req.user!.id);
     res.status(200).json(bills);
   } catch (err) {
-    if (err instanceof NoGroupError) {
-      res.status(404).json({ error: "no group yet" });
-      return;
-    }
     throw err;
   }
 }
@@ -94,7 +79,7 @@ export async function updateRecurringBillHandler(req: Request, res: Response) {
 
   if (
     (description !== undefined && !isNonEmptyString(description)) ||
-    (amount !== undefined && (typeof amount !== "number" || amount <= 0)) ||
+    (amount !== undefined && !isValidAmount(amount)) ||
     (dayOfMonth !== undefined && !isValidDayOfMonth(dayOfMonth)) ||
     (isActive !== undefined && typeof isActive !== "boolean") ||
     (categoryId !== undefined && categoryId !== null && !isNonEmptyString(categoryId))

@@ -7,14 +7,9 @@ import { findUserDocsInGroup } from "../users/users.repository";
 import { isAdminEmail } from "./admin.service";
 import { sendPasswordResetEmail } from "../../email/mailer";
 import { deleteAccountForUser } from "../users/deleteAccount.service";
+import { toMillis } from "../../utils/timestamp";
 
 const usersCol = db.collection("users");
-
-function millis(value: unknown): number | null {
-  if (typeof value === "number") return value;
-  if (value && typeof (value as { toMillis?: () => number }).toMillis === "function") return (value as { toMillis: () => number }).toMillis();
-  return null;
-}
 
 export interface AdminUserRow {
   id: string;
@@ -39,8 +34,8 @@ export async function listUsersForAdmin(query: string): Promise<AdminUserRow[]> 
         displayName: d.displayName ?? "",
         email: d.email ?? "",
         groupId: d.groupId ?? null,
-        createdAt: millis(d.createdAt),
-        lastSeenAt: millis(d.lastSeenAt),
+        createdAt: toMillis(d.createdAt),
+        lastSeenAt: toMillis(d.lastSeenAt),
         blocked: d.blocked === true,
       };
     })
@@ -79,8 +74,8 @@ export async function getUserDetailForAdmin(userId: string) {
     displayName: d.displayName ?? "",
     email: d.email ?? "",
     phone: d.phone ?? null,
-    createdAt: millis(d.createdAt),
-    lastSeenAt: millis(d.lastSeenAt),
+    createdAt: toMillis(d.createdAt),
+    lastSeenAt: toMillis(d.lastSeenAt),
     blocked: d.blocked === true,
     isAdmin: isAdminEmail(d.email ?? ""),
     group: groupId

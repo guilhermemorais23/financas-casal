@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
 import { useToast } from "./ToastProvider";
 import { Sheet } from "./Sheet";
+import { isLinkedTransaction, linkedHint, type LinkKind } from "../utils/linkedTransaction";
 
 interface CategoryRow {
   id: string;
@@ -33,6 +34,8 @@ export interface EditableTransaction {
   accountId: string;
   payerId: string;
   paymentMethod: PaymentMethod | null;
+  splitType?: string;
+  linkKind?: LinkKind | null;
 }
 
 export function EditTransactionModal({
@@ -63,6 +66,9 @@ export function EditTransactionModal({
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Fatura paga, parcela, reembolso, lista de compras: aqui só nome,
+  // categoria e forma de pagamento.
+  const locked = isLinkedTransaction(transaction);
 
   useEffect(() => {
     apiRequest<CategoryRow[]>("/categories", { token }).then(setCategories);
@@ -87,16 +93,18 @@ export function EditTransactionModal({
       await apiRequest(`/transactions/${transaction.id}`, {
         method: "PATCH",
         token,
-        body: {
-          description: description.trim(),
-          amount: parsedAmount,
-          transactionType,
-          categoryId: categoryId || null,
-          occurredAt,
-          accountId,
-          payerId,
-          paymentMethod: paymentMethod || null,
-        },
+        body: locked
+          ? { description: description.trim(), categoryId: categoryId || null, paymentMethod: paymentMethod || null }
+          : {
+              description: description.trim(),
+              amount: parsedAmount,
+              transactionType,
+              categoryId: categoryId || null,
+              occurredAt,
+              accountId,
+              payerId,
+              paymentMethod: paymentMethod || null,
+            },
       });
       showToast("Lançamento atualizado");
       onSaved();
@@ -116,6 +124,7 @@ export function EditTransactionModal({
         <button
           type="button"
           className={`segmented-option${transactionType === "expense" ? " active" : ""}`}
+          disabled={locked}
           onClick={() => setTransactionType("expense")}
         >
           Despesa
@@ -123,11 +132,14 @@ export function EditTransactionModal({
         <button
           type="button"
           className={`segmented-option${transactionType === "income" ? " active" : ""}`}
+          disabled={locked}
           onClick={() => setTransactionType("income")}
         >
           Receita
         </button>
       </div>
+
+      {locked && <p className="refresh-note">{linkedHint(transaction)}</p>}
 
       <form onSubmit={handleSubmit}>
         <div className="field">
@@ -148,6 +160,7 @@ export function EditTransactionModal({
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              disabled={locked}
               required
             />
           </div>
@@ -158,6 +171,7 @@ export function EditTransactionModal({
               type="date"
               value={occurredAt}
               onChange={(e) => setOccurredAt(e.target.value)}
+              disabled={locked}
               required
             />
           </div>
@@ -178,7 +192,7 @@ export function EditTransactionModal({
         <div className="field-row">
           <div className="field">
             <label htmlFor="edit-account">Conta</label>
-            <select id="edit-account" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <select id="edit-account" value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={locked}>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name}
@@ -188,7 +202,7 @@ export function EditTransactionModal({
           </div>
           <div className="field">
             <label htmlFor="edit-payer">{transactionType === "income" ? "Quem recebeu" : "Quem pagou"}</label>
-            <select id="edit-payer" value={payerId} onChange={(e) => setPayerId(e.target.value)}>
+            <select id="edit-payer" value={payerId} onChange={(e) => setPayerId(e.target.value)} disabled={locked}>
               {members.map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.id === user?.id ? "Você" : member.displayName}

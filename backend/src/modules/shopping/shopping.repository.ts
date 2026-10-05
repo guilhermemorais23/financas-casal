@@ -60,18 +60,14 @@ export async function findItemById(itemId: string): Promise<ShoppingItemRow | nu
   return toItemRow(doc);
 }
 
-export async function setItemChecked(
-  itemId: string,
-  isChecked: boolean,
-  checkedBy: string | null,
-  transactionId: string | null
-): Promise<ShoppingItemRow> {
-  const ref = itemsCol.doc(itemId);
-  await ref.update({ isChecked, checkedBy, transactionId });
-  const doc = await ref.get();
-  return toItemRow(doc);
+export function shoppingItemRef(itemId: string): FirebaseFirestore.DocumentReference {
+  return itemsCol.doc(itemId);
 }
 
-export async function deleteItem(itemId: string): Promise<void> {
-  await itemsCol.doc(itemId).delete();
+export { toItemRow };
+
+// Lançamentos de antes do linkKind: veio de um item da lista?
+export async function isShoppingTransaction(transactionId: string): Promise<boolean> {
+  const snapshot = await itemsCol.where("transactionId", "==", transactionId).limit(1).select().get();
+  return !snapshot.empty;
 }
