@@ -13,6 +13,7 @@ import { initialOf } from "../utils/initial";
 import { SplitSummary } from "../components/SplitSummary";
 import { personColor } from "../utils/categoryColor";
 import { readCreditCardPreference, saveCreditCardPreference } from "../utils/creditCardPreference";
+import { categoriesFor, type CategoryType } from "../utils/categories";
 
 interface MemberRow {
   id: string;
@@ -23,6 +24,7 @@ interface CategoryRow {
   id: string;
   name: string;
   emoji: string | null;
+  type?: CategoryType;
 }
 
 interface PersonTotal {
@@ -705,7 +707,7 @@ export function CardsPage() {
                             onChange={(e) => setPurchaseCategoryId(e.target.value)}
                           >
                             <option value="">Sem categoria</option>
-                            {categories.map((category) => (
+                            {categoriesFor(categories, "expense").map((category) => (
                               <option key={category.id} value={category.id}>
                                 {category.emoji ?? ""} {category.name}
                               </option>

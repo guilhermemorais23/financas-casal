@@ -13,6 +13,7 @@ import { ImportRulesCard } from "../components/ImportRulesCard";
 import { PushSettingsCard } from "../components/PushSettingsCard";
 import { ImportStatementModal } from "../components/ImportStatementModal";
 import { initialOf } from "../utils/initial";
+import { categoryTypeOf, type CategoryType } from "../utils/categories";
 
 interface AccountRow {
   id: string;
@@ -53,6 +54,7 @@ interface CategoryRow {
   name: string;
   emoji: string | null;
   isDefault: boolean;
+  type?: CategoryType;
 }
 
 export function AccountPage() {
@@ -601,8 +603,8 @@ export function AccountPage() {
         <div className="card">
           <p className="card-title">Categorias</p>
           <p className="card-subtitle">
-            As padrão (com a estrela) valem pra qualquer grupo e não dá pra mudar. As que vocês criaram dá pra
-            renomear ou excluir.
+            As padrão valem pra qualquer grupo e não dá pra mudar. As que vocês criaram dá pra renomear ou
+            excluir. As de receita só aparecem ao lançar uma entrada.
           </p>
           {categories?.map((category) => (
             <div key={category.id} className="category-budget-row">
@@ -639,6 +641,11 @@ export function AccountPage() {
                   <div className="category-budget-info">
                     <span className="category-budget-name">
                       {category.name}
+                      {categoryTypeOf(category) === "income" && (
+                        <span className="badge" style={{ marginLeft: "0.4rem" }}>
+                          receita
+                        </span>
+                      )}
                       {category.isDefault && (
                         <span className="badge private-badge" style={{ marginLeft: "0.4rem" }}>
                           padrão

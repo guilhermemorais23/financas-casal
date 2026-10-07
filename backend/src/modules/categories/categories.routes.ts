@@ -47,9 +47,9 @@ categoriesRouter.get(
 categoriesRouter.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { name, emoji } = req.body ?? {};
-    if (!isNonEmptyString(name)) {
-      res.status(400).json({ error: "name is required" });
+    const { name, emoji, type } = req.body ?? {};
+    if (!isNonEmptyString(name) || (type !== undefined && type !== "expense" && type !== "income")) {
+      res.status(400).json({ error: "name is required; type (if set) must be expense or income" });
       return;
     }
 
@@ -60,6 +60,7 @@ categoriesRouter.post(
         groupId,
         name: name.trim(),
         emoji: isNonEmptyString(emoji) ? emoji.trim() : null,
+        type: type ?? "expense",
       });
       res.status(201).json(category);
     } catch (err) {

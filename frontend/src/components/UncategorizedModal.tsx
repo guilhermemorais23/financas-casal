@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { formatCurrency } from "../utils/format";
 import { Sheet } from "./Sheet";
 import { useToast } from "./ToastProvider";
+import { categoriesFor, type CategoryType } from "../utils/categories";
 
 interface UncategorizedGroup {
   key: string;
@@ -18,6 +19,7 @@ interface CategoryRow {
   id: string;
   name: string;
   emoji: string | null;
+  type?: CategoryType;
 }
 
 // "Sem categoria": um nome por linha (todos os lançamentos com esse nome de
@@ -40,7 +42,7 @@ export function UncategorizedModal({ month, onClose, onSaved }: { month: string;
     const name = newName.trim();
     if (!name) return;
     try {
-      const created = await apiRequest<CategoryRow>("/categories", { method: "POST", token, body: { name } });
+      const created = await apiRequest<CategoryRow>("/categories", { method: "POST", token, body: { name, type: "expense" } });
       setCategories((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
       setChoice((prev) => ({ ...prev, [groupKey]: created.id }));
       setCreatingFor(null);
@@ -125,7 +127,7 @@ export function UncategorizedModal({ month, onClose, onSaved }: { month: string;
               >
                 <option value="">Escolher...</option>
                 <option value="__new">+ Criar categoria</option>
-                {categories.map((category) => (
+                {categoriesFor(categories, "expense").map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.emoji ? `${category.emoji} ` : ""}
                     {category.name}

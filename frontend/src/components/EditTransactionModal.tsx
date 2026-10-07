@@ -5,11 +5,13 @@ import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMeth
 import { useToast } from "./ToastProvider";
 import { Sheet } from "./Sheet";
 import { isLinkedTransaction, linkedHint, type LinkKind } from "../utils/linkedTransaction";
+import { categoriesFor, type CategoryType } from "../utils/categories";
 
 interface CategoryRow {
   id: string;
   name: string;
   emoji: string | null;
+  type?: CategoryType;
 }
 
 interface AccountRow {
@@ -181,7 +183,12 @@ export function EditTransactionModal({
           <label htmlFor="edit-category">Categoria</label>
           <select id="edit-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">Sem categoria</option>
-            {categories.map((category) => (
+            {categoriesFor(categories, transactionType)
+              .concat(
+                // Lançamento antigo com categoria do outro tipo: continua aparecendo pra não sumir.
+                categories.filter((c) => c.id === transaction.categoryId && categoriesFor([c], transactionType).length === 0)
+              )
+              .map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
               </option>
