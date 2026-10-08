@@ -75,6 +75,9 @@ interface TransactionListRow {
   // card itself, so the extrato shows it without edit/delete.
   securedCardId?: string | null;
   loanId?: string | null;
+  // Dinheiro guardado numa meta (goalId) ou entre as suas contas: transferência.
+  transferKind?: "goal" | "accounts" | null;
+  goalId?: string | null;
   linkKind?: LinkKind | null;
   accountId: string;
   paymentMethod: PaymentMethod | null;
@@ -1276,7 +1279,7 @@ export function DashboardPage() {
                             {tx.transactionType === "income" ? "+" : "-"}
                             {formatCurrency(Number(tx.amount))}
                           </span>
-                          {!tx.securedCardId && !tx.loanId && (
+                          {!tx.securedCardId && !tx.loanId && !tx.goalId && (
                             <div className="transaction-row-actions">
                               <button
                                 type="button"

@@ -196,7 +196,7 @@ async function salaryArrived(groupId: string, userId: string, since: string, tod
   if (daysBetween(since, today) >= SALARY_MAX_WAIT_DAYS) return true;
   const docs = await findOwnDocsForRange(groupId, userId, since, addDaysIso(today, 1));
   return docs.some(
-    (doc) => doc.transactionType === "income" && !doc.isSecuredCardTransfer && !doc.isLoanTransfer && doc.amountCents >= SALARY_MIN_CENTS
+    (doc) => doc.transactionType === "income" && !doc.isSecuredCardTransfer && !doc.isLoanTransfer && !doc.isGoalTransfer && !doc.isAccountsTransfer && doc.amountCents >= SALARY_MIN_CENTS
   );
 }
 

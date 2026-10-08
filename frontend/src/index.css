@@ -9035,3 +9035,45 @@ select {
 .card-limit-percent.over { color: var(--color-danger-text); }
 .card-limit-edit { justify-self: start; font-size: 0.85rem; margin-top: 0.25rem; }
 .card-limit-add { align-self: flex-start; margin-top: 0.5rem; }
+
+/* ---- Metas: submetas, guardar/retirar, histórico ---- */
+.goal-items { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.65rem; }
+.goal-item { display: grid; gap: 0.3rem; }
+.goal-item-top { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+.goal-item-name { font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.goal-item-done { font-size: 0.7rem; font-weight: 800; padding: 0.1rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--status-good) 16%, var(--color-card)); color: color-mix(in srgb, var(--status-good) 60%, var(--color-text)); }
+.goal-item-amount { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.9rem; }
+.goal-item-amount span { color: var(--color-text-muted); font-weight: 500; }
+.goal-item-track { height: 6px; }
+.goal-item-actions { display: flex; gap: 0.9rem; }
+.goal-item-actions .link-button { font-size: 0.8rem; }
+.goal-item-price-form { display: flex; gap: 0.3rem; align-items: center; }
+.goal-item-price-form input { width: 7.5rem; }
+.goal-item-new { display: grid; grid-template-columns: minmax(0, 1fr) 7rem auto auto; gap: 0.5rem; align-items: center; margin-top: 0.6rem; }
+@media (max-width: 520px) { .goal-item-new { grid-template-columns: minmax(0, 1fr) 6.5rem; } }
+.goal-item-add { margin-top: 0.6rem; justify-self: start; text-align: left; }
+.goal-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.9rem; }
+.goal-history { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; }
+.goal-history li { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.45rem 0; border-top: 1px solid var(--color-border); font-size: 0.88rem; }
+.goal-history li span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal-history-out { color: var(--color-danger-text); }
+.goal-new-items { display: grid; gap: 0.45rem; margin-bottom: 0.75rem; }
+.goal-new-item { display: grid; grid-template-columns: minmax(0, 1fr) 7rem auto; gap: 0.45rem; align-items: center; }
+
+/* ---- Importação: o que é o "Não é gasto" ---- */
+.import-nonexpense { display: grid; gap: 0.45rem; margin: 0.6rem 0 0.4rem; }
+.import-nonexpense-option {
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-card);
+  cursor: pointer;
+}
+.import-nonexpense-option small { color: var(--color-text-muted); font-size: 0.8rem; }
+.import-nonexpense-option.active { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.import-nonexpense-option .chip-row { margin-top: 0.35rem; }

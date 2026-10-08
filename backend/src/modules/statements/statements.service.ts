@@ -10,6 +10,8 @@ import { deleteRule, findRulesByGroup, normalizeStatementName, upsertRules } fro
 import { requireGroupId } from "../groups/groups.service";
 import { createHash } from "node:crypto";
 import { findUsableAccount } from "../groups/groups.repository";
+import { moveGoalMoney } from "../goals/goals.service";
+import { NON_EXPENSE_KINDS, type NonExpenseKind } from "./importRules.repository";
 import { InvalidAccountError, InvalidCategoryError } from "../transactions/transactions.service";
 import {
   claimImportCommit,
@@ -63,7 +65,13 @@ export interface PreviewGroup {
   // Sugestão da IA pra pergunta nova (a pessoa confirma).
   suggestion?: Suggestion | null;
   // Resposta guardada de uma importação anterior (null = pergunta nova).
-  rule: { categoryId: string | null; notExpense: boolean; paymentMethod: PaymentMethod | null } | null;
+  rule: {
+    categoryId: string | null;
+    notExpense: boolean;
+    paymentMethod: PaymentMethod | null;
+    nonExpenseKind: NonExpenseKind | null;
+    goalId: string | null;
+  } | null;
   // Forma de pagamento que veio marcada (da regra ou do texto do banco).
   paymentMethod: PaymentMethod | null;
 }
@@ -264,7 +272,13 @@ async function previewRows(
           rowIndexes: [],
           rule:
             rule && (rule.categoryId || rule.notExpense)
-              ? { categoryId: rule.categoryId, notExpense: rule.notExpense, paymentMethod: rule.paymentMethod }
+              ? {
+                  categoryId: rule.categoryId,
+                  notExpense: rule.notExpense,
+                  paymentMethod: rule.paymentMethod,
+                  nonExpenseKind: rule.nonExpenseKind,
+                  goalId: rule.goalId,
+                }
               : null,
           paymentMethod: row.paymentMethod,
         },
@@ -324,6 +338,8 @@ export interface ImportItem {
   occurredAt: string;
   categoryId: string | null;
   paymentMethod?: PaymentMethod | null;
+  // "Não é gasto" que mexe no saldo: guardado numa meta, ou entre as suas contas.
+  transfer?: { kind: "goal"; goalId: string } | { kind: "accounts" } | null;
 }
 
 export interface RuleInput {
@@ -333,6 +349,8 @@ export interface RuleInput {
   notExpense: boolean;
   // Só vem quando a pessoa marcou "Sempre assim".
   paymentMethod?: PaymentMethod | null;
+  nonExpenseKind?: NonExpenseKind | null;
+  goalId?: string | null;
 }
 
 function cleanPaymentMethod(value: unknown): PaymentMethod | null {
@@ -371,10 +389,13 @@ export async function commitStatement(userId: string, accountId: string, items: 
   if (!(await claimImportCommit(fingerprint))) throw new DuplicateImportError();
 
   let created = 0;
+  // Guardado na meta: passa pela meta (soma nela e grava o histórico).
+  const goalItems = account ? items.filter((item) => item.transfer?.kind === "goal") : [];
+  const plainItems = items.filter((item) => item.transfer?.kind !== "goal");
   try {
     created = await insertTransactionsBatch(
       account
-        ? items.map((item) => ({
+        ? plainItems.map((item) => ({
             groupId,
             accountId: account.id,
             accountType: account.type,
@@ -389,9 +410,46 @@ export async function commitStatement(userId: string, accountId: string, items: 
             isPrivate: false,
             splitType: "none" as const,
             paymentMethod: cleanPaymentMethod(item.paymentMethod),
+            transferKind: item.transfer?.kind === "accounts" ? ("accounts" as const) : null,
           }))
         : []
     );
+    for (const item of goalItems) {
+      const goalId = (item.transfer as { goalId: string }).goalId;
+      try {
+        // Saída do extrato = guardou; entrada = resgatou.
+        await moveGoalMoney(userId, goalId, {
+          direction: item.transactionType === "expense" ? "deposit" : "withdraw",
+          amount: item.amount,
+          accountId: account!.id,
+          occurredAt: item.occurredAt,
+          description: item.description.trim().slice(0, 120),
+        });
+      } catch {
+        // Meta apagada ou resgate maior que o guardado: entra como
+        // transferência entre contas, pro saldo continuar igual ao do banco.
+        await insertTransactionsBatch([
+          {
+            groupId,
+            accountId: account!.id,
+            accountType: account!.type,
+            accountOwnerId: account!.ownerUserId,
+            categoryId: null,
+            payerId: userId,
+            createdBy: userId,
+            description: item.description.trim().slice(0, 120),
+            amount: item.amount,
+            transactionType: item.transactionType,
+            occurredAt: item.occurredAt,
+            isPrivate: false,
+            splitType: "none",
+            paymentMethod: null,
+            transferKind: "accounts",
+          },
+        ]);
+      }
+      created++;
+    }
   } catch (err) {
     await releaseImportCommit(fingerprint).catch(() => {});
     throw err;
@@ -412,6 +470,8 @@ export async function commitStatement(userId: string, accountId: string, items: 
       categoryId,
       notExpense: rule.notExpense === true,
       paymentMethod: rule.notExpense ? null : cleanPaymentMethod(rule.paymentMethod),
+      nonExpenseKind: rule.notExpense && NON_EXPENSE_KINDS.includes(rule.nonExpenseKind as NonExpenseKind) ? rule.nonExpenseKind : null,
+      goalId: rule.notExpense && rule.nonExpenseKind === "saved" && typeof rule.goalId === "string" ? rule.goalId : null,
     });
   }
   await upsertRules(groupId, userId, validRules);
@@ -430,7 +490,15 @@ export async function listImportRules(userId: string) {
 
 export async function saveImportRule(
   userId: string,
-  input: { key?: unknown; label?: unknown; categoryId?: unknown; notExpense?: unknown; paymentMethod?: unknown }
+  input: {
+    key?: unknown;
+    label?: unknown;
+    categoryId?: unknown;
+    notExpense?: unknown;
+    paymentMethod?: unknown;
+    nonExpenseKind?: unknown;
+    goalId?: unknown;
+  }
 ) {
   const groupId = await requireGroupId(userId);
   if (typeof input.key !== "string" || !input.key.trim()) throw new InvalidRuleError();
@@ -441,8 +509,11 @@ export async function saveImportRule(
   const key = normalizeStatementName(input.key);
   const label = typeof input.label === "string" && input.label.trim() ? input.label.trim().slice(0, 120) : key;
   const paymentMethod = notExpense ? null : cleanPaymentMethod(input.paymentMethod);
-  await upsertRules(groupId, userId, [{ key, label, categoryId, notExpense, paymentMethod }]);
-  return { key, label, categoryId, notExpense, paymentMethod };
+  const nonExpenseKind =
+    notExpense && NON_EXPENSE_KINDS.includes(input.nonExpenseKind as NonExpenseKind) ? (input.nonExpenseKind as NonExpenseKind) : null;
+  const goalId = nonExpenseKind === "saved" && typeof input.goalId === "string" ? input.goalId : null;
+  await upsertRules(groupId, userId, [{ key, label, categoryId, notExpense, paymentMethod, nonExpenseKind, goalId }]);
+  return { key, label, categoryId, notExpense, paymentMethod, nonExpenseKind, goalId };
 }
 
 export async function removeImportRule(userId: string, key: string) {

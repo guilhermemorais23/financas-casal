@@ -23,7 +23,7 @@ export async function listWithoutPaymentMethod(userId: string, month: string): P
   const ruleByKey = new Map(rules.filter((r) => r.paymentMethod).map((r) => [r.key, r.paymentMethod]));
   const byKey = new Map<string, { label: string; type: "expense" | "income"; cents: number; ids: string[] }>();
   for (const tx of rows) {
-    if (tx.paymentMethod || tx.securedCardId || tx.loanId) continue;
+    if (tx.paymentMethod || tx.securedCardId || tx.loanId || tx.transferKind) continue;
     if (!canManageTransaction(userId, tx)) continue;
     const name = normalizeStatementName(tx.description) || tx.description.toLowerCase();
     const id = `${tx.transactionType}:${name}`;

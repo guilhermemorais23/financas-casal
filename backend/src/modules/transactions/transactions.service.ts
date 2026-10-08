@@ -275,7 +275,9 @@ export async function getMonthlyTrendForUser(
   for (const row of rows) {
     const entry = byMonth.get(row.month);
     if (!entry) continue; // outside the requested window -- can't happen given the query's own range, kept defensive
-    if (row.isSecuredCardTransfer) {
+    if (row.isAccountsTransfer) {
+      continue;
+    } else if (row.isSecuredCardTransfer || row.isGoalTransfer) {
       entry.savedCents += row.transactionType === "income" ? -row.amountCents : row.amountCents;
     } else if (row.isLoanTransfer) {
       entry.lentCents += row.transactionType === "income" ? -row.amountCents : row.amountCents;
@@ -309,8 +311,8 @@ export async function deleteTransactionForUser(userId: string, transactionId: st
   if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
   }
-  if (transaction.securedCardId || transaction.loanId) {
-    throw new SecuredCardTransferError(transaction.loanId ? "loan" : "card");
+  if (transaction.securedCardId || transaction.loanId || transaction.transferKind === "goal") {
+    throw new SecuredCardTransferError(transaction.loanId ? "loan" : transaction.goalId ? "goal" : "card");
   }
   const linkKind = await linkKindOf(groupId, transaction);
   if (linkKind) {
@@ -344,7 +346,7 @@ export async function deleteTransactionsForUser(
         skipped.push({ id, reason: "not_found" });
         return;
       }
-      if (transaction.securedCardId || transaction.loanId) {
+      if (transaction.securedCardId || transaction.loanId || transaction.transferKind === "goal") {
         skipped.push({ id, reason: "transfer" });
         return;
       }
@@ -522,8 +524,8 @@ export async function updateTransactionForUser(
   if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
   }
-  if (transaction.securedCardId || transaction.loanId) {
-    throw new SecuredCardTransferError(transaction.loanId ? "loan" : "card");
+  if (transaction.securedCardId || transaction.loanId || transaction.transferKind === "goal") {
+    throw new SecuredCardTransferError(transaction.loanId ? "loan" : transaction.goalId ? "goal" : "card");
   }
 
   // Lançamento de outra tela: dá pra mudar nome, categoria e forma de

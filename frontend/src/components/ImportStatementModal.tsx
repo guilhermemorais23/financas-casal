@@ -11,6 +11,18 @@ import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMeth
 
 type TxType = "expense" | "income";
 
+// "Não é gasto": o que é. Fatura e Ignorar não entram; Guardei vira
+// transferência pra meta; Entre minhas contas, transferência que mexe no saldo
+// sem ser gasto.
+type NonExpenseKind = "card_payment" | "saved" | "accounts" | "ignore";
+
+const NON_EXPENSE_OPTIONS: { kind: NonExpenseKind; expense: string; income: string; hint: string }[] = [
+  { kind: "card_payment", expense: "Pagamento de fatura", income: "Estorno do cartão", hint: "Não entra: as compras já estão no cartão." },
+  { kind: "saved", expense: "Guardei", income: "Resgatei", hint: "Caixinha, investimento ou meta. O saldo bate com o banco e aparece em Guardado." },
+  { kind: "accounts", expense: "Entre minhas contas", income: "Veio de outra conta minha", hint: "Mexe no saldo desta conta, mas não é gasto nem receita." },
+  { kind: "ignore", expense: "Ignorar", income: "Ignorar", hint: "Não entra no PAR." },
+];
+
 interface PreviewRow {
   date: string;
   description: string;
@@ -33,7 +45,13 @@ interface PreviewGroup {
   count: number;
   total: string;
   rowIndexes: number[];
-  rule: { categoryId: string | null; notExpense: boolean; paymentMethod?: PaymentMethod | null } | null;
+  rule: {
+    categoryId: string | null;
+    notExpense: boolean;
+    paymentMethod?: PaymentMethod | null;
+    nonExpenseKind?: NonExpenseKind | null;
+    goalId?: string | null;
+  } | null;
   // Forma que já veio marcada (regra ou texto do banco).
   paymentMethod?: PaymentMethod | null;
   // Sugestão da IA (a pessoa confirma).
@@ -89,6 +107,9 @@ interface Answer {
   paymentMethod: PaymentMethod | null;
   // "Sempre assim": guarda a forma pra próxima importação.
   alwaysPayment: boolean;
+  // Com notExpense: o que é (e a meta, no "Guardei").
+  nonExpenseKind: NonExpenseKind | null;
+  goalId: string | null;
 }
 
 type Stage = "file" | "questions" | "summary";
@@ -148,6 +169,8 @@ function blankAnswer(group: PreviewGroup): Answer {
     descriptions: {},
     paymentMethod: group.rule?.paymentMethod ?? group.paymentMethod ?? null,
     alwaysPayment: true,
+    nonExpenseKind: group.rule?.notExpense ? group.rule.nonExpenseKind ?? "ignore" : null,
+    goalId: group.rule?.goalId ?? null,
   };
 }
 
@@ -390,7 +413,39 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     setQuestionIndex((index) => index - 1);
   }
 
-  function choose(group: PreviewGroup, patch: { categoryId: string | null; notExpense: boolean }) {
+  const [nonExpenseOpen, setNonExpenseOpen] = useState(false);
+  const [goals, setGoals] = useState<{ id: string; name: string }[]>([]);
+
+  async function loadGoals() {
+    try {
+      setGoals((await apiRequest<{ id: string; name: string }[]>("/goals", { token })).map((g) => ({ id: g.id, name: g.name })));
+    } catch {
+      setGoals([]);
+    }
+  }
+
+  // "Guardei" sem meta ainda: cria a "Caixinha" (alvo = o valor desse nome,
+  // dá pra mudar depois em Metas).
+  async function createCaixinha(group: PreviewGroup) {
+    try {
+      const created = await apiRequest<{ id: string; name: string }>("/goals", {
+        method: "POST",
+        token,
+        body: { name: "Caixinha", targetAmount: Math.max(100, Number(group.total)), emoji: null, photoDataUrl: null, deadline: null },
+      });
+      setGoals((list) => [...list, { id: created.id, name: created.name }]);
+      choose(group, { categoryId: null, notExpense: true, nonExpenseKind: "saved", goalId: created.id });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível criar a Caixinha.");
+    }
+  }
+
+  function choose(
+    group: PreviewGroup,
+    patch: { categoryId: string | null; notExpense: boolean; nonExpenseKind?: NonExpenseKind | null; goalId?: string | null }
+  ) {
+    if (!patch.notExpense) patch = { ...patch, nonExpenseKind: null, goalId: null };
+    setNonExpenseOpen(false);
     patchAnswer(group, { ...patch, status: "answered", fromRule: false });
     // Com a descrição aberta a pessoa ainda vai digitar; senão, próxima.
     if (!showDescription) goNext();
@@ -457,6 +512,7 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       occurredAt: string;
       categoryId: string | null;
       paymentMethod: PaymentMethod | null;
+      transfer?: { kind: "goal"; goalId: string } | { kind: "accounts" };
     }[] = [];
     let incoming = 0;
     let outgoing = 0;
@@ -477,8 +533,30 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
       }
       const entry = answeredByRow.get(index);
       const answer = entry?.answer;
-      if (answer?.status === "answered" && answer.notExpense) {
+      // Guardei (com meta) e Entre minhas contas entram como transferência;
+      // fatura e ignorar não entram.
+      const transfer =
+        answer?.status === "answered" && answer.notExpense
+          ? answer.nonExpenseKind === "saved" && answer.goalId
+            ? ({ kind: "goal", goalId: answer.goalId } as const)
+            : answer.nonExpenseKind === "accounts"
+            ? ({ kind: "accounts" } as const)
+            : null
+          : null;
+      if (answer?.status === "answered" && answer.notExpense && !transfer) {
         skippedNotExpense++;
+        return;
+      }
+      if (transfer) {
+        items.push({
+          description: row.description,
+          amount: Number(row.amount),
+          transactionType: row.transactionType,
+          occurredAt: row.date,
+          categoryId: null,
+          paymentMethod: null,
+          transfer,
+        });
         return;
       }
       const custom =
@@ -514,6 +592,8 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         categoryId: answer.status === "answered" ? answer.categoryId : null,
         notExpense: answer.status === "answered" && answer.notExpense,
         paymentMethod: answer.alwaysPayment ? answer.paymentMethod : null,
+        nonExpenseKind: answer.status === "answered" && answer.notExpense ? answer.nonExpenseKind : null,
+        goalId: answer.status === "answered" && answer.notExpense && answer.nonExpenseKind === "saved" ? answer.goalId : null,
       }));
     const withoutCategory = unmatched.length;
     return { items, rules, incoming, outgoing, skippedNotExpense, skippedRoundTrip, withoutCategory, unmatched };
@@ -635,7 +715,15 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
 
   function answerLabel(answer: Answer | undefined, type: TxType) {
     if (!answer || answer.status !== "answered") return "Sem categoria";
-    if (answer.notExpense) return type === "income" ? "Não é entrada" : "Não é gasto";
+    if (answer.notExpense) {
+      const option = NON_EXPENSE_OPTIONS.find((o) => o.kind === answer.nonExpenseKind);
+      if (option?.kind === "saved") {
+        const goal = goals.find((g) => g.id === answer.goalId);
+        return `${type === "income" ? option.income : option.expense}${goal ? ` · ${goal.name}` : ""}`;
+      }
+      if (option) return type === "income" ? option.income : option.expense;
+      return type === "income" ? "Não é entrada" : "Não é gasto";
+    }
     return categoryLabel(answer.categoryId);
   }
 
@@ -1056,8 +1144,12 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                 className={`import-chip is-not${currentAnswer.status === "answered" && currentAnswer.notExpense ? " active" : ""}${
                   currentAnswer.status !== "answered" && current.suggestion?.notExpense ? " suggested" : ""
                 }`}
-                onClick={() => choose(current, { categoryId: null, notExpense: true })}
-                title="Fatura do cartão, aplicação, transferência entre suas contas: não entra"
+                onClick={() => {
+                  setNonExpenseOpen((open) => !open);
+                  void loadGoals();
+                }}
+                aria-expanded={nonExpenseOpen}
+                title="Fatura do cartão, caixinha, transferência entre suas contas"
               >
                 {current.transactionType === "income" ? "Não é entrada" : "Não é gasto"}
               </button>
@@ -1087,10 +1179,48 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                 </form>
               )}
             </div>
-            <p className="import-hint">
-              “{current.transactionType === "income" ? "Não é entrada" : "Não é gasto"}” é pra fatura do cartão, aplicação e
-              transferência entre suas contas: essas linhas não entram.
-            </p>
+            {nonExpenseOpen && (
+              <div className="import-nonexpense" role="group" aria-label="O que é">
+                {NON_EXPENSE_OPTIONS.map((option) => {
+                  const label = current.transactionType === "income" ? option.income : option.expense;
+                  const active = currentAnswer.status === "answered" && currentAnswer.notExpense && currentAnswer.nonExpenseKind === option.kind;
+                  if (option.kind === "saved") {
+                    return (
+                      <div key={option.kind} className={`import-nonexpense-option${active ? " active" : ""}`}>
+                        <strong>{label}</strong>
+                        <small>{option.hint}</small>
+                        <div className="chip-row">
+                          {goals.map((goal) => (
+                            <button
+                              key={goal.id}
+                              type="button"
+                              className={`filter-chip${active && currentAnswer.goalId === goal.id ? " active" : ""}`}
+                              onClick={() => choose(current, { categoryId: null, notExpense: true, nonExpenseKind: "saved", goalId: goal.id })}
+                            >
+                              {goal.name}
+                            </button>
+                          ))}
+                          <button type="button" className="filter-chip" onClick={() => void createCaixinha(current)}>
+                            + Nova: Caixinha
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={option.kind}
+                      type="button"
+                      className={`import-nonexpense-option${active ? " active" : ""}`}
+                      onClick={() => choose(current, { categoryId: null, notExpense: true, nonExpenseKind: option.kind })}
+                    >
+                      <strong>{label}</strong>
+                      <small>{option.hint}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {!showDescription ? (
               <button type="button" className="link-button" onClick={() => setShowDescription(true)}>

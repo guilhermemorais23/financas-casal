@@ -12,6 +12,9 @@ interface ImportRule {
   notExpense: boolean;
   // "Sempre assim": forma de pagamento lembrada (null = perguntar).
   paymentMethod?: PaymentMethod | null;
+  // "Não é gasto": o que é (fatura, guardei, entre contas, ignorar) e a meta.
+  nonExpenseKind?: string | null;
+  goalId?: string | null;
 }
 
 interface CategoryOption {
@@ -44,7 +47,14 @@ export function ImportRulesCard({ categories, reloadKey }: { categories: Categor
       await apiRequest("/statements/rules", {
         method: "PUT",
         token,
-        body: { key: rule.key, label: rule.label, ...next },
+        // Mantém o tipo do "Não é gasto" (e a meta) enquanto continuar sendo.
+        body: {
+          key: rule.key,
+          label: rule.label,
+          ...next,
+          nonExpenseKind: next.notExpense ? rule.nonExpenseKind ?? null : null,
+          goalId: next.notExpense ? rule.goalId ?? null : null,
+        },
       });
       setRules((list) => list?.map((r) => (r.key === rule.key ? { ...r, ...next } : r)) ?? list);
       showToast("Resposta atualizada");
@@ -108,7 +118,15 @@ export function ImportRulesCard({ categories, reloadKey }: { categories: Categor
                   {category.name}
                 </option>
               ))}
-              <option value={NOT_EXPENSE}>Não é gasto (não entra)</option>
+              <option value={NOT_EXPENSE}>
+                {rule.nonExpenseKind === "saved"
+                  ? "Guardei (vai pra meta)"
+                  : rule.nonExpenseKind === "accounts"
+                  ? "Entre minhas contas"
+                  : rule.nonExpenseKind === "card_payment"
+                  ? "Pagamento de fatura (não entra)"
+                  : "Não é gasto (não entra)"}
+              </option>
             </select>
             {!rule.notExpense && (
               <select

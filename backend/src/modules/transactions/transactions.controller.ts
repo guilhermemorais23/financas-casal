@@ -277,9 +277,9 @@ export async function updateTransactionHandler(req: Request, res: Response) {
 }
 
 function transferLockedMessage(err: Error): string {
-  return err.message === "loan"
-    ? "Esse lançamento é de um empréstimo. Mexa nele pela página Empréstimos."
-    : "Esse valor foi guardado no cartão. Use Resgatar na página Cartões.";
+  if (err.message === "loan") return "Esse lançamento é de um empréstimo. Mexa nele pela página Empréstimos.";
+  if (err.message === "goal") return "Esse valor foi guardado numa meta. Use Retirar na página Metas.";
+  return "Esse valor foi guardado no cartão. Use Resgatar na página Cartões.";
 }
 
 const LINKED_MESSAGES: Record<LinkedTransactionError["kind"], string> = {

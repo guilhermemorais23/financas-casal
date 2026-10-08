@@ -152,8 +152,8 @@ describe("perguntas por nome e regras", () => {
       ]),
     });
     const byKey = Object.fromEntries(next.groups.map((g) => [g.key, g.rule]));
-    expect(byKey["pao de acucar"]).toEqual({ categoryId: mercado.id, notExpense: false, paymentMethod: null });
-    expect(byKey["pag fatura"]).toEqual({ categoryId: null, notExpense: true, paymentMethod: null });
+    expect(byKey["pao de acucar"]).toEqual({ categoryId: mercado.id, notExpense: false, paymentMethod: null, nonExpenseKind: null, goalId: null });
+    expect(byKey["pag fatura"]).toEqual({ categoryId: null, notExpense: true, paymentMethod: null, nonExpenseKind: null, goalId: null });
     expect(next.rows.find((r) => r.groupKey === "pao de acucar")?.suggestedCategoryId).toBe(mercado.id);
 
     const rules = await listImportRules(userAId);

@@ -13,8 +13,16 @@ export interface ImportRule {
   notExpense: boolean;
   // "Sempre assim": a forma de pagamento desse nome (null = perguntar toda vez).
   paymentMethod: PaymentMethod | null;
+  // Com notExpense: o que é. card_payment / ignore não entram; saved vira
+  // transferência pra meta (goalId); accounts, transferência entre contas.
+  // null (regras antigas) = não entra, como antes.
+  nonExpenseKind: NonExpenseKind | null;
+  goalId: string | null;
   updatedAt: number;
 }
+
+export const NON_EXPENSE_KINDS = ["card_payment", "saved", "accounts", "ignore"] as const;
+export type NonExpenseKind = (typeof NON_EXPENSE_KINDS)[number];
 
 const col = db.collection("importRules");
 
@@ -48,6 +56,8 @@ export function findRulesByGroup(groupId: string): Promise<ImportRule[]> {
           categoryId: (d.categoryId as string | null) ?? null,
           notExpense: d.notExpense === true,
           paymentMethod: PAYMENT_METHODS.includes(d.paymentMethod) ? (d.paymentMethod as PaymentMethod) : null,
+          nonExpenseKind: NON_EXPENSE_KINDS.includes(d.nonExpenseKind) ? (d.nonExpenseKind as NonExpenseKind) : null,
+          goalId: typeof d.goalId === "string" ? d.goalId : null,
           updatedAt: (d.updatedAt as number) ?? 0,
         };
       })
@@ -58,13 +68,29 @@ export function findRulesByGroup(groupId: string): Promise<ImportRule[]> {
 export async function upsertRules(
   groupId: string,
   userId: string,
-  rules: { key: string; label: string; categoryId: string | null; notExpense: boolean; paymentMethod?: PaymentMethod | null }[]
+  rules: {
+    key: string;
+    label: string;
+    categoryId: string | null;
+    notExpense: boolean;
+    paymentMethod?: PaymentMethod | null;
+    nonExpenseKind?: NonExpenseKind | null;
+    goalId?: string | null;
+  }[]
 ): Promise<void> {
   if (rules.length === 0) return;
   const batch = db.batch();
   const now = Date.now();
   for (const rule of rules) {
-    batch.set(col.doc(docId(groupId, rule.key)), { ...rule, paymentMethod: rule.paymentMethod ?? null, groupId, updatedAt: now, updatedBy: userId });
+    batch.set(col.doc(docId(groupId, rule.key)), {
+      ...rule,
+      paymentMethod: rule.paymentMethod ?? null,
+      nonExpenseKind: rule.notExpense ? rule.nonExpenseKind ?? null : null,
+      goalId: rule.notExpense && rule.nonExpenseKind === "saved" ? rule.goalId ?? null : null,
+      groupId,
+      updatedAt: now,
+      updatedBy: userId,
+    });
   }
   await batch.commit();
 }

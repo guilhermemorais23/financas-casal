@@ -68,6 +68,9 @@ interface TransactionListRow {
   // card itself, so the extrato shows it without edit/delete.
   securedCardId?: string | null;
   loanId?: string | null;
+  // Dinheiro guardado numa meta (goalId) ou entre as suas contas: transferência.
+  transferKind?: "goal" | "accounts" | null;
+  goalId?: string | null;
   linkKind?: LinkKind | null;
   accountId: string;
   accountType: "personal" | "joint";
@@ -361,7 +364,7 @@ export function ReportsPage() {
 
   // Fatura paga, parcela, reembolso, transferência: não entram na seleção
   // (só dá pra desfazer pela tela que criou).
-  const isLocked = (tx: TransactionListRow) => Boolean(tx.securedCardId || tx.loanId) || isLinkedTransaction(tx);
+  const isLocked = (tx: TransactionListRow) => Boolean(tx.securedCardId || tx.loanId || tx.goalId) || isLinkedTransaction(tx);
 
   function toggleSelected(tx: TransactionListRow) {
     setSelectedIds((current) => {
@@ -516,7 +519,7 @@ export function ReportsPage() {
   const paymentCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const tx of transactions ?? []) {
-      if (tx.securedCardId || tx.loanId) continue;
+      if (tx.securedCardId || tx.loanId || tx.transferKind) continue;
       const key = tx.paymentMethod ?? "none";
       counts[key] = (counts[key] ?? 0) + 1;
     }
@@ -572,7 +575,9 @@ export function ReportsPage() {
     let lent = 0;
     for (const tx of transactions ?? []) {
       const amount = Number(tx.amount);
-      if (tx.securedCardId) saved += tx.transactionType === "expense" ? amount : -amount;
+      // Entre as suas contas: o dinheiro continua seu, fica fora dos totais.
+      if (tx.transferKind === "accounts") continue;
+      if (tx.securedCardId || tx.transferKind === "goal") saved += tx.transactionType === "expense" ? amount : -amount;
       else if (tx.loanId) lent += tx.transactionType === "expense" ? amount : -amount;
       else if (tx.transactionType === "income") income += amount;
       else expense += amount;
@@ -660,7 +665,7 @@ export function ReportsPage() {
             {tx.transactionType === "income" ? "+" : "-"}
             {formatCurrency(Number(tx.amount))}
           </span>
-          {!tx.securedCardId && !tx.loanId && (
+          {!tx.securedCardId && !tx.loanId && !tx.goalId && (
             <div className="transaction-row-actions">
               <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                 <Icon name="pencil" />
