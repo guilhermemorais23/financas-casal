@@ -50,7 +50,8 @@ export async function getCategoryBudgets(userId: string, monthParam?: string): P
   const groupId = await requireGroupId(userId);
   const { periodMonth, monthStart, monthEnd } = parseMonthRange(monthParam);
 
-  const categories = await findVisibleCategories(groupId);
+  // Teto de gasto só faz sentido pras categorias de despesa.
+  const categories = (await findVisibleCategories(groupId)).filter((category) => category.type === "expense");
   const categoryIds = categories.map((category) => category.id);
 
   const [budgetsByCategory, summary] = await Promise.all([

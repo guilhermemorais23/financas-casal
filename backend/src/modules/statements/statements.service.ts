@@ -276,7 +276,9 @@ async function previewRows(
   const open = groups.filter((group) => !group.rule && group.rowIndexes.every((index) => !preview[index].suggestedCategoryId));
   if (open.length > 0 && (await allowAi())) {
     try {
-      const categories = (await findVisibleCategories(groupId)).map((c) => ({ id: c.id, name: c.name }));
+      const visible = await findVisibleCategories(groupId);
+      const typeById = new Map(visible.map((c) => [c.id, c.type]));
+      const categories = visible.map((c) => ({ id: c.id, name: c.name }));
       const suggestions = await suggestCategories(
         open.map((g) => ({ key: g.key, name: g.name, kind: g.kind, transactionType: g.transactionType, total: g.total })),
         categories,
@@ -285,7 +287,10 @@ async function previewRows(
       );
       for (const group of groups) {
         const suggestion = suggestions.get(`${group.transactionType}:${group.key}`);
-        if (suggestion) {
+        // Receita só com categoria de receita, despesa só com de despesa.
+        const fitsType =
+          !suggestion?.categoryId || (typeById.get(suggestion.categoryId) ?? "expense") === group.transactionType;
+        if (suggestion && fitsType) {
           (group as PreviewGroup).suggestion = suggestion;
           suggested++;
         }

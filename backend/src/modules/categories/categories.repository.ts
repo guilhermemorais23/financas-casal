@@ -2,13 +2,22 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
 import { memoizeScoped } from "../../utils/readCache";
 
+// Despesa ou receita: a tela de lançar mostra só as do tipo do lançamento.
+// Categoria antiga (de antes do campo) é de despesa.
+export type CategoryType = "expense" | "income";
+
 export interface CategoryRow {
   id: string;
   groupId: string | null;
   name: string;
   emoji: string | null;
   isDefault: boolean;
+  type: CategoryType;
 }
+
+// A categoria de receita que todo grupo tem (e não dá pra apagar). Quem tem
+// outras fontes (salário, aluguel recebido, freela) cria as suas.
+const DEFAULT_INCOME = { id: "global__receita", name: "Receita", emoji: "💰" };
 
 const categoriesCol = db.collection("categories");
 
@@ -28,7 +37,29 @@ function toCategoryRow(doc: FirebaseFirestore.DocumentSnapshot): CategoryRow {
     name: data.name,
     emoji: data.emoji ?? null,
     isDefault: data.isDefault ?? false,
+    type: data.type === "income" ? "income" : "expense",
   };
+}
+
+// As padrão são criadas por script (seed); a de receita veio depois, então é
+// criada aqui na primeira leitura se ainda não existir.
+async function ensureDefaultIncomeCategory(rows: CategoryRow[]): Promise<CategoryRow[]> {
+  if (rows.some((row) => row.id === DEFAULT_INCOME.id)) return rows;
+  const created: CategoryRow = { ...DEFAULT_INCOME, groupId: null, isDefault: true, type: "income" };
+  try {
+    await categoriesCol.doc(DEFAULT_INCOME.id).create({
+      groupId: null,
+      name: created.name,
+      emoji: created.emoji,
+      isDefault: true,
+      type: "income",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    // Outra requisição criou primeiro: tudo bem.
+    if (!(err && typeof err === "object" && "code" in err && err.code === 6)) throw err;
+  }
+  return [...rows, created];
 }
 
 export function findVisibleCategories(groupId: string | null): Promise<CategoryRow[]> {
@@ -41,7 +72,7 @@ async function loadFindVisibleCategories(groupId: string | null): Promise<Catego
     queries.push(categoriesCol.where("groupId", "==", groupId).get());
   }
   const snapshots = await Promise.all(queries);
-  const rows = snapshots.flatMap((snapshot) => snapshot.docs.map(toCategoryRow));
+  const rows = await ensureDefaultIncomeCategory(snapshots.flatMap((snapshot) => snapshot.docs.map(toCategoryRow)));
   return rows.sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
 }
 
@@ -51,7 +82,9 @@ export async function insertCategory(input: {
   groupId: string;
   name: string;
   emoji: string | null;
+  type?: CategoryType;
 }): Promise<CategoryRow> {
+  const type = input.type ?? "expense";
   const id = categoryDocId(input.groupId, input.name);
   try {
     await categoriesCol.doc(id).create({
@@ -59,6 +92,7 @@ export async function insertCategory(input: {
       name: input.name,
       emoji: input.emoji,
       isDefault: false,
+      type,
       createdAt: FieldValue.serverTimestamp(),
     });
   } catch (err) {
@@ -67,7 +101,7 @@ export async function insertCategory(input: {
     }
     throw err;
   }
-  return { id, groupId: input.groupId, name: input.name, emoji: input.emoji, isDefault: false };
+  return { id, groupId: input.groupId, name: input.name, emoji: input.emoji, isDefault: false, type };
 }
 
 export async function categoryIsVisibleTo(categoryId: string, groupId: string): Promise<boolean> {

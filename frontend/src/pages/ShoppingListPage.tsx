@@ -6,6 +6,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
+import { categoriesFor, type CategoryType } from "../utils/categories";
 
 interface AccountRow {
   id: string;
@@ -18,6 +19,7 @@ interface CategoryRow {
   id: string;
   name: string;
   emoji: string | null;
+  type?: CategoryType;
 }
 
 interface MemberRow {
@@ -250,7 +252,7 @@ export function ShoppingListPage() {
                           onChange={(e) => setCheckCategoryId(e.target.value)}
                         >
                           <option value="">Sem categoria</option>
-                          {categories.map((category) => (
+                          {categoriesFor(categories, "expense").map((category) => (
                             <option key={category.id} value={category.id}>
                               {category.emoji ?? ""} {category.name}
                             </option>

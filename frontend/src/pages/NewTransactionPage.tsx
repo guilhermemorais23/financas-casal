@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -15,6 +15,7 @@ import {
   resolveCreditCardPreference,
   saveCreditCardPreference,
 } from "../utils/creditCardPreference";
+import { categoriesFor, defaultCategoryFor, type CategoryType } from "../utils/categories";
 
 interface AccountRow {
   id: string;
@@ -41,6 +42,7 @@ interface CategoryRow {
   id: string;
   name: string;
   emoji: string | null;
+  type?: CategoryType;
 }
 
 export function NewTransactionPage() {
@@ -138,6 +140,17 @@ export function NewTransactionPage() {
 
   const [error, setError] = useState<string | null>(null);
 
+  // Receita mostra só as categorias de receita (começa com "Receita" marcada);
+  // despesa, só as de despesa.
+  const typedCategories = useMemo(() => categoriesFor(categories, transactionType), [categories, transactionType]);
+  useEffect(() => {
+    if (categories.length === 0) return;
+    setCategoryId((current) => {
+      if (current && typedCategories.some((category) => category.id === current)) return current;
+      return defaultCategoryFor(categories, transactionType);
+    });
+  }, [categories, typedCategories, transactionType]);
+
   async function loadCategories() {
     const categoriesRes = await apiRequest<CategoryRow[]>("/categories", { token });
     setCategories(categoriesRes);
@@ -181,7 +194,7 @@ export function NewTransactionPage() {
     if (categoryTouched) return;
     const suggestion = suggestFor(user?.id ?? "", value);
     if (!suggestion) return;
-    if (suggestion.categoryId && categories.some((c) => c.id === suggestion.categoryId)) setCategoryId(suggestion.categoryId);
+    if (suggestion.categoryId && typedCategories.some((c) => c.id === suggestion.categoryId)) setCategoryId(suggestion.categoryId);
     if (suggestion.paymentMethod) setPaymentMethod(suggestion.paymentMethod);
     if (suggestion.accountId && accounts.some((a) => a.id === suggestion.accountId)) setAccountId(suggestion.accountId);
   }
@@ -194,7 +207,7 @@ export function NewTransactionPage() {
       const created = await apiRequest<CategoryRow>("/categories", {
         method: "POST",
         token,
-        body: { name: newCategoryName.trim(), emoji: newCategoryEmoji.trim() || null },
+        body: { name: newCategoryName.trim(), emoji: newCategoryEmoji.trim() || null, type: transactionType },
       });
       await loadCategories();
       setCategoryId(created.id);
@@ -403,7 +416,7 @@ export function NewTransactionPage() {
                 className="link-button"
                 onClick={() => setIsAddingCategory((current) => !current)}
               >
-                {isAddingCategory ? "Cancelar" : "+ Nova categoria"}
+                {isAddingCategory ? "Cancelar" : isIncome ? "+ Nova fonte de receita" : "+ Nova categoria"}
               </button>
             </div>
             <select id="category" value={categoryId} onChange={(e) => {
@@ -411,7 +424,7 @@ export function NewTransactionPage() {
                 setCategoryTouched(true);
               }}>
               <option value="">Sem categoria</option>
-              {categories.map((category) => (
+              {typedCategories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>

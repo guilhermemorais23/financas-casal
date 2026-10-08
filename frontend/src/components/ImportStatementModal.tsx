@@ -6,6 +6,7 @@ import { Icon } from "./Icon";
 import { PasswordInput } from "./PasswordInput";
 import { useToast } from "./ToastProvider";
 import { Sheet } from "./Sheet";
+import { categoriesFor, type CategoryType } from "../utils/categories";
 
 type TxType = "expense" | "income";
 
@@ -67,6 +68,7 @@ interface CategoryRow {
   id: string;
   name: string;
   emoji: string | null;
+  type?: CategoryType;
 }
 
 // A resposta de uma pergunta (um nome do extrato).
@@ -124,8 +126,6 @@ function rememberedBank(account: AccountRow | undefined): BankId | null {
 
 // Quantos itens as listas do resumo mostram antes do "Ver todos".
 const LIST_PREVIEW = 5;
-
-const INCOME_HINT = /sal[aá]r|renda|receb|freel|reembol|venda|rendiment|b[oô]nus|comiss|extra/i;
 
 function blankAnswer(group: PreviewGroup): Answer {
   return {
@@ -401,7 +401,11 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     const name = newCategoryName?.trim();
     if (!name) return;
     try {
-      const created = await apiRequest<CategoryRow>("/categories", { method: "POST", token, body: { name } });
+      const created = await apiRequest<CategoryRow>("/categories", {
+        method: "POST",
+        token,
+        body: { name, type: group.transactionType },
+      });
       setCategories((list) => [...list, created]);
       setNewCategoryName(null);
       choose(group, { categoryId: created.id, notExpense: false });
@@ -608,10 +612,8 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
     return categoryLabel(answer.categoryId);
   }
 
-  const orderedCategories = (type: TxType) =>
-    type === "income"
-      ? [...categories].sort((a, b) => Number(INCOME_HINT.test(b.name)) - Number(INCOME_HINT.test(a.name)))
-      : categories;
+  // Entrada só com categorias de receita; saída só com as de despesa.
+  const orderedCategories = (type: TxType) => categoriesFor(categories, type);
 
   const readBank = bankName(preview?.pdf?.bank);
   const chosenOwn = BANKS.find((b) => b.id === bank)?.own ?? false;

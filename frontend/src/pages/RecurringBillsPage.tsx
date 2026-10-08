@@ -11,6 +11,7 @@ import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
 import { MonthBillsCard, parseMoney } from "../components/BillReminders";
 import { Sheet } from "../components/Sheet";
+import { categoriesFor, type CategoryType } from "../utils/categories";
 
 interface AccountRow {
   id: string;
@@ -29,6 +30,7 @@ interface CategoryRow {
   id: string;
   name: string;
   emoji: string | null;
+  type?: CategoryType;
 }
 
 interface RecurringBillRow {
@@ -745,7 +747,7 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
               <label htmlFor="bill-category">Categoria (opcional)</label>
               <select id="bill-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 <option value="">Sem categoria</option>
-                {categories.map((category) => (
+                {categoriesFor(categories, "expense").map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
