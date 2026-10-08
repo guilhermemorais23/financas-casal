@@ -687,6 +687,7 @@ async function loadDocsForDateRange(
 
 export interface OwnRangeDoc {
   month: string;
+  date: string;
   amountCents: number;
   transactionType: TransactionType;
   isSecuredCardTransfer: boolean;
@@ -733,6 +734,7 @@ async function loadOwnDocsForRange(
     const data = doc.data();
     return {
       month: (data.occurredAt as string).slice(0, 7),
+      date: (data.occurredAt as string).slice(0, 10),
       amountCents: data.amountCents as number,
       transactionType: data.transactionType as TransactionType,
       isSecuredCardTransfer: Boolean(data.securedCardId),

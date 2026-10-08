@@ -8,6 +8,7 @@ import { GlobalAssistant } from "../components/GlobalAssistant";
 import { GroupSwitcher } from "../components/GroupSwitcher";
 import { Icon, type IconName } from "../components/Icon";
 import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
+import { LaunchMenu } from "../components/LaunchMenu";
 import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
 import { BILLS_TABS } from "../components/BillsTabs";
 import { FeedbackChat, useFeedbackUnread } from "../components/FeedbackChat";
@@ -97,6 +98,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const navigate = useNavigate();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isLaunchOpen, setIsLaunchOpen] = useState(false);
   const [isAdminNavOpen, setIsAdminNavOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const moreSheetRef = useRef<HTMLDivElement>(null);
@@ -400,13 +402,16 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
             Par
           </NavLink>
         )}
-        <Link
-          to="/transactions/new"
-          className={`app-bottom-nav-add${isOnNewTransaction ? " active" : ""}`}
-          aria-label="Nova despesa"
+        <button
+          type="button"
+          data-launch-toggle
+          className={`app-bottom-nav-add${isOnNewTransaction || isLaunchOpen ? " active" : ""}`}
+          aria-label="Lançar"
+          aria-expanded={isLaunchOpen}
+          onClick={() => setIsLaunchOpen((open) => !open)}
         >
           <Icon name="plus" />
-        </Link>
+        </button>
         <Link to="/contas" className={`app-bottom-nav-link${isOnBills ? " active" : ""}`}>
           <span className="app-bottom-nav-icon"><Icon name="receipt" /></span>
           Contas
@@ -503,10 +508,21 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
       {isFeedbackOpen && <FeedbackChat onClose={() => setIsFeedbackOpen(false)} />}
 
       {!isOnNewTransaction && (
-        <Link to="/transactions/new" className="global-fab" aria-label="Nova despesa" title="Nova despesa">
-          +
-        </Link>
+        <button
+          type="button"
+          data-launch-toggle
+          className={`global-fab${isLaunchOpen ? " is-open" : ""}`}
+          aria-label="Lançar"
+          aria-expanded={isLaunchOpen}
+          onClick={() => setIsLaunchOpen((open) => !open)}
+        >
+          <span className="global-fab-plus" aria-hidden="true">
+            +
+          </span>
+          <span className="global-fab-label">Lançar</span>
+        </button>
       )}
+      <LaunchMenu open={isLaunchOpen} onClose={() => setIsLaunchOpen(false)} />
 
       <GlobalAssistant isOpen={isAssistantOpen} onClose={() => setIsAssistantOpen(false)} />
     </div>

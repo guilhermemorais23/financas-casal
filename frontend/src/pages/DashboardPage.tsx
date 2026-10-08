@@ -2,13 +2,12 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { AccumulatedSpendingChart, type DailyTrendPoint } from "../components/AccumulatedSpendingChart";
+import { type DailyTrendPoint } from "../components/AccumulatedSpendingChart";
 import { AnimatedNumber } from "../components/AnimatedNumber";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { DashboardSkeleton } from "../components/Skeleton";
 import { Icon } from "../components/Icon";
-import { EmptyState } from "../components/EmptyState";
 import { CircularProgress } from "../components/CircularProgress";
 import { EditRecurringModal } from "../components/EditRecurringModal";
 import { EditTransactionModal } from "../components/EditTransactionModal";
@@ -22,7 +21,7 @@ import { repeatHref } from "../utils/quickEntry";
 import { SplitStatusPill } from "../components/SplitStatusPill";
 import { SplitSummary } from "../components/SplitSummary";
 import { AppLayout } from "../layouts/AppLayout";
-import { categoryColor, personColor } from "../utils/categoryColor";
+import { personColor } from "../utils/categoryColor";
 import {
   currentMonthParam,
   formatCurrency,
@@ -39,6 +38,8 @@ import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
 import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
 import { BillRemindersCard } from "../components/BillReminders";
+import { BalanceLineChart, InOutMonthsChart } from "../components/PainelCharts";
+import { minimumMonthlySaving } from "../utils/goals";
 
 interface AccountWithBalance {
   id: string;
@@ -153,10 +154,6 @@ interface NextInvoice {
   status?: "open" | "paid" | "empty";
 }
 
-function limitToneFor(used: number, limit: number): string {
-  const percent = limit > 0 ? (used / limit) * 100 : 0;
-  return percent >= 100 ? "over" : percent >= 80 ? "warning" : "";
-}
 
 interface MonthlyTrendPoint {
   month: string;
@@ -199,6 +196,51 @@ interface DashboardResponse {
   upcoming?: UpcomingItem[];
   trend6m: MonthlyTrendPoint[];
   alerts: AlertRow[];
+  // Painel novo (opcional: cache de versão antiga não tem).
+  heroDaily?: { day: string; balance: number }[];
+  cardsSummary?: PainelCard[];
+  goalsSummary?: PainelGoal[];
+  savedInGoals?: number;
+}
+
+interface PainelCard {
+  id: string;
+  name: string;
+  limit: string | null;
+  limitUsed: string | null;
+  limitType: "normal" | "secured";
+  statementTotal: string;
+  statementIsPaid: boolean;
+  dueDate: string;
+}
+
+interface PainelGoal {
+  id: string;
+  name: string;
+  currentAmount: string;
+  targetAmount: string;
+  deadline: string | null;
+  itemsCount: number;
+}
+
+interface PainelData {
+  heroDaily: { day: string; balance: number }[];
+  trend6m: MonthlyTrendPoint[];
+  cards: PainelCard[];
+  goals: PainelGoal[];
+  savedInGoals: number;
+}
+
+const EMPTY_PAINEL: PainelData = { heroDaily: [], trend6m: [], cards: [], goals: [], savedInGoals: 0 };
+
+function painelFrom(data: DashboardResponse): PainelData {
+  return {
+    heroDaily: data.heroDaily ?? [],
+    trend6m: data.trend6m ?? [],
+    cards: data.cardsSummary ?? [],
+    goals: data.goalsSummary ?? [],
+    savedInGoals: data.savedInGoals ?? 0,
+  };
 }
 
 interface UpcomingItem {
@@ -278,10 +320,11 @@ export function DashboardPage() {
   const [personalPrevMonthTotals, setPersonalPrevMonthTotals] = useState<MonthTotals>(
     () => readCache(monthKey("personalPrevMonthTotals")) ?? { income: 0, expense: 0 }
   );
+  const [painel, setPainel] = useState<PainelData>(() => readCache<PainelData>(monthKey("painel")) ?? EMPTY_PAINEL);
   const [recent, setRecent] = useState<TransactionListRow[]>(
     () => (readCache<TransactionListRow[]>(monthKey("recent")) ?? []).filter((row) => !isDeferredPending(`tx:${row.id}`))
   );
-  const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[]>(() => readCache(monthKey("dailyTrend")) ?? []);
+  const [, setDailyTrend] = useState<DailyTrendPoint[]>(() => readCache(monthKey("dailyTrend")) ?? []);
   const [debts, setDebts] = useState<DebtRow[]>(() => readCache(staticKey("debts")) ?? []);
   const [summary, setSummary] = useState<SummaryResponse | null>(() => readCache(monthKey("summary")));
   const [jointSummary, setJointSummary] = useState<JointSummaryResponse | null>(() =>
@@ -297,10 +340,10 @@ export function DashboardPage() {
   // Neither depends on the selected month (a goal/card due date isn't tied
   // to which month you're browsing) -- static key, same reasoning as
   // debts/balance above.
-  const [goalHighlight, setGoalHighlight] = useState<GoalHighlight | null>(() =>
+  const [, setGoalHighlight] = useState<GoalHighlight | null>(() =>
     readCache(staticKey("goalHighlight"))
   );
-  const [nextInvoice, setNextInvoice] = useState<NextInvoice | null>(() => readCache(staticKey("nextInvoice")));
+  const [, setNextInvoice] = useState<NextInvoice | null>(() => readCache(staticKey("nextInvoice")));
   const [savedInSecuredCards, setSavedInSecuredCards] = useState<number>(
     () => readCache(staticKey("savedInSecuredCards")) ?? 0
   );
@@ -319,7 +362,8 @@ export function DashboardPage() {
   const nudges = useDashboardNudges(token, month, isImportOpen || isUncatOpen);
   // A notificação do Pluggy abre o Painel com ?importar=banco.
   useEffect(() => {
-    if (searchParams.get("importar") !== "banco") return;
+    const importar = searchParams.get("importar");
+    if (importar !== "banco" && importar !== "extrato") return;
     setIsImportOpen(true);
     const next = new URLSearchParams(searchParams);
     next.delete("importar");
@@ -341,6 +385,7 @@ export function DashboardPage() {
     const mKey = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
 
     if (!warmCacheOnly) {
+      setPainel(painelFrom(data));
       setGroup(data.group);
       setPersonalMonthTotals(data.personalMonthTotals);
       setPersonalPrevMonthTotals(data.personalPrevMonthTotals);
@@ -382,6 +427,7 @@ export function DashboardPage() {
     writeCache(mKey("categoryBudgets"), data.categoryBudgets);
     writeCache(mKey("dailyTrend"), data.dailyTrend);
     writeCache(mKey("alerts"), data.alerts ?? []);
+    writeCache(mKey("painel"), painelFrom(data));
     // The whole response, one key -- lets load() below check "do we already
     // have this month?" with a single readCache instead of guessing from
     // one field. This is what prefetchMonth's warm-up actually pays off:
@@ -601,26 +647,24 @@ export function DashboardPage() {
     return { activeDebts: active, totalDebtRemaining: active.reduce((sum, debt) => sum + debt.remainingAmount, 0) };
   }, [debts]);
 
-  const { topCategories, topCategoriesTotal, uncategorizedShare } = useMemo(() => {
+  const uncategorizedShare = useMemo(() => {
     const rows = summary?.byCategory ?? [];
-    const top = rows.slice(0, 4);
     const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
     const uncategorized = Number(rows.find((row) => row.categoryId === null)?.total ?? 0);
-    return {
-      topCategories: top,
-      topCategoriesTotal: top.reduce((sum, row) => sum + Number(row.total), 0),
-      uncategorizedShare: total > 0 ? uncategorized / total : 0,
-    };
+    return total > 0 ? uncategorized / total : 0;
   }, [summary]);
+
+  const categoryRows = useMemo(() => (summary?.byCategory ?? []).slice(0, 6), [summary]);
+  const categoryMax = Math.max(1, ...categoryRows.map((row) => Number(row.total)));
 
   // "Seu dinheiro hoje": what's in the accounts this person can see (their
   // own + Nossa Conta -- the backend never sends anyone else's personal
   // balance) plus what's guardado in cartões com limite garantido.
   const visibleAccounts = group?.accounts ?? [];
   const accountsTotal = visibleAccounts.reduce((sum, account) => sum + account.balance, 0);
-  const moneyTotal = accountsTotal + savedInSecuredCards;
+  // Guardado em metas também é seu (saiu da conta, ou já estava guardado).
+  const moneyTotal = accountsTotal + savedInSecuredCards + painel.savedInGoals;
 
-  const upcomingToPay = upcoming.filter((item) => item.direction === "pay").reduce((sum, item) => sum + item.amount, 0);
 
   // "Dá pra gastar por dia": only for the month actually being lived --
   // browsing a past month, "até o fim do mês" means nothing.
@@ -689,12 +733,11 @@ export function DashboardPage() {
 
   return (
     <AppLayout wide>
-      <div className="dashboard">
-        <div className="section-header" style={{ alignItems: "flex-start" }}>
+      <div className="dashboard painel">
+        <div className="painel-top">
           <div className="dashboard-greeting">
             <h1>Olá, {user?.displayName?.split(" ")[0]}</h1>
             <p className="card-subtitle">{monthLabel}</p>
-            <FinancialHealthBadge monthlyIncome={income} monthlyExpense={expense} />
           </div>
           <MonthPicker value={month} onChange={setMonth} isLoading={isLoading} />
         </div>
@@ -708,240 +751,331 @@ export function DashboardPage() {
         </div>
 
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
-        {firstImport.show && (
-          <div className="card first-import">
-            <span className="first-import-icon" aria-hidden="true">
-              <Icon name="upload" />
-            </span>
-            <div className="first-import-text">
-              <p className="card-title">Comece pelo extrato do banco</p>
-              <p className="card-subtitle">
-                Mande o PDF do extrato (ou OFX/CSV) e o PAR. monta o mês de vocês em poucos minutos: você só diz o que é cada nome, e ele
-                lembra nas próximas vezes.
-              </p>
-              <div className="first-import-actions">
-                <button type="button" className="btn btn-primary" onClick={() => setIsImportOpen(true)}>
-                  Importar extrato
-                </button>
-                <button type="button" className="btn btn-outline" onClick={firstImport.dismiss}>
-                  Prefiro lançar na mão
-                </button>
+          {firstImport.show && (
+            <div className="card first-import">
+              <span className="first-import-icon" aria-hidden="true">
+                <Icon name="upload" />
+              </span>
+              <div className="first-import-text">
+                <p className="card-title">Comece pelo extrato do banco</p>
+                <p className="card-subtitle">
+                  Mande o PDF do extrato (ou OFX/CSV) e o PAR. monta o mês de vocês em poucos minutos: você só diz o que é cada nome, e
+                  ele lembra nas próximas vezes.
+                </p>
+                <div className="first-import-actions">
+                  <button type="button" className="btn btn-primary" onClick={() => setIsImportOpen(true)}>
+                    Importar extrato
+                  </button>
+                  <button type="button" className="btn btn-outline" onClick={firstImport.dismiss}>
+                    Prefiro lançar na mão
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-        {(nudges.bankTotal > 0 || nudges.uncategorized > 0) && (
-          <div className="dashboard-nudges">
-            {nudges.bankTotal > 0 && (
-              <button type="button" className="dashboard-nudge" onClick={() => setIsImportOpen(true)}>
-                <span className="dashboard-nudge-icon" aria-hidden="true">
-                  <Icon name="bank" />
-                </span>
-                <span className="dashboard-nudge-text">
-                  <strong>
-                    {nudges.bankTotal} {nudges.bankTotal === 1 ? "lançamento novo" : "lançamentos novos"} do banco
-                  </strong>
-                  <small>{nudges.banks.join(", ")} · toque pra revisar e importar</small>
-                </span>
-                <Icon name="chevron" className="icon dashboard-nudge-chevron" />
-              </button>
-            )}
-            {nudges.uncategorized > 0 && (
-              <button type="button" className="dashboard-nudge" onClick={() => setIsUncatOpen(true)}>
-                <span className="dashboard-nudge-icon warn" aria-hidden="true">
-                  <Icon name="alert" />
-                </span>
-                <span className="dashboard-nudge-text">
-                  <strong>
-                    {nudges.uncategorized} {nudges.uncategorized === 1 ? "gasto sem categoria" : "gastos sem categoria"}
-                  </strong>
-                  <small>Ficam de fora dos relatórios · toque pra organizar</small>
-                </span>
-                <Icon name="chevron" className="icon dashboard-nudge-chevron" />
-              </button>
-            )}
-          </div>
-        )}
-        {month === currentMonthParam() && <BillRemindersCard onChanged={() => load(month, { skipCache: true, silent: true })} />}
-        {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
-        <div className="stat-card wide">
-          {/* O número grande é o saldo do mês (entrou - saiu), não o
-              saldo acumulado das contas: quem lança só o salário todo mês e
-              não lança todo gasto veria o saldo crescer mês a mês sem ter
-              esse dinheiro de verdade. O saldo das contas fica no card
-              "Onde está seu dinheiro". */}
-          <p className="label">
-            {dailyAllowance !== null ? `Saldo de ${monthLongName(month)}` : `Saldo de ${monthLabel}`}
-          </p>
-          <p className={`value${monthLeft < 0 ? " negative" : ""}`}>
-            <AnimatedNumber value={monthLeft} />
-          </p>
-          {dailyAllowance !== null && dailyAllowance > 0 && (
-            <p className="hero-line">
-              Dá <strong>{formatCurrency(dailyAllowance)} por dia</strong> até o dia {lastDayOfMonth}.
-            </p>
           )}
-          {loansOutstanding > 0 && (
-            <p className="hero-note">{formatCurrency(loansOutstanding)} emprestados ainda vão voltar pra você.</p>
-          )}
-          {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
-            <p className="hero-note">Você já gastou mais do que entrou este mês.</p>
-          )}
-          {savedInCards !== 0 && (
-            <p className="hero-note">
-              {savedInCards > 0
-                ? `${formatCurrency(savedInCards)} foram guardados no cartão. Não é gasto, esse dinheiro continua seu.`
-                : `${formatCurrency(-savedInCards)} voltaram do cartão com limite garantido.`}
-            </p>
-          )}
-          {lentOut !== 0 && (
-            <p className="hero-note">
-              {lentOut > 0
-                ? `${formatCurrency(lentOut)} emprestados este mês. Não é gasto, vai voltar pra você.`
-                : `${formatCurrency(-lentOut)} de empréstimos voltaram pra você este mês.`}
-            </p>
-          )}
-        </div>
+          {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
 
-        <div className="stat-row wrap">
-          <div className="stat-box tone-good">
-            <p className="label">Entrou no mês</p>
-            <p className="value-sm income-text">{formatCurrency(income)}</p>
-            {incomeDelta !== null && (
-              <p className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
-                {incomeDelta >= 0 ? "+" : ""}
-                {Math.round(incomeDelta)}% vs {prevMonthName}
-              </p>
-            )}
-          </div>
-          <div className="stat-box tone-warm">
-            <p className="label">Saiu no mês</p>
-            <p className="value-sm">{formatCurrency(expense)}</p>
-            {expenseDelta !== null && (
-              <p className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
-                {expenseDelta >= 0 ? "+" : ""}
-                {Math.round(expenseDelta)}% vs {prevMonthName}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {jointAccount && orderedMembers.length > 1 && (
-          <SplitSummary
-            payers={payers}
-            accountName={jointAccount.name}
-            currentUserId={user?.id}
-            memberName={memberName}
-            settlements={balance?.balances}
-            settleHref="/par"
-          />
-        )}
-
-        <div className="dashboard-actions">
-          <Link to="/transactions/new" className="btn btn-primary">
-            Nova despesa
-          </Link>
-          <Link to="/transactions/new?tipo=receita" className="btn btn-outline">
-            Nova receita
-          </Link>
-{!firstImport.show && (
-          <button type="button" className="btn btn-outline dashboard-import" onClick={() => setIsImportOpen(true)}>
-            <Icon name="upload" />
-            Importar extrato do banco
-          </button>
-          )}
-        </div>
-        {isUncatOpen && (
-          <UncategorizedModal
-            month={month}
-            onClose={() => setIsUncatOpen(false)}
-            onSaved={() => load(month, { skipCache: true, silent: true })}
-          />
-        )}
-        {isImportOpen && (
-          <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { skipCache: true, silent: true })} />
-        )}
-
-        <section className="upcoming-section" aria-label="Vence em 7 dias">
-          <div className="section-header">
-            <h2 className="section-title">Vence em 7 dias</h2>
-            {upcomingToPay > 0 ? (
-              <span className="split-summary-total">{formatCurrency(upcomingToPay)}</span>
-            ) : (
-              <Link to="/cards" className="link">
-                Ver contas
-              </Link>
-            )}
-          </div>
-          {upcoming.length === 0 ? (
-            <p className="empty-state">Nada pra pagar ou receber nos próximos 7 dias.</p>
-          ) : (
-            <ul className="upcoming-list">
-              {upcoming.map((item) => (
-                <li key={item.id}>
-                  <Link to={item.link} className={`upcoming-row${item.daysUntil < 0 ? " overdue" : ""}`}>
-                    <span className={`upcoming-date ${item.direction}`}>
-                      <strong>{item.dueDate.slice(8, 10)}</strong>
-                      <small>{MONTH_SHORT[Number(item.dueDate.slice(5, 7)) - 1]}</small>
+          {/* 1. O mês e o que precisa de atenção */}
+          <div className="painel-grid painel-hero-row">
+            <section className="card painel-hero" aria-label="Resumo do mês">
+              <div className="painel-hero-top">
+                <div>
+                  {/* O número grande é o saldo do mês (entrou - saiu), não o
+                      saldo acumulado das contas: quem lança só o salário todo
+                      mês e não lança todo gasto veria o saldo crescer mês a mês
+                      sem ter esse dinheiro de verdade. O saldo das contas fica
+                      em "Onde está seu dinheiro". */}
+                  <p className="painel-kicker">Saldo de {monthLongName(month)}</p>
+                  <p className={`painel-big${monthLeft < 0 ? " negative" : ""}`}>
+                    <AnimatedNumber value={monthLeft} />
+                  </p>
+                  {dailyAllowance !== null && dailyAllowance > 0 && (
+                    <p className="hero-line">
+                      Dá <strong>{formatCurrency(dailyAllowance)} por dia</strong> até o dia {lastDayOfMonth}.
+                    </p>
+                  )}
+                  {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
+                    <p className="hero-note">Você já gastou mais do que entrou este mês.</p>
+                  )}
+                </div>
+                <FinancialHealthBadge monthlyIncome={income} monthlyExpense={expense} />
+              </div>
+              {painel.heroDaily.length > 0 && (
+                <BalanceLineChart
+                  points={painel.heroDaily}
+                  todayDay={month === currentMonthParam() ? new Date().getDate() : null}
+                />
+              )}
+              <div className="painel-kpis">
+                <div className="painel-kpi">
+                  <span className="painel-kpi-label">Entrou</span>
+                  <span className="painel-kpi-value income-text">{formatCurrency(income)}</span>
+                  {incomeDelta !== null && (
+                    <span className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
+                      {incomeDelta >= 0 ? "+" : ""}
+                      {Math.round(incomeDelta)}% vs {prevMonthName}
                     </span>
-                    <span className="upcoming-info">
-                      <span className="text-truncate upcoming-title">{item.title}</span>
-                      <span className={`upcoming-when${item.daysUntil <= 1 ? " soon" : ""}`}>
-                        {upcomingWhen(item)} · {item.detail}
+                  )}
+                </div>
+                <div className="painel-kpi">
+                  <span className="painel-kpi-label">Saiu</span>
+                  <span className="painel-kpi-value">{formatCurrency(expense)}</span>
+                  {expenseDelta !== null && (
+                    <span className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
+                      {expenseDelta >= 0 ? "+" : ""}
+                      {Math.round(expenseDelta)}% vs {prevMonthName}
+                    </span>
+                  )}
+                </div>
+                <div className="painel-kpi">
+                  <span className="painel-kpi-label">Guardado</span>
+                  <span className="painel-kpi-value">{formatCurrency(savedInCards)}</span>
+                  <span className="painel-kpi-sub">metas e cartão garantido</span>
+                </div>
+              </div>
+              {(loansOutstanding > 0 || lentOut !== 0) && (
+                <p className="hero-note">
+                  {lentOut > 0
+                    ? `${formatCurrency(lentOut)} emprestados este mês. Não é gasto, vai voltar pra você.`
+                    : lentOut < 0
+                    ? `${formatCurrency(-lentOut)} de empréstimos voltaram pra você este mês.`
+                    : `${formatCurrency(loansOutstanding)} emprestados ainda vão voltar pra você.`}
+                </p>
+              )}
+            </section>
+
+            <section className="card painel-attention" aria-label="Precisa de atenção">
+              <div className="section-header">
+                <p className="card-title">Precisa de atenção</p>
+                <Link to="/a-pagar" className="link">
+                  Ver tudo
+                </Link>
+              </div>
+              {month === currentMonthParam() && <BillRemindersCard onChanged={() => load(month, { skipCache: true, silent: true })} />}
+              <ul className="painel-att-list">
+                {nudges.bankTotal > 0 && (
+                  <li>
+                    <button type="button" className="painel-att-row" onClick={() => setIsImportOpen(true)}>
+                      <span className="painel-att-badge" aria-hidden="true">
+                        <Icon name="bank" />
                       </span>
-                    </span>
-                    <span className={`upcoming-amount ${item.direction}${item.amountMode ? ` ${item.amountMode}` : ""}`}>
-                      {item.direction === "receive" ? "+" : ""}
-                      {item.amountMode === "unknown" && item.amount === 0
-                        ? "sem valor"
-                        : `${item.amountMode ? "≈ " : ""}${formatCurrency(item.amount)}`}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {(cap !== null || totalDebtRemaining > 0) && (
-          <div className="stat-row wrap">
-            {cap !== null && (
-              <div className="stat-box">
-                <p className="label">Orçamento usado</p>
-                <p className="value-sm">{Math.round(budgetRawPercent)}%</p>
-              </div>
-            )}
-            {totalDebtRemaining > 0 && (
-              <div className="stat-box">
-                <p className="label">Dívidas em aberto</p>
-                <p className="value-sm">{formatCurrency(totalDebtRemaining)}</p>
-              </div>
-            )}
+                      <span className="painel-att-text">
+                        <strong>
+                          {nudges.bankTotal} {nudges.bankTotal === 1 ? "lançamento novo" : "lançamentos novos"} do banco
+                        </strong>
+                        <small>{nudges.banks.join(", ")} · revisar e importar</small>
+                      </span>
+                      <Icon name="chevron" className="icon painel-att-chevron" />
+                    </button>
+                  </li>
+                )}
+                {nudges.uncategorized > 0 && (
+                  <li>
+                    <button type="button" className="painel-att-row" onClick={() => setIsUncatOpen(true)}>
+                      <span className="painel-att-badge warn" aria-hidden="true">
+                        <Icon name="alert" />
+                      </span>
+                      <span className="painel-att-text">
+                        <strong>
+                          {nudges.uncategorized} {nudges.uncategorized === 1 ? "gasto sem categoria" : "gastos sem categoria"}
+                        </strong>
+                        <small>ficam fora dos relatórios · organizar</small>
+                      </span>
+                      <Icon name="chevron" className="icon painel-att-chevron" />
+                    </button>
+                  </li>
+                )}
+                {alerts.map((alert) => (
+                  <li key={alert.id}>
+                    <div className={`painel-att-row is-static severity-${alert.severity}`}>
+                      <span className={`painel-att-badge${alert.severity === "critical" ? " bad" : " warn"}`} aria-hidden="true">
+                        <Icon name="alert" />
+                      </span>
+                      <span className="painel-att-text">
+                        <strong>{alert.message}</strong>
+                      </span>
+                    </div>
+                  </li>
+                ))}
+                {upcoming.map((item) => (
+                  <li key={item.id}>
+                    <Link to={item.link} className={`painel-att-row${item.daysUntil < 0 ? " overdue" : ""}`}>
+                      <span className={`painel-att-date${item.daysUntil < 0 ? " bad" : item.daysUntil <= 3 ? " warn" : ""}`}>
+                        <strong>{item.dueDate.slice(8, 10)}</strong>
+                        <small>{MONTH_SHORT[Number(item.dueDate.slice(5, 7)) - 1]}</small>
+                      </span>
+                      <span className="painel-att-text">
+                        <strong className="text-truncate">{item.title}</strong>
+                        <small>
+                          {upcomingWhen(item)} · {item.detail}
+                        </small>
+                      </span>
+                      <span className={`painel-att-amount ${item.direction}${item.amountMode ? ` ${item.amountMode}` : ""}`}>
+                        {item.direction === "receive" ? "+" : ""}
+                        {item.amountMode === "unknown" && item.amount === 0
+                          ? "sem valor"
+                          : `${item.amountMode ? "≈ " : ""}${formatCurrency(item.amount)}`}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {nudges.bankTotal === 0 && nudges.uncategorized === 0 && alerts.length === 0 && upcoming.length === 0 && (
+                <p className="empty-state">Tudo em dia: nada vence nos próximos 7 dias.</p>
+              )}
+            </section>
           </div>
-        )}
 
-        <div className="dashboard-grid">
-          <div className="dashboard-col">
-            {alerts.length > 0 && (
-              <div className="card">
-                <p className="card-title">Alertas</p>
-                <ul className="alerts-list">
-                  {alerts.map((alert) => (
-                    <li key={alert.id} className={`alert-item severity-${alert.severity}`}>
-                      {alert.message}
-                    </li>
-                  ))}
-                </ul>
+          {isUncatOpen && (
+            <UncategorizedModal
+              month={month}
+              onClose={() => setIsUncatOpen(false)}
+              onSaved={() => load(month, { skipCache: true, silent: true })}
+            />
+          )}
+          {isImportOpen && (
+            <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { skipCache: true, silent: true })} />
+          )}
+
+          {/* 2. Dinheiro, cartões e orçamento */}
+          <div className="painel-grid painel-3">
+            <section className="card money-card" aria-label="Onde está seu dinheiro">
+              <p className="card-title">Onde está seu dinheiro</p>
+              <p className="money-card-total">{formatCurrency(moneyTotal)}</p>
+              <ul className="money-card-list">
+                {visibleAccounts.map((account) => (
+                  <li key={account.id}>
+                    <span>{account.name}</span>
+                    <strong className={account.balance < 0 ? "danger-text" : ""}>{formatCurrency(account.balance)}</strong>
+                  </li>
+                ))}
+                {painel.savedInGoals > 0 && (
+                  <li>
+                    <Link to="/goals" className="link">
+                      Guardado em metas
+                    </Link>
+                    <strong>{formatCurrency(painel.savedInGoals)}</strong>
+                  </li>
+                )}
+                {savedInSecuredCards > 0 && (
+                  <li>
+                    <Link to="/cards" className="link">
+                      Guardado em cartões
+                    </Link>
+                    <strong>{formatCurrency(savedInSecuredCards)}</strong>
+                  </li>
+                )}
+                {loansOutstanding > 0 && (
+                  <li>
+                    <Link to="/loans" className="link">
+                      Vão te pagar
+                    </Link>
+                    <strong>{formatCurrency(loansOutstanding)}</strong>
+                  </li>
+                )}
+                {owedToPeople > 0 && (
+                  <li>
+                    <Link to="/loans?lado=devo" className="link">
+                      Você deve pra pessoas
+                    </Link>
+                    <strong className="owe-text">−{formatCurrency(owedToPeople)}</strong>
+                  </li>
+                )}
+                {totalDebtRemaining > 0 && (
+                  <li>
+                    <Link to="/a-pagar?aba=dividas" className="link">
+                      Dívidas em aberto
+                    </Link>
+                    <strong className="owe-text">−{formatCurrency(totalDebtRemaining)}</strong>
+                  </li>
+                )}
+              </ul>
+              {/* O outro lado: tira dívidas e faturas/parcelas de cartão em
+                  aberto, pra o número não mostrar só o que vai entrar. */}
+              {totalDebtRemaining + owedOnCards + owedToPeople > 0 && (
+                <p className="money-card-future money-card-owed">
+                  Depois de pagar o que deve:{" "}
+                  <strong
+                    className={
+                      moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople < 0 ? "danger-text" : ""
+                    }
+                  >
+                    {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople)}
+                  </strong>
+                </p>
+              )}
+              <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>
+            </section>
+
+            <section className="card painel-cards" aria-label="Cartões">
+              <div className="section-header">
+                <p className="card-title">Cartões</p>
+                <Link to="/cards" className="link">
+                  Ver cartões
+                </Link>
               </div>
-            )}
-            <div className={`card budget-card${cap ? "" : " is-empty"}`}>
+              {painel.cards.length === 0 ? (
+                <p className="empty-state">
+                  Nenhum cartão ainda.{" "}
+                  <Link to="/cards" className="link">
+                    Cadastrar
+                  </Link>
+                </p>
+              ) : (
+                <ul className="painel-card-list">
+                  {painel.cards.map((card) => {
+                    const limit = card.limit !== null ? Number(card.limit) : null;
+                    const used = card.limitUsed !== null ? Number(card.limitUsed) : null;
+                    const percent = limit && used !== null ? (used / limit) * 100 : 0;
+                    const tone = percent >= 100 ? "over" : percent >= 80 ? "warning" : "ok";
+                    return (
+                      <li key={card.id}>
+                        <div className="painel-card-top">
+                          <strong>{card.name}</strong>
+                          {limit !== null && used !== null ? (
+                            <span className={`painel-card-state ${tone}`}>{Math.round(percent)}% do limite</span>
+                          ) : (
+                            <Link to="/cards" className="link">
+                              Cadastrar limite
+                            </Link>
+                          )}
+                        </div>
+                        {limit !== null && used !== null && (
+                          <div className="progress-track card-limit-track" role="img" aria-label={`${card.name}: ${Math.round(percent)}% do limite usado`}>
+                            <div className={`progress-fill ${tone === "ok" ? "" : tone}`} style={{ width: `${Math.min(100, percent)}%` }} />
+                          </div>
+                        )}
+                        <div className="painel-card-sub">
+                          {limit !== null && used !== null ? (
+                            <>
+                              <span>
+                                {formatCurrency(used)} de {formatCurrency(limit)}
+                              </span>
+                              <span>{used >= limit ? `passou ${formatCurrency(used - limit)}` : `sobram ${formatCurrency(limit - used)}`}</span>
+                            </>
+                          ) : (
+                            <span>
+                              {card.statementIsPaid
+                                ? "Fatura paga"
+                                : Number(card.statementTotal) > 0
+                                ? `Fatura de ${formatCurrency(Number(card.statementTotal))} · ${dueLabel(daysUntil(card.dueDate))}`
+                                : "Sem compras na fatura atual"}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+
+            <section className={`card budget-card${cap ? "" : " is-empty"}`} aria-label="Orçamento do mês">
               <div className="budget-header">
                 <p className="card-title">Orçamento do mês</p>
-                {!cap && (
-                  <Link to="/account" className="link">
-                    Definir teto
-                  </Link>
-                )}
+                <Link to="/account" className="link">
+                  {cap ? "Ajustar" : "Definir teto"}
+                </Link>
               </div>
               {cap ? (
                 <div className="budget-ring-row">
@@ -976,79 +1110,16 @@ export function DashboardPage() {
               ) : (
                 <p className="empty-state">Defina um teto mensal na Conta pra acompanhar aqui.</p>
               )}
-            </div>
+            </section>
+          </div>
 
-            {(goalHighlight || nextInvoice) && (
-              <div className="card">
-                <div className="dashboard-mini-grid">
-                  {goalHighlight && (
-                    <Link to="/goals" className="dashboard-mini-widget">
-                      <CircularProgress
-                        percent={
-                          (Number(goalHighlight.currentAmount) / Number(goalHighlight.targetAmount)) * 100
-                        }
-                        size={48}
-                        strokeWidth={5}
-                        color="var(--color-primary)"
-                      >
-                        <span className="dashboard-mini-emoji">{initialOf(goalHighlight.name)}</span>
-                      </CircularProgress>
-                      <div className="dashboard-mini-text">
-                        <p className="dashboard-mini-title">Meta</p>
-                        <p className="dashboard-mini-name">{goalHighlight.name}</p>
-                        <p className="dashboard-mini-sub">
-                          {formatCurrency(Number(goalHighlight.currentAmount))} de{" "}
-                          {formatCurrency(Number(goalHighlight.targetAmount))}
-                        </p>
-                      </div>
-                    </Link>
-                  )}
-                  {nextInvoice && (
-                    <Link to="/cards" className="dashboard-mini-widget">
-                      <div className="dashboard-mini-text">
-                        <p className="dashboard-mini-title">
-                          {(nextInvoice.status ?? "open") === "open" ? "Próxima fatura" : "Cartão"}
-                        </p>
-                        <p className="dashboard-mini-name">{nextInvoice.cardName}</p>
-                        {(nextInvoice.status ?? "open") === "open" ? (
-                          <p
-                            className={`dashboard-mini-sub${
-                              daysUntil(nextInvoice.dueDate) <= 3 ? " danger-text" : ""
-                            }`}
-                          >
-                            {formatCurrency(Number(nextInvoice.total))} · {dueLabel(daysUntil(nextInvoice.dueDate))}
-                          </p>
-                        ) : (
-                          <p className="dashboard-mini-sub">
-                            {nextInvoice.status === "paid" ? "Fatura paga" : "Sem compras na fatura atual"}
-                          </p>
-                        )}
-                        {nextInvoice.limit !== null && nextInvoice.limitUsed !== null && (
-                          <>
-                            <div className="progress-track card-limit-track">
-                              <div
-                                className={`progress-fill ${limitToneFor(Number(nextInvoice.limitUsed), Number(nextInvoice.limit))}`}
-                                style={{ width: `${Math.min(100, (Number(nextInvoice.limitUsed) / Number(nextInvoice.limit)) * 100)}%` }}
-                              />
-                            </div>
-                            <p className="dashboard-mini-sub">
-                              Sobrou {formatCurrency(Math.max(0, Number(nextInvoice.limit) - Number(nextInvoice.limitUsed)))} de{" "}
-                              {formatCurrency(Number(nextInvoice.limit))}
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </Link>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="card">
+          {/* 3. Pra onde foi o dinheiro */}
+          <div className="painel-grid painel-2">
+            <section className="card" aria-label="Pra onde foi o dinheiro">
               <div className="section-header">
-                <p className="card-title">Maiores gastos do mês</p>
+                <p className="card-title">Pra onde foi o dinheiro</p>
                 <Link to="/reports" className="link">
-                  Ver relatório
+                  Relatório
                 </Link>
               </div>
               {uncategorizedShare >= 0.5 && (
@@ -1056,190 +1127,123 @@ export function DashboardPage() {
                   <Icon name="spark" />
                   <span>
                     {Math.round(uncategorizedShare * 100)}% dos gastos estão sem categoria.{" "}
-                    <Link to="/reports" className="link">
-                      Categorize no extrato
-                    </Link>{" "}
+                    <button type="button" className="link-button" onClick={() => setIsUncatOpen(true)}>
+                      Organizar
+                    </button>{" "}
                     pra ver pra onde o dinheiro vai.
                   </span>
                 </p>
               )}
-              {topCategories.length === 0 ? (
+              {categoryRows.length === 0 ? (
                 <p className="empty-state">Nenhuma despesa neste mês.</p>
               ) : (
-                <div className="category-gauge-grid">
-                  {topCategories.map((row) => {
+                <ul className="painel-cat-list">
+                  {categoryRows.map((row) => {
                     const value = Number(row.total);
-                    const percent =
-                      topCategoriesTotal > 0 ? Math.round((value / topCategoriesTotal) * 100) : 0;
-                    const color = categoryColor(row.categoryId);
                     const categoryCap = row.categoryId ? categoryCapById.get(row.categoryId) : undefined;
-                    const capRawPercent = categoryCap ? (value / categoryCap) * 100 : 0;
-                    const capSeverity = capRawPercent >= 100 ? "over" : capRawPercent >= 80 ? "warning" : "good";
+                    const capPercent = categoryCap ? (value / categoryCap) * 100 : 0;
+                    const capTone = capPercent >= 100 ? "over" : capPercent >= 80 ? "warning" : "";
                     return (
-                      <div className="category-gauge-item" key={row.categoryId ?? "none"}>
-                        {row.categoryId ? (
-                          <CircularProgress percent={percent} size={72} strokeWidth={7} color={color}>
-                            <span className="category-gauge-emoji">{initialOf(row.categoryName)}</span>
-                          </CircularProgress>
-                        ) : (
-                          // "Sem categoria" isn't a category to track against
-                          // a teto -- a colored progress ring here implied a
-                          // goal that doesn't exist. A plain dashed circle
-                          // reads as "uncategorized", not as a broken gauge.
-                          <div className="category-gauge-uncategorized" style={{ width: 72, height: 72 }}>
-                            <span className="category-gauge-emoji">?</span>
-                          </div>
+                      <li key={row.categoryId ?? "none"}>
+                        <span className="painel-cat-name">{row.categoryName ?? "Sem categoria"}</span>
+                        <span className="painel-cat-track" aria-hidden="true">
+                          <span style={{ width: `${Math.max(2, (value / categoryMax) * 100)}%` }} />
+                        </span>
+                        <span className="painel-cat-value">{formatCurrency(value)}</span>
+                        {categoryCap !== undefined && (
+                          <span className={`painel-cat-cap ${capTone}`}>
+                            {Math.round(capPercent)}% do teto de {formatCurrency(categoryCap)}
+                          </span>
                         )}
-                        <span className="category-gauge-name">{row.categoryName ?? "Sem categoria"}</span>
-                        <span className="category-gauge-amount">{formatCurrency(value)}</span>
-                        {categoryCap ? (
-                          <>
-                            <div className="category-gauge-bar-track">
-                              <div
-                                className="category-gauge-bar-fill"
-                                style={{
-                                  width: `${Math.min(100, capRawPercent)}%`,
-                                  background:
-                                    capSeverity === "over"
-                                      ? "var(--status-critical)"
-                                      : capSeverity === "warning"
-                                        ? "var(--status-warning)"
-                                        : "var(--success-text)",
-                                }}
-                              />
-                            </div>
-                            <span className={`category-gauge-bar-label ${capSeverity}`}>
-                              {Math.round(capRawPercent)}% de {formatCurrency(categoryCap)}
-                            </span>
-                          </>
-                        ) : (
-                          row.categoryId && <span className="category-gauge-no-cap">sem teto definido</span>
-                        )}
-                      </div>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               )}
-            </div>
-
-            <div className="card">
+            </section>
+            <section className="card" aria-label="Entrou e saiu nos últimos 6 meses">
               <div className="section-header">
-                <p className="card-title">Dívidas</p>
-                <Link to="/a-pagar?aba=dividas" className="link">
-                  Ver tudo
-                </Link>
+                <p className="card-title">Entrou e saiu</p>
+                <span className="card-subtitle">últimos 6 meses</span>
               </div>
-              {activeDebts.length === 0 ? (
-                <EmptyState>Nenhuma dívida pendente.</EmptyState>
+              <div className="painel-legend">
+                <span>
+                  <i style={{ background: "var(--series-1)" }} />
+                  Entrou
+                </span>
+                <span>
+                  <i style={{ background: "var(--series-2)" }} />
+                  Saiu
+                </span>
+              </div>
+              {painel.trend6m.length > 0 ? (
+                <InOutMonthsChart months={painel.trend6m.map((point) => ({ month: point.month, income: point.income, expense: point.expense }))} />
               ) : (
-                <>
-                  <p className="value-sm danger-text">{formatCurrency(totalDebtRemaining)}</p>
-                  <p className="card-subtitle" style={{ marginBottom: "0.9rem" }}>
-                    pendente em {activeDebts.length} dívida{activeDebts.length > 1 ? "s" : ""}
-                  </p>
-                  <ul className="category-breakdown">
-                    {activeDebts.slice(0, 3).map((debt) => {
-                      const percent = Math.round((debt.paidAmount / Number(debt.totalAmount)) * 100);
-                      return (
-                        <li key={debt.id}>
-                          <div className="category-row-header">
-                            <span>{debt.name}</span>
-                            <span className="value">{formatCurrency(debt.remainingAmount)}</span>
-                          </div>
-                          <div className="progress-track thin">
-                            <div className="progress-fill" style={{ width: `${percent}%` }} />
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </>
+                <p className="empty-state">Sem lançamentos nos últimos meses.</p>
               )}
-            </div>
+            </section>
           </div>
 
-          <div className="dashboard-col">
-            <div className="card money-card">
-              <p className="card-title">Onde está seu dinheiro</p>
-              <p className="money-card-total">{formatCurrency(moneyTotal)}</p>
-              <ul className="money-card-list">
-                {visibleAccounts.map((account) => (
-                  <li key={account.id}>
-                    <span>
-                      {account.name}
-                    </span>
-                    <strong className={account.balance < 0 ? "danger-text" : ""}>{formatCurrency(account.balance)}</strong>
-                  </li>
-                ))}
-                {savedInSecuredCards > 0 && (
-                  <li>
-                    <Link to="/cards" className="link">
-                      Guardado em cartões
-                    </Link>
-                    <strong>{formatCurrency(savedInSecuredCards)}</strong>
-                  </li>
-                )}
-                {loansOutstanding > 0 && (
-                  <li>
-                    <Link to="/loans" className="link">
-                      Vão te pagar
-                    </Link>
-                    <strong>{formatCurrency(loansOutstanding)}</strong>
-                  </li>
-                )}
-                {owedToPeople > 0 && (
-                  <li>
-                    <Link to="/loans?lado=devo" className="link">
-                      Você deve pra pessoas
-                    </Link>
-                    <strong className="owe-text">−{formatCurrency(owedToPeople)}</strong>
-                  </li>
-                )}
-              </ul>
-              {loansOutstanding > 0 && (
-                <p className="money-card-future">
-                  Quando receber tudo: <strong>{formatCurrency(moneyTotal + loansOutstanding)}</strong>
-                </p>
-              )}
-              {/* O outro lado: tira dívidas e faturas/parcelas de cartão em
-                  aberto, pra o número não mostrar só o que vai entrar. */}
-              {totalDebtRemaining + owedOnCards + owedToPeople > 0 && (
-                <p className="money-card-future money-card-owed">
-                  Depois de pagar o que deve:{" "}
-                  <strong
-                    className={
-                      moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople < 0 ? "danger-text" : ""
-                    }
-                  >
-                    {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople)}
-                  </strong>
-                  <span className="money-card-future-note">
-                    Tira {formatCurrency(totalDebtRemaining + owedOnCards + owedToPeople)} de{" "}
-                    {owedToPeople > 0 ? "dívidas, cartões e empréstimos que você pegou" : "dívidas e cartões"}
-                  </span>
-                </p>
-              )}
-              <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>
-            </div>
-            {dailyTrend.length > 0 && (
-              <div className="card">
-                <p className="card-title">Gastos acumulados</p>
-                <p className="card-subtitle">
-                  {monthLongName(month)} · {user?.displayName?.split(" ")[0]}
-                </p>
-                <AccumulatedSpendingChart points={dailyTrend} />
-              </div>
-            )}
-
-            <div className="card">
+          {/* 4. Metas e o extrato */}
+          <div className="painel-grid painel-2">
+            <section className="card" aria-label="Metas">
               <div className="section-header">
-                <p className="card-title">Extrato do mês</p>
+                <p className="card-title">Metas</p>
+                <Link to="/goals" className="link">
+                  Ver metas
+                </Link>
+              </div>
+              {painel.goals.length === 0 ? (
+                <p className="empty-state">
+                  Nenhuma meta em andamento.{" "}
+                  <Link to="/goals" className="link">
+                    Criar uma
+                  </Link>
+                </p>
+              ) : (
+                <ul className="painel-goal-list">
+                  {painel.goals.map((goal) => {
+                    const current = Number(goal.currentAmount);
+                    const target = Number(goal.targetAmount);
+                    const monthly = minimumMonthlySaving(target, current, goal.deadline);
+                    return (
+                      <li key={goal.id}>
+                        <Link to="/goals" className="painel-goal">
+                          <span className="painel-goal-icon">{initialOf(goal.name)}</span>
+                          <span className="painel-goal-body">
+                            <span className="painel-goal-top">
+                              <strong>{goal.name}</strong>
+                              <span>
+                                {formatCurrency(current)} de {formatCurrency(target)}
+                              </span>
+                            </span>
+                            <span className="progress-track thin">
+                              <span className="progress-fill" style={{ width: `${target > 0 ? Math.min(100, (current / target) * 100) : 0}%` }} />
+                            </span>
+                            {monthly && (
+                              <small>
+                                Guarde {formatCurrency(monthly.perMonth)}/mês pra chegar no prazo
+                                {goal.itemsCount > 0 ? ` · ${goal.itemsCount} submetas` : ""}
+                              </small>
+                            )}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+
+            <section className="card" aria-label="Últimos lançamentos">
+              <div className="section-header">
+                <p className="card-title">Últimos lançamentos</p>
                 <Link to="/reports" className="link">
-                  Ver tudo
+                  Extrato
                 </Link>
               </div>
               {recent.length === 0 ? (
-                <p className="empty-state">Nenhuma despesa lançada neste mês.</p>
+                <p className="empty-state">Nenhum lançamento neste mês.</p>
               ) : (
                 <ul className="transaction-list">
                   {recentGroups.map((dayGroup) => (
@@ -1247,15 +1251,15 @@ export function DashboardPage() {
                       <li className="date-group-header">{dayGroup.label}</li>
                       {dayGroup.items.map((tx) => (
                         <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
-                          <span
-                            className="transaction-icon"
-                          >
-                            {initialOf(tx.categoryName ?? tx.description)}
-                          </span>
+                          <span className="transaction-icon">{initialOf(tx.categoryName ?? tx.description)}</span>
                           <div className="transaction-info">
                             <span className="transaction-desc">
                               <span className="text-truncate">{tx.description}</span>
-                              {tx.recurringGroupId && <span className="badge recurring-badge" title="Recorrente">Mensal</span>}
+                              {tx.recurringGroupId && (
+                                <span className="badge recurring-badge" title="Recorrente">
+                                  Mensal
+                                </span>
+                              )}
                             </span>
                             <span className="transaction-meta">
                               <span className="text-truncate">
@@ -1281,12 +1285,7 @@ export function DashboardPage() {
                           </span>
                           {!tx.securedCardId && !tx.loanId && !tx.goalId && (
                             <div className="transaction-row-actions">
-                              <button
-                                type="button"
-                                className="btn-icon"
-                                title="Editar"
-                                onClick={() => setEditingTx(tx)}
-                              >
+                              <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                                 <Icon name="pencil" />
                               </button>
                               <RowActionsMenu
@@ -1334,9 +1333,47 @@ export function DashboardPage() {
                   ))}
                 </ul>
               )}
-            </div>
+            </section>
           </div>
-        </div>
+
+          {/* Casal: quem pagou o quê da conta conjunta (detalhe na tela Par). */}
+          {jointAccount && orderedMembers.length > 1 && (
+            <SplitSummary
+              payers={payers}
+              accountName={jointAccount.name}
+              currentUserId={user?.id}
+              memberName={memberName}
+              settlements={balance?.balances}
+              settleHref="/par"
+            />
+          )}
+
+          {activeDebts.length > 0 && (
+            <section className="card" aria-label="Dívidas">
+              <div className="section-header">
+                <p className="card-title">Dívidas</p>
+                <Link to="/a-pagar?aba=dividas" className="link">
+                  Ver tudo
+                </Link>
+              </div>
+              <ul className="category-breakdown">
+                {activeDebts.slice(0, 3).map((debt) => {
+                  const percent = Math.round((debt.paidAmount / Number(debt.totalAmount)) * 100);
+                  return (
+                    <li key={debt.id}>
+                      <div className="category-row-header">
+                        <span>{debt.name}</span>
+                        <span className="value">{formatCurrency(debt.remainingAmount)}</span>
+                      </div>
+                      <div className="progress-track thin">
+                        <div className="progress-fill" style={{ width: `${percent}%` }} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
         </div>
       </div>
 

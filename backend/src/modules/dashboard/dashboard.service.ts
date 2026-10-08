@@ -11,7 +11,9 @@ import {
   getMonthlyTrendForUser,
   listTransactions,
 } from "../transactions/transactions.service";
-import { currentMonthParam, parseMonthRange } from "../../utils/month";
+import { addMonths, currentMonthParam, parseMonthRange } from "../../utils/month";
+import { findOwnDocsForRange } from "../transactions/transactions.repository";
+import { requireGroupId } from "../groups/groups.service";
 import { listLoans } from "../loans/loans.service";
 import { getUpcomingForUser } from "../upcoming/upcoming.service";
 
@@ -91,6 +93,30 @@ export { InvalidMonthError } from "../../utils/month";
 // parallel on the client side. Bundling them server-side turns "N round
 // trips to the same place" into 1, while the actual reads below still run
 // concurrently via Promise.all, same as before.
+// Saldo do mês dia a dia, com a mesma conta do número grande do Painel
+// (conta pessoal: entrou - saiu - guardado - emprestado). Um ponto por dia do
+// mês, acumulado.
+async function personalDailyBalance(userId: string, month: string): Promise<{ day: string; balance: number }[]> {
+  const groupId = await requireGroupId(userId);
+  const rows = await findOwnDocsForRange(groupId, userId, `${month}-01`, `${addMonths(month, 1)}-01`);
+  const byDay = new Map<string, number>();
+  for (const row of rows) {
+    if (row.isAccountsTransfer) continue;
+    const delta = row.transactionType === "income" ? row.amountCents : -row.amountCents;
+    byDay.set(row.date, (byDay.get(row.date) ?? 0) + delta);
+  }
+  const [year, monthNumber] = month.split("-").map(Number);
+  const days = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  let running = 0;
+  const points: { day: string; balance: number }[] = [];
+  for (let d = 1; d <= days; d++) {
+    const day = `${month}-${String(d).padStart(2, "0")}`;
+    running += byDay.get(day) ?? 0;
+    points.push({ day, balance: running / 100 });
+  }
+  return points;
+}
+
 export async function getDashboardForUser(userId: string, monthParam?: string) {
   const groupResult = await getGroupForUser(userId);
   if (!groupResult) return null;
@@ -178,6 +204,31 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     personalPrevMonthTotals: { income: prevMonthTotals.income, expense: prevMonthTotals.expense },
     goalHighlight: pickGoalHighlight(goals),
     nextInvoice: pickNextInvoice(cards),
+    heroDaily: await personalDailyBalance(userId, month),
+    // Painel novo: todos os cartões com o limite, as metas (sem a foto) e o
+    // total guardado nelas.
+    cardsSummary: cards.map((card) => ({
+      id: card.id,
+      name: card.name,
+      limit: card.limit,
+      limitUsed: card.limitUsed,
+      limitType: card.limitType,
+      statementTotal: card.currentStatement.total,
+      statementIsPaid: card.currentStatement.isPaid,
+      dueDate: card.currentStatement.dueDate,
+    })),
+    goalsSummary: goals
+      .filter((goal) => !goal.achievedAt)
+      .slice(0, 4)
+      .map((goal) => ({
+        id: goal.id,
+        name: goal.name,
+        currentAmount: goal.currentAmount,
+        targetAmount: goal.targetAmount,
+        deadline: goal.deadline,
+        itemsCount: goal.items?.length ?? 0,
+      })),
+    savedInGoals: goals.reduce((sum, goal) => sum + Math.round(Number(goal.currentAmount) * 100), 0) / 100,
     trend6m,
     alerts,
   };
