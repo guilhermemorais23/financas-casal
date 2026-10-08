@@ -1,6 +1,6 @@
 import { pruneInboundMessages } from "../assistant/assistant.repository";
 import { findCardsByGroupId, findStatement } from "../cards/cards.repository";
-import { currentStatementMonth, dueDateFor } from "../cards/cards.service";
+import { currentStatementMonth, dueDateFor, limitUsedCents, onCardPurchase } from "../cards/cards.service";
 import { findGroupBudget, getMonthlyExpenseTotal } from "../budgets/budgets.repository";
 import { findDebtsByGroupId, findInstallmentsByDebtIds } from "../debts/debts.repository";
 import { escapeHtml, sendReminderEmail } from "../../email/mailer";
@@ -398,6 +398,7 @@ export async function runDueReminders(): Promise<{ groupsChecked: number; emails
     const members = await findMembersWithEmailByGroupId(group.id);
     if (members.length === 0) continue;
     emailsSent += await runCardReminders(group.id, members);
+    emailsSent += await runCardLimitAlerts(group.id, members);
     emailsSent += await runDebtReminders(group.id, members);
     emailsSent += await runBudgetReminder(group.id, members);
     emailsSent += await runRecurringBillReminders(group.id, members);
@@ -407,6 +408,68 @@ export async function runDueReminders(): Promise<{ groupsChecked: number; emails
 
   return { groupsChecked: groups.length, emailsSent };
 }
+
+// Limite do cartão: avisa quando passa de 80% e de novo quando estoura,
+// uma vez por fatura. Roda logo depois de cada compra (alertCardLimit) e no
+// job diário, pra pegar compra lançada por outro caminho.
+const LIMIT_STEPS = [
+  { percent: 100, key: "limit100" },
+  { percent: 80, key: "limit80" },
+] as const;
+
+async function runCardLimitAlerts(groupId: string, members: MemberWithEmail[], onlyCardId?: string): Promise<number> {
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const cards = (await findCardsByGroupId(groupId)).filter(
+    (card) => card.limit !== null && Number(card.limit) > 0 && (!onlyCardId || card.id === onlyCardId)
+  );
+  let sent = 0;
+  for (const card of cards) {
+    const limitCents = Math.round(Number(card.limit) * 100);
+    const usedCents = await limitUsedCents(card.id);
+    const percent = (usedCents / limitCents) * 100;
+    const step = LIMIT_STEPS.find((candidate) => percent >= candidate.percent);
+    if (!step) continue;
+    const statementMonth = currentStatementMonth(card.closingDay);
+    const key = `${step.key}:${card.id}:${statementMonth}`;
+    if (await wasReminderSent(key)) continue;
+
+    const recipients = card.ownerUserId
+      ? membersById.has(card.ownerUserId)
+        ? [membersById.get(card.ownerUserId)!]
+        : []
+      : members;
+    const left = Math.max(0, limitCents - usedCents) / 100;
+    const subject =
+      step.percent >= 100 ? `${card.name} estourou o limite` : `${card.name} passou de 80% do limite`;
+    const delivered = await sendToMembers(
+      recipients,
+      subject,
+      `
+        <h1 style="font-size: 20px;">Limite do cartão</h1>
+        <p><strong>${escapeHtml(card.name)}</strong>: usado ${formatBRL(usedCents / 100)} de ${formatBRL(limitCents / 100)} (${Math.round(percent)}%).
+        ${step.percent >= 100 ? `Passou ${formatBRL((usedCents - limitCents) / 100)} do limite.` : `Sobram ${formatBRL(left)}.`}</p>
+      `,
+      "/cards",
+      { tag: `limit-${card.id}` }
+    );
+    if (delivered > 0) {
+      sent += delivered;
+      // Estourou: o aviso dos 80% desta fatura também conta como dado.
+      await markReminderSent(key, { groupId, kind: "card-limit", cardId: card.id, month: statementMonth });
+      if (step.percent >= 100) await markReminderSent(`limit80:${card.id}:${statementMonth}`, { groupId, kind: "card-limit", cardId: card.id, month: statementMonth });
+    }
+  }
+  return sent;
+}
+
+// Chamado logo depois de uma compra no cartão.
+export async function alertCardLimit(groupId: string, cardId: string): Promise<void> {
+  const members = await findMembersWithEmailByGroupId(groupId);
+  if (members.length === 0) return;
+  await runCardLimitAlerts(groupId, members, cardId);
+}
+
+onCardPurchase(alertCardLimit);
 
 // Rede de segurança pro cron diário: o primeiro ping de health depois das 8h
 // (Brasília) de cada dia reserva a execução do dia no Firestore -- create()

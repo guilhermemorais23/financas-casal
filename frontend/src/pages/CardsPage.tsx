@@ -388,6 +388,68 @@ export function CardsPage() {
     return members.find((m) => m.id === userId)?.displayName ?? "Alguém do grupo";
   }
 
+  // Cadastrar / mudar o limite de um cartão normal (o garantido muda por
+  // Guardar mais / Resgatar).
+  const [limitEditId, setLimitEditId] = useState<string | null>(null);
+  const [limitEditValue, setLimitEditValue] = useState("");
+  const [isSavingLimit, setIsSavingLimit] = useState(false);
+
+  function startLimitEdit(card: CardRow) {
+    setLimitEditId(card.id);
+    setLimitEditValue(card.limit !== null ? String(Number(card.limit)).replace(".", ",") : "");
+  }
+
+  async function saveLimit(event: FormEvent, card: CardRow) {
+    event.preventDefault();
+    const raw = limitEditValue.trim();
+    const value = raw === "" ? null : Number(raw.replace(/\./g, "").replace(",", "."));
+    if (value !== null && !(value > 0)) {
+      setError("O limite precisa ser um valor maior que zero.");
+      return;
+    }
+    setIsSavingLimit(true);
+    try {
+      await apiRequest(`/cards/${card.id}`, {
+        method: "PATCH",
+        token,
+        body: { name: card.name, closingDay: card.closingDay, dueDay: card.dueDay, limit: value },
+      });
+      setLimitEditId(null);
+      showToast(value === null ? "Limite removido" : "Limite salvo");
+      await loadCards();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar o limite");
+    } finally {
+      setIsSavingLimit(false);
+    }
+  }
+
+  function renderLimitForm(card: CardRow) {
+    return (
+      <form className="limit-adjust-form" onSubmit={(e) => void saveLimit(e, card)}>
+        <div className="field">
+          <label htmlFor={`limit-edit-${card.id}`}>Limite do cartão (R$)</label>
+          <input
+            id={`limit-edit-${card.id}`}
+            inputMode="decimal"
+            placeholder="Ex.: 3.000,00 (vazio = sem limite)"
+            value={limitEditValue}
+            onChange={(e) => setLimitEditValue(e.target.value)}
+            autoFocus
+          />
+        </div>
+        <div className="limit-adjust-actions">
+          <button type="button" className="btn btn-outline" onClick={() => setLimitEditId(null)}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSavingLimit}>
+            {isSavingLimit ? "Salvando..." : "Salvar limite"}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
   function renderCard(card: CardRow) {
     const isExpanded = expandedCardId === card.id;
     const s = card.currentStatement;
@@ -418,17 +480,37 @@ export function CardsPage() {
           <span className="card-hero-amount">{formatCurrency(Number(s.total))}</span>
         </div>
 
+        {limitCents === null && !isSecured && (
+          limitEditId === card.id ? (
+            renderLimitForm(card)
+          ) : (
+            <button type="button" className="btn btn-outline card-limit-add" onClick={() => startLimitEdit(card)}>
+              Cadastrar limite
+            </button>
+          )
+        )}
+
         {limitCents !== null && limitUsedCents !== null && (
           <>
             <div className="progress-track card-limit-track">
               <div className={`progress-fill ${limitTone}`} style={{ width: `${limitPercent}%` }} />
             </div>
             <div className="card-limit-legend">
-              <span>{isSecured ? "Guardado usado" : "Limite usado"}</span>
+              <span className={`card-limit-percent ${limitTone}`}>
+                {isSecured ? "Guardado usado" : "Limite usado"} · {Math.round(limitRawPercent)}%
+              </span>
               <span>
                 {formatCurrency(available)} livres de {formatCurrency(limitCents)}
               </span>
             </div>
+            {!isSecured &&
+              (limitEditId === card.id ? (
+                renderLimitForm(card)
+              ) : (
+                <button type="button" className="link-button card-limit-edit" onClick={() => startLimitEdit(card)}>
+                  Mudar limite
+                </button>
+              ))}
 
             {isSecured && (
               <p className="field-hint">

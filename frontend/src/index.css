@@ -9028,3 +9028,10 @@ select {
 }
 .selection-bar-text { flex: 1; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 0; }
 @media (max-width: 720px) { .selection-bar { bottom: calc(env(safe-area-inset-bottom, 0px) + 8.5rem); } }
+
+/* ---- Limite do cartão ---- */
+.card-limit-percent { font-weight: 700; }
+.card-limit-percent.warning { color: color-mix(in srgb, var(--status-warning) 60%, var(--color-text)); }
+.card-limit-percent.over { color: var(--color-danger-text); }
+.card-limit-edit { justify-self: start; font-size: 0.85rem; margin-top: 0.25rem; }
+.card-limit-add { align-self: flex-start; margin-top: 0.5rem; }
