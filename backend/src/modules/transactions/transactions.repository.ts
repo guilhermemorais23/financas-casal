@@ -60,6 +60,12 @@ export interface TransactionRow {
   // saldo, nunca conta como gasto/receita. Pertence ao empréstimo
   // (editado/excluído só por ele).
   loanId: string | null;
+  // Outras transferências (mexem no saldo, nunca contam como gasto/receita):
+  // "goal" = dinheiro guardado numa meta ou retirado dela (goalId; só a tela
+  // Metas desfaz); "accounts" = entre as suas contas (cada extrato traz o seu
+  // lado, então o saldo de cada conta bate com o banco).
+  transferKind: TransferKind | null;
+  goalId: string | null;
   // Lançamento criado por outra tela (fatura paga, parcela de dívida,
   // reembolso de despesa dividida, item da lista de compras). Quem é dono
   // dele é essa tela: apagar ou mudar o valor por aqui deixaria a fatura
@@ -68,13 +74,15 @@ export interface TransactionRow {
   linkKind: LinkKind | null;
 }
 
+export type TransferKind = "goal" | "accounts";
+
 export const LINK_KINDS = ["card_statement", "debt_installment", "settlement", "shopping"] as const;
 export type LinkKind = (typeof LINK_KINDS)[number];
 
 // Transferências movem dinheiro entre a conta e outro lugar (um cartão
 // garantido, alguém que te deve) sem ser receita nem gasto.
 export function isTransferData(data: FirebaseFirestore.DocumentData): boolean {
-  return Boolean(data.securedCardId || data.loanId);
+  return Boolean(data.securedCardId || data.loanId || data.transferKind);
 }
 
 export interface TransactionListRow extends TransactionRow {
@@ -109,6 +117,8 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
     settlementTransactionId: data.settlementTransactionId ?? null,
     securedCardId: data.securedCardId ?? null,
     loanId: data.loanId ?? null,
+    transferKind: data.transferKind ?? null,
+    goalId: data.goalId ?? null,
     linkKind: data.linkKind ?? null,
   };
 }
@@ -135,6 +145,8 @@ export interface NewTransactionInput {
   paymentMethod?: PaymentMethod | null;
   securedCardId?: string | null;
   loanId?: string | null;
+  transferKind?: TransferKind | null;
+  goalId?: string | null;
   linkKind?: LinkKind | null;
 }
 
@@ -176,6 +188,8 @@ function transactionData(
     settlementTransactionId: null,
     securedCardId: base.securedCardId ?? null,
     loanId: base.loanId ?? null,
+    transferKind: base.transferKind ?? null,
+    goalId: base.goalId ?? null,
     linkKind: base.linkKind ?? null,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
@@ -318,6 +332,11 @@ export { toTransactionRow };
 export async function findRecurringSeries(recurringGroupId: string): Promise<TransactionRow[]> {
   const snapshot = await transactionsCol.where("recurringGroupId", "==", recurringGroupId).get();
   return snapshot.docs.map(toTransactionRow);
+}
+
+export async function findGoalTransferIds(goalId: string): Promise<string[]> {
+  const snapshot = await transactionsCol.where("goalId", "==", goalId).select().get();
+  return snapshot.docs.map((doc) => doc.id);
 }
 
 export async function findSecuredCardTransferIds(cardId: string): Promise<string[]> {
@@ -668,10 +687,15 @@ async function loadDocsForDateRange(
 
 export interface OwnRangeDoc {
   month: string;
+  date: string;
   amountCents: number;
   transactionType: TransactionType;
   isSecuredCardTransfer: boolean;
   isLoanTransfer: boolean;
+  // Guardado numa meta (soma com o guardado no cartão: saiu da conta, é seu).
+  isGoalTransfer: boolean;
+  // Entre as suas contas: não é receita nem gasto.
+  isAccountsTransfer: boolean;
 }
 
 // One query across the whole range, personal account only (accountOwnerId,
@@ -704,16 +728,19 @@ async function loadOwnDocsForRange(
     .where("accountOwnerId", "==", userId)
     .where("occurredAt", ">=", rangeStart)
     .where("occurredAt", "<", rangeEnd)
-    .select("occurredAt", "amountCents", "transactionType", "securedCardId", "loanId")
+    .select("occurredAt", "amountCents", "transactionType", "securedCardId", "loanId", "transferKind")
     .get();
   return snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
       month: (data.occurredAt as string).slice(0, 7),
+      date: (data.occurredAt as string).slice(0, 10),
       amountCents: data.amountCents as number,
       transactionType: data.transactionType as TransactionType,
       isSecuredCardTransfer: Boolean(data.securedCardId),
       isLoanTransfer: Boolean(data.loanId),
+      isGoalTransfer: data.transferKind === "goal",
+      isAccountsTransfer: data.transferKind === "accounts",
     };
   });
 }

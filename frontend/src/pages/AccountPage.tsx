@@ -14,6 +14,7 @@ import { PushSettingsCard } from "../components/PushSettingsCard";
 import { ImportStatementModal } from "../components/ImportStatementModal";
 import { initialOf } from "../utils/initial";
 import { categoryTypeOf, type CategoryType } from "../utils/categories";
+import { useTheme } from "../hooks/useTheme";
 
 interface AccountRow {
   id: string;
@@ -59,6 +60,7 @@ interface CategoryRow {
 
 export function AccountPage() {
   const { user, token, logout, refreshUser, revokeAllSessions, deleteAccount } = useAuth();
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const confirm = useConfirm();
@@ -598,6 +600,30 @@ export function AccountPage() {
               {isSaving ? "Salvando..." : "Salvar orçamento"}
             </button>
           </form>
+        </div>
+
+        <div className="card">
+          <p className="card-title">Aparência</p>
+          <p className="card-subtitle">Automático segue o tema do celular ou do computador.</p>
+          <div className="segmented" role="group" aria-label="Tema">
+            {(
+              [
+                ["system", "Automático"],
+                ["light", "Claro"],
+                ["dark", "Escuro"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`segmented-option${themeMode === value ? " active" : ""}`}
+                aria-pressed={themeMode === value}
+                onClick={() => setThemeMode(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="card">

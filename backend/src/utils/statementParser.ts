@@ -1,3 +1,4 @@
+import type { PaymentMethod } from "../modules/transactions/transactions.repository";
 // Reads a bank statement export (OFX or CSV) into plain rows. Pure functions,
 // no I/O: the caller decides what to do with the rows (preview, dedupe,
 // save). Amounts keep the file's own sign here (negative = money out); the
@@ -13,6 +14,8 @@ export interface ParsedStatementRow {
   // Horário (HH:MM), quando o extrato traz (Banco do Brasil traz; Bradesco e
   // Nubank não).
   time?: string | null;
+  // Forma de pagamento quando quem lê já sabe (conta de cartão no Open Finance).
+  paymentMethod?: PaymentMethod | null;
 }
 
 export type StatementFormat = "ofx" | "csv";

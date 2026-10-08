@@ -3,12 +3,18 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Icon } from "./Icon";
 import { useToast } from "./ToastProvider";
+import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
 
 interface ImportRule {
   key: string;
   label: string;
   categoryId: string | null;
   notExpense: boolean;
+  // "Sempre assim": forma de pagamento lembrada (null = perguntar).
+  paymentMethod?: PaymentMethod | null;
+  // "Não é gasto": o que é (fatura, guardei, entre contas, ignorar) e a meta.
+  nonExpenseKind?: string | null;
+  goalId?: string | null;
 }
 
 interface CategoryOption {
@@ -34,23 +40,38 @@ export function ImportRulesCard({ categories, reloadKey }: { categories: Categor
       .catch(() => setRules([]));
   }, [token, reloadKey]);
 
-  async function change(rule: ImportRule, value: string) {
+  // A resposta é gravada inteira: categoria e forma vão sempre juntas.
+  async function save(rule: ImportRule, next: { categoryId: string | null; notExpense: boolean; paymentMethod: PaymentMethod | null }) {
     setBusyKey(rule.key);
-    const notExpense = value === NOT_EXPENSE;
-    const categoryId = notExpense ? null : value;
     try {
       await apiRequest("/statements/rules", {
         method: "PUT",
         token,
-        body: { key: rule.key, label: rule.label, categoryId, notExpense },
+        // Mantém o tipo do "Não é gasto" (e a meta) enquanto continuar sendo.
+        body: {
+          key: rule.key,
+          label: rule.label,
+          ...next,
+          nonExpenseKind: next.notExpense ? rule.nonExpenseKind ?? null : null,
+          goalId: next.notExpense ? rule.goalId ?? null : null,
+        },
       });
-      setRules((list) => list?.map((r) => (r.key === rule.key ? { ...r, categoryId, notExpense } : r)) ?? list);
+      setRules((list) => list?.map((r) => (r.key === rule.key ? { ...r, ...next } : r)) ?? list);
       showToast("Resposta atualizada");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Não foi possível salvar", { variant: "error" });
     } finally {
       setBusyKey(null);
     }
+  }
+
+  function change(rule: ImportRule, value: string) {
+    const notExpense = value === NOT_EXPENSE;
+    void save(rule, { categoryId: notExpense || value === "" ? null : value, notExpense, paymentMethod: notExpense ? null : rule.paymentMethod ?? null });
+  }
+
+  function changePayment(rule: ImportRule, value: string) {
+    void save(rule, { categoryId: rule.categoryId, notExpense: rule.notExpense, paymentMethod: (value || null) as PaymentMethod | null });
   }
 
   async function forget(rule: ImportRule) {
@@ -73,7 +94,8 @@ export function ImportRulesCard({ categories, reloadKey }: { categories: Categor
     <div className="card">
       <p className="card-title">Nomes do extrato</p>
       <p className="card-subtitle">
-        O que você respondeu nas importações. Esses nomes já chegam com categoria; apague um pra ser perguntado de novo.
+        O que você respondeu nas importações. Esses nomes já chegam com a categoria e a forma de pagamento; apague um pra
+        ser perguntado de novo.
       </p>
       <ul className="rules-list">
         {visible.map((rule) => (
@@ -87,7 +109,8 @@ export function ImportRulesCard({ categories, reloadKey }: { categories: Categor
               onChange={(event) => void change(rule, event.target.value)}
               aria-label={`Categoria de ${rule.label}`}
             >
-              {!rule.notExpense && !categories.some((c) => c.id === rule.categoryId) && (
+              {!rule.notExpense && rule.categoryId === null && <option value="">Perguntar a categoria</option>}
+              {!rule.notExpense && rule.categoryId !== null && !categories.some((c) => c.id === rule.categoryId) && (
                 <option value="">Categoria apagada</option>
               )}
               {categories.map((category) => (
@@ -95,8 +118,31 @@ export function ImportRulesCard({ categories, reloadKey }: { categories: Categor
                   {category.name}
                 </option>
               ))}
-              <option value={NOT_EXPENSE}>Não é gasto (não entra)</option>
+              <option value={NOT_EXPENSE}>
+                {rule.nonExpenseKind === "saved"
+                  ? "Guardei (vai pra meta)"
+                  : rule.nonExpenseKind === "accounts"
+                  ? "Entre minhas contas"
+                  : rule.nonExpenseKind === "card_payment"
+                  ? "Pagamento de fatura (não entra)"
+                  : "Não é gasto (não entra)"}
+              </option>
             </select>
+            {!rule.notExpense && (
+              <select
+                value={rule.paymentMethod ?? ""}
+                disabled={busyKey === rule.key}
+                onChange={(event) => changePayment(rule, event.target.value)}
+                aria-label={`Forma de pagamento de ${rule.label}`}
+              >
+                <option value="">Perguntar a forma</option>
+                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               className="btn-icon"

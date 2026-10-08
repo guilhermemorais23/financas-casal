@@ -16,6 +16,9 @@ import {
   cancelRecurringForUser,
   createTransaction,
   deleteTransactionForUser,
+  deleteTransactionsForUser,
+  InvalidBulkDeleteError,
+  MAX_BULK_DELETE,
   exportTransactionsForUser,
   getBalance,
   getDailySeriesForUser,
@@ -274,9 +277,9 @@ export async function updateTransactionHandler(req: Request, res: Response) {
 }
 
 function transferLockedMessage(err: Error): string {
-  return err.message === "loan"
-    ? "Esse lançamento é de um empréstimo. Mexa nele pela página Empréstimos."
-    : "Esse valor foi guardado no cartão. Use Resgatar na página Cartões.";
+  if (err.message === "loan") return "Esse lançamento é de um empréstimo. Mexa nele pela página Empréstimos.";
+  if (err.message === "goal") return "Esse valor foi guardado numa meta. Use Retirar na página Metas.";
+  return "Esse valor foi guardado no cartão. Use Resgatar na página Cartões.";
 }
 
 const LINKED_MESSAGES: Record<LinkedTransactionError["kind"], string> = {
@@ -383,6 +386,24 @@ export async function setSplitSettledHandler(req: Request, res: Response) {
     }
     if (err instanceof InvalidSettlementAmountError) {
       res.status(400).json({ error: "invalid amount" });
+      return;
+    }
+    throw err;
+  }
+}
+
+// Excluir vários (Relatórios > Selecionar).
+export async function bulkDeleteHandler(req: Request, res: Response) {
+  const { transactionIds } = req.body ?? {};
+  if (!Array.isArray(transactionIds) || !transactionIds.every((id) => typeof id === "string" && id.length > 0)) {
+    res.status(400).json({ error: "transactionIds is required" });
+    return;
+  }
+  try {
+    res.status(200).json(await deleteTransactionsForUser(req.user!.id, transactionIds));
+  } catch (err) {
+    if (err instanceof InvalidBulkDeleteError) {
+      res.status(400).json({ error: `Selecione entre 1 e ${MAX_BULK_DELETE} lançamentos.` });
       return;
     }
     throw err;

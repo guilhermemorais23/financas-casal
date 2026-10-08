@@ -6,6 +6,7 @@ import {
   cancelRecurringHandler,
   createTransactionHandler,
   deleteTransactionHandler,
+  bulkDeleteHandler,
   exportTransactionsHandler,
   getBalanceHandler,
   getDailySeriesHandler,
@@ -16,7 +17,7 @@ import {
   updateRecurringHandler,
   updateTransactionHandler,
 } from "./transactions.controller";
-import { categorizeHandler, listUncategorizedHandler } from "./uncategorized.controller";
+import { categorizeHandler, listUncategorizedHandler, listNoPaymentHandler, setPaymentMethodsHandler } from "./uncategorized.controller";
 
 export const transactionsRouter = Router();
 
@@ -30,10 +31,13 @@ transactionsRouter.get("/summary/year", asyncHandler(getYearlySummaryHandler));
 transactionsRouter.get("/daily-series", asyncHandler(getDailySeriesHandler));
 transactionsRouter.get("/uncategorized", asyncHandler(listUncategorizedHandler));
 transactionsRouter.post("/categorize", asyncHandler(categorizeHandler));
+transactionsRouter.get("/no-payment-method", asyncHandler(listNoPaymentHandler));
+transactionsRouter.post("/payment-method", asyncHandler(setPaymentMethodsHandler));
 // Exportar (CSV) é do Premium.
 transactionsRouter.get("/export", requirePremium, asyncHandler(exportTransactionsHandler));
 transactionsRouter.patch("/:id/settle", asyncHandler(setSplitSettledHandler));
 transactionsRouter.patch("/:id/recurring", asyncHandler(updateRecurringHandler));
 transactionsRouter.patch("/:id", asyncHandler(updateTransactionHandler));
 transactionsRouter.delete("/:id/recurring", asyncHandler(cancelRecurringHandler));
+transactionsRouter.post("/bulk-delete", asyncHandler(bulkDeleteHandler));
 transactionsRouter.delete("/:id", asyncHandler(deleteTransactionHandler));

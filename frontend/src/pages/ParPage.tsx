@@ -55,6 +55,9 @@ interface TransactionListRow {
   // páginas -- sem editar/excluir aqui.
   securedCardId?: string | null;
   loanId?: string | null;
+  // Dinheiro guardado numa meta (goalId) ou entre as suas contas: transferência.
+  transferKind?: "goal" | "accounts" | null;
+  goalId?: string | null;
   linkKind?: LinkKind | null;
 }
 
@@ -413,7 +416,7 @@ export function ParPage() {
                   {tx.transactionType === "income" ? "+" : "-"}
                   {formatCurrency(Number(tx.amount))}
                 </span>
-                {!tx.securedCardId && !tx.loanId && (
+                {!tx.securedCardId && !tx.loanId && !tx.goalId && (
                   <div className="transaction-row-actions">
                     <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                       <Icon name="pencil" />

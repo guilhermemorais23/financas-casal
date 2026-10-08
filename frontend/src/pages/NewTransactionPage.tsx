@@ -8,7 +8,12 @@ import { useToast } from "../components/ToastProvider";
 import { saveTransactionInBackground } from "../utils/optimisticTransactions";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, todayISO } from "../utils/format";
-import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
+import {
+  PAYMENT_METHOD_OPTIONS,
+  readLastPaymentMethod,
+  saveLastPaymentMethod,
+  type PaymentMethod,
+} from "../utils/paymentMethod";
 import { recentDescriptions, rememberEntry, suggestFor } from "../utils/quickEntry";
 import {
   readCreditCardPreference,
@@ -92,7 +97,10 @@ export function NewTransactionPage() {
   const [occurredAt, setOccurredAt] = useState(() => todayISO());
   const [splitType, setSplitType] = useState<"none" | "equal">("none");
   const [isPrivate, setIsPrivate] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">(() => (prefill.get("p") as PaymentMethod | null) ?? "");
+  // Vem do "Repetir" (p=) ou é a última forma que a pessoa usou.
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">(
+    () => (prefill.get("p") as PaymentMethod | null) ?? (user ? readLastPaymentMethod(user.id) : null) ?? ""
+  );
   const [isRecurring, setIsRecurring] = useState(false);
 
   // Crédito -> cartão: na primeira compra no crédito pergunta em qual
@@ -119,7 +127,7 @@ export function NewTransactionPage() {
         ? "você recebeu"
         : "você pagou"
       : members.find((m) => m.id === payerId)?.displayName,
-    selectedCard ? `cartão ${selectedCard.name}` : paymentMethodLabel(paymentMethod || null),
+
     isRecurring ? "todo mês" : null,
     !isIncome && splitType === "equal" ? "dividido" : null,
   ]
@@ -286,6 +294,7 @@ export function NewTransactionPage() {
         accountId,
         paymentMethod: paymentMethod || null,
       });
+      saveLastPaymentMethod(user?.id ?? "", "credit");
       await saveCardPurchase(selectedCard, parsedAmount);
       return;
     }
@@ -338,6 +347,7 @@ export function NewTransactionPage() {
         payerId,
       },
     });
+    saveLastPaymentMethod(user?.id ?? "", paymentMethod || null);
     showToast(
       isRecurring ? `${isIncome ? "Receita" : "Despesa"} recorrente salva` : isIncome ? "Receita salva" : "Despesa salva",
       isRecurring ? { description: `Repete por ${parsedMonths} meses` } : undefined
@@ -449,6 +459,25 @@ export function NewTransactionPage() {
             )}
           </div>
 
+          <div className="field">
+            <span className="field-label" id="payment-label">
+              {isIncome ? "Como recebeu" : "Como foi pago"}
+            </span>
+            <div className="chip-row payment-chips" role="group" aria-labelledby="payment-label">
+              {PAYMENT_METHOD_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`filter-chip${paymentMethod === option.value ? " active" : ""}`}
+                  aria-pressed={paymentMethod === option.value}
+                  onClick={() => setPaymentMethod((current) => (current === option.value ? "" : option.value))}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* O resto já vem preenchido (hoje, sua conta, você pagou). Fica
               escondido pra o lançamento do dia a dia caber numa tela. */}
           <button
@@ -497,22 +526,6 @@ export function NewTransactionPage() {
                 {members.map((member) => (
                   <option key={member.id} value={member.id}>
                     {member.id === user?.id ? "Você" : member.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="field">
-              <label htmlFor="payment-method">{isIncome ? "Forma de recebimento" : "Forma de pagamento"} (opcional)</label>
-              <select
-                id="payment-method"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod | "")}
-              >
-                <option value="">Não informado</option>
-                {PAYMENT_METHOD_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
                   </option>
                 ))}
               </select>

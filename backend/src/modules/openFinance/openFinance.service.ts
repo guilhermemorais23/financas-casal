@@ -7,6 +7,7 @@ import { deleteItem, findItem, findItemsByUser, markSynced, saveItem, savePendin
 import { sendPushToUser } from "../push/push.service";
 import { logError } from "../../utils/errorLog";
 import { todayInBrazil } from "../../utils/month";
+import { detectPaymentMethod } from "../../utils/paymentDetect";
 
 export class OpenFinanceUnavailableError extends Error {}
 export class OpenFinanceItemNotFoundError extends Error {}
@@ -129,6 +130,11 @@ export function toStatementRows(transactions: PluggyTransaction[], account: Pick
       kind: name && bankText && name.toLowerCase() !== bankText.toLowerCase() ? bankText : null,
       amountCents: tx.type === "DEBIT" ? -cents : cents,
       externalId: tx.id,
+      // Conta de cartão: tudo é crédito. Conta corrente: pelo texto ("PIX").
+      paymentMethod:
+        account.type === "CREDIT"
+          ? "credit"
+          : detectPaymentMethod([bankText, name], tx.type === "DEBIT" ? "expense" : "income"),
     });
   }
   return rows;

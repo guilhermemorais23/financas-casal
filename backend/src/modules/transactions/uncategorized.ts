@@ -23,7 +23,7 @@ export async function listUncategorized(userId: string, month: string): Promise<
   const ruleByKey = new Map(rules.filter((r) => r.categoryId).map((r) => [r.key, r.categoryId]));
   const byKey = new Map<string, { label: string; cents: number; ids: string[] }>();
   for (const tx of rows) {
-    if (tx.transactionType !== "expense" || tx.categoryId || tx.securedCardId || tx.loanId) continue;
+    if (tx.transactionType !== "expense" || tx.categoryId || tx.securedCardId || tx.loanId || tx.transferKind) continue;
     if (!canManageTransaction(userId, tx)) continue;
     const key = normalizeStatementName(tx.description) || tx.description.toLowerCase();
     const entry = byKey.get(key) ?? { label: tx.description, cents: 0, ids: [] };

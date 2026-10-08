@@ -22,8 +22,19 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [deadline, setDeadline] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Submetas: "PC gamer" -> Placa de vídeo, Placa-mãe... cada uma com o preço.
+  // Com elas, o valor da meta é a soma.
+  const [useItems, setUseItems] = useState(false);
+  const [items, setItems] = useState<{ name: string; price: string }[]>([{ name: "", price: "" }, { name: "", price: "" }]);
 
-  const monthly = minimumMonthlySaving(Number(targetAmount.replace(",", ".")) || 0, 0, deadline || null);
+  const parsePrice = (value: string) => {
+    const clean = value.trim().replace(/\s|R\$/g, "");
+    return Number(clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean) || 0;
+  };
+  const filledItems = items.filter((item) => item.name.trim() && parsePrice(item.price) > 0);
+  const itemsTotal = filledItems.reduce((sum, item) => sum + parsePrice(item.price), 0);
+  const effectiveTarget = useItems ? itemsTotal : parsePrice(targetAmount);
+  const monthly = minimumMonthlySaving(effectiveTarget, 0, deadline || null);
 
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -39,9 +50,9 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    const parsedTarget = Number(targetAmount.replace(",", "."));
-    if (!name.trim() || !(parsedTarget > 0)) {
-      setError("Informe nome e valor da meta.");
+    const parsedTarget = parsePrice(targetAmount);
+    if (!name.trim() || (useItems ? filledItems.length === 0 : !(parsedTarget > 0))) {
+      setError(useItems ? "Informe o nome da meta e pelo menos uma submeta com preço." : "Informe nome e valor da meta.");
       return;
     }
 
@@ -54,8 +65,9 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
           name: name.trim(),
           emoji: null,
           photoDataUrl,
-          targetAmount: parsedTarget,
+          targetAmount: useItems ? itemsTotal : parsedTarget,
           deadline: deadline || null,
+          items: useItems ? filledItems.map((item) => ({ name: item.name.trim(), targetAmount: parsePrice(item.price) })) : [],
         },
       });
       onCreated();
@@ -99,7 +111,53 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
             <input id="goal-name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
           </div>
         </div>
+        <label className="checkbox-field">
+          <input type="checkbox" checked={useItems} onChange={(e) => setUseItems(e.target.checked)} />
+          Dividir em submetas (ex.: cada peça do PC, com o preço)
+        </label>
+        {useItems && (
+          <div className="goal-new-items">
+            {items.map((item, index) => (
+              <div key={index} className="goal-new-item">
+                <input
+                  aria-label={`Submeta ${index + 1}`}
+                  placeholder={index === 0 ? "Placa de vídeo" : index === 1 ? "Placa-mãe" : "Submeta"}
+                  value={item.name}
+                  maxLength={60}
+                  onChange={(e) => setItems((list) => list.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)))}
+                />
+                <input
+                  aria-label={`Preço da submeta ${index + 1}`}
+                  placeholder="R$"
+                  inputMode="decimal"
+                  value={item.price}
+                  onChange={(e) => setItems((list) => list.map((row, i) => (i === index ? { ...row, price: e.target.value } : row)))}
+                />
+                {items.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    title="Tirar"
+                    onClick={() => setItems((list) => list.filter((_, i) => i !== index))}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            {items.length < 12 && (
+              <button type="button" className="link-button" onClick={() => setItems((list) => [...list, { name: "", price: "" }])}>
+                + Outra submeta
+              </button>
+            )}
+            <p className="field-hint">
+              Total da meta: <strong>{formatCurrency(itemsTotal)}</strong>
+            </p>
+          </div>
+        )}
+
         <div className="field-row">
+          {!useItems && (
           <div className="field">
             <label htmlFor="goal-target">Valor alvo (R$)</label>
             <input
@@ -110,6 +168,7 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
               required
             />
           </div>
+          )}
           <div className="field">
             <label htmlFor="goal-deadline">Prazo (opcional)</label>
             <input id="goal-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />

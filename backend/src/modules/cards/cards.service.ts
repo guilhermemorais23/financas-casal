@@ -116,6 +116,11 @@ async function computeUnpaidByMonth(cardId: string): Promise<Map<string, number>
   return byMonth;
 }
 
+// Quanto do limite as compras em aberto prendem (todas as faturas não pagas).
+export async function limitUsedCents(cardId: string): Promise<number> {
+  return sumCents(await computeUnpaidByMonth(cardId));
+}
+
 function sumCents(byMonth: Map<string, number>): number {
   let total = 0;
   for (const cents of byMonth.values()) total += cents;
@@ -366,7 +371,7 @@ export async function addPurchase(userId: string, cardId: string, input: AddPurc
     addMonths(firstStatementMonth, index)
   );
 
-  return insertPurchaseSeries(
+  const purchases = await insertPurchaseSeries(
     cardId,
     {
       description: input.description,
@@ -378,6 +383,20 @@ export async function addPurchase(userId: string, cardId: string, input: AddPurc
     },
     statementMonths
   );
+  // Compra que passou dos 80% do limite: avisa na hora. Falha no aviso não
+  // atrapalha a compra.
+  if (card.limit !== null && purchaseListener) {
+    void purchaseListener(groupId, cardId).catch(() => {});
+  }
+  return purchases;
+}
+
+// O módulo de lembretes (que já depende deste) se registra aqui pra avisar do
+// limite logo depois de cada compra, sem import circular.
+type PurchaseListener = (groupId: string, cardId: string) => Promise<void>;
+let purchaseListener: PurchaseListener | null = null;
+export function onCardPurchase(listener: PurchaseListener): void {
+  purchaseListener = listener;
 }
 
 export async function removePurchase(userId: string, cardId: string, purchaseId: string) {

@@ -32,6 +32,13 @@ export async function previewStatementHandler(req: Request, res: Response) {
   }
 }
 
+function parseTransfer(value: unknown): ImportItem["transfer"] {
+  const transfer = value as { kind?: unknown; goalId?: unknown } | null | undefined;
+  if (transfer?.kind === "accounts") return { kind: "accounts" };
+  if (transfer?.kind === "goal" && typeof transfer.goalId === "string" && transfer.goalId) return { kind: "goal", goalId: transfer.goalId };
+  return null;
+}
+
 export async function commitStatementHandler(req: Request, res: Response) {
   const { accountId, items, rules } = req.body ?? {};
   if (typeof accountId !== "string" || accountId === "" || !Array.isArray(items)) {
@@ -46,6 +53,8 @@ export async function commitStatementHandler(req: Request, res: Response) {
       transactionType: item.transactionType as "expense" | "income",
       occurredAt: item.occurredAt as string,
       categoryId: typeof item.categoryId === "string" && item.categoryId !== "" ? item.categoryId : null,
+      paymentMethod: (item.paymentMethod as ImportItem["paymentMethod"]) ?? null,
+      transfer: parseTransfer(item.transfer),
     }));
     const normalizedRules: RuleInput[] = (Array.isArray(rules) ? rules : [])
       .filter((rule: unknown): rule is Record<string, unknown> => !!rule && typeof rule === "object")
@@ -54,6 +63,9 @@ export async function commitStatementHandler(req: Request, res: Response) {
         label: typeof rule.label === "string" ? rule.label : "",
         categoryId: typeof rule.categoryId === "string" && rule.categoryId !== "" ? rule.categoryId : null,
         notExpense: rule.notExpense === true,
+        paymentMethod: (rule.paymentMethod as RuleInput["paymentMethod"]) ?? null,
+        nonExpenseKind: (rule.nonExpenseKind as RuleInput["nonExpenseKind"]) ?? null,
+        goalId: typeof rule.goalId === "string" ? rule.goalId : null,
       }));
     const result = await commitStatement(req.user!.id, accountId, normalized, normalizedRules);
     res.status(201).json(result);
