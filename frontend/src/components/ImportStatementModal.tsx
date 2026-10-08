@@ -7,6 +7,7 @@ import { PasswordInput } from "./PasswordInput";
 import { useToast } from "./ToastProvider";
 import { Sheet } from "./Sheet";
 import { categoriesFor, type CategoryType } from "../utils/categories";
+import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMethod";
 
 type TxType = "expense" | "income";
 
@@ -20,6 +21,8 @@ interface PreviewRow {
   kind: string | null;
   time?: string | null;
   groupKey: string;
+  // Pela regra "Sempre assim" ou pelo texto do banco ("PIX ENVIADO").
+  paymentMethod?: PaymentMethod | null;
 }
 
 interface PreviewGroup {
@@ -30,7 +33,9 @@ interface PreviewGroup {
   count: number;
   total: string;
   rowIndexes: number[];
-  rule: { categoryId: string | null; notExpense: boolean } | null;
+  rule: { categoryId: string | null; notExpense: boolean; paymentMethod?: PaymentMethod | null } | null;
+  // Forma que já veio marcada (regra ou texto do banco).
+  paymentMethod?: PaymentMethod | null;
   // Sugestão da IA (a pessoa confirma).
   suggestion?: { categoryId: string | null; notExpense: boolean } | null;
 }
@@ -80,6 +85,10 @@ interface Answer {
   descMode: "all" | "each";
   description: string;
   descriptions: Record<number, string>;
+  // Forma de pagamento escolhida pro nome (null = a de cada linha, se houver).
+  paymentMethod: PaymentMethod | null;
+  // "Sempre assim": guarda a forma pra próxima importação.
+  alwaysPayment: boolean;
 }
 
 type Stage = "file" | "questions" | "summary";
@@ -95,7 +104,7 @@ interface OpenFinanceStatus {
   }[];
 }
 
-type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "outro";
+type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "c6" | "outro";
 
 // Bancos com leitura própria (conferida com extrato real) primeiro; os
 // outros passam pela leitura geral.
@@ -107,6 +116,7 @@ const BANKS: { id: BankId; name: string; own: boolean; match: RegExp }[] = [
   { id: "itau", name: "Itaú", own: false, match: /ita[uú]/i },
   { id: "santander", name: "Santander", own: false, match: /santander/i },
   { id: "inter", name: "Inter", own: false, match: /\binter\b/i },
+  { id: "c6", name: "C6 Bank", own: false, match: /\bc6\b/i },
   { id: "outro", name: "Outro", own: false, match: /$^/ },
 ];
 const bankName = (id: BankId | null | undefined) => BANKS.find((bank) => bank.id === id)?.name ?? null;
@@ -136,6 +146,8 @@ function blankAnswer(group: PreviewGroup): Answer {
     descMode: "all",
     description: "",
     descriptions: {},
+    paymentMethod: group.rule?.paymentMethod ?? group.paymentMethod ?? null,
+    alwaysPayment: true,
   };
 }
 
@@ -438,7 +450,14 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
   // tirando os nomes marcados como "Não é gasto".
   const plan = useMemo(() => {
     if (!preview) return null;
-    const items: { description: string; amount: number; transactionType: TxType; occurredAt: string; categoryId: string | null }[] = [];
+    const items: {
+      description: string;
+      amount: number;
+      transactionType: TxType;
+      occurredAt: string;
+      categoryId: string | null;
+      paymentMethod: PaymentMethod | null;
+    }[] = [];
     let incoming = 0;
     let outgoing = 0;
     let skippedNotExpense = 0;
@@ -475,18 +494,26 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
         transactionType: row.transactionType,
         occurredAt: row.date,
         categoryId: categoryId ?? null,
+        paymentMethod: answer?.paymentMethod ?? row.paymentMethod ?? null,
       });
     });
     const rules = preview.groups
       .map((group) => ({ group, answer: answers[groupKey(group)] }))
-      .filter(({ answer }) => answer?.status === "answered" && !answer.fromRule && (answer.notExpense || answer.categoryId))
+      .filter(
+        ({ answer }) =>
+          answer &&
+          !answer.fromRule &&
+          ((answer.status === "answered" && (answer.notExpense || answer.categoryId)) ||
+            (answer.alwaysPayment && answer.paymentMethod !== null))
+      )
       .map(({ group, answer }) => ({
         key: group.key,
         // Nome digitado pra todos (o banco corta nomes compridos) fica guardado
         // e aparece assim nas próximas importações.
         label: (answer.descMode === "all" && answer.description.trim()) || group.name,
-        categoryId: answer.categoryId,
-        notExpense: answer.notExpense,
+        categoryId: answer.status === "answered" ? answer.categoryId : null,
+        notExpense: answer.status === "answered" && answer.notExpense,
+        paymentMethod: answer.alwaysPayment ? answer.paymentMethod : null,
       }));
     const withoutCategory = unmatched.length;
     return { items, rules, incoming, outgoing, skippedNotExpense, skippedRoundTrip, withoutCategory, unmatched };
@@ -713,7 +740,12 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
               <strong>
                 <Icon name="lock" /> {pendingPdf.name} tem senha
               </strong>
-              <small>Geralmente são os primeiros dígitos do CPF. A senha só abre o arquivo e não fica guardada.</small>
+              <small>
+                {bank === "c6"
+                  ? "No C6, a senha são os 4 últimos dígitos do cartão físico."
+                  : "Geralmente são os primeiros dígitos do CPF."}{" "}
+                A senha só abre o arquivo e não fica guardada.
+              </small>
               <PasswordInput
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -957,6 +989,36 @@ export function ImportStatementModal({ onClose, onImported }: { onClose: () => v
                 })}
               </div>
             )}
+            <div className="import-payment">
+              <p className="import-question-ask">{current.transactionType === "income" ? "Como recebeu?" : "Como foi pago?"}</p>
+              <div className="chip-row" role="group" aria-label="Forma de pagamento">
+                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`filter-chip${currentAnswer.paymentMethod === option.value ? " active" : ""}`}
+                    aria-pressed={currentAnswer.paymentMethod === option.value}
+                    onClick={() =>
+                      patchAnswer(current, {
+                        paymentMethod: currentAnswer.paymentMethod === option.value ? null : option.value,
+                      })
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {currentAnswer.paymentMethod && (
+                <label className="checkbox-field import-always">
+                  <input
+                    type="checkbox"
+                    checked={currentAnswer.alwaysPayment}
+                    onChange={(e) => patchAnswer(current, { alwaysPayment: e.target.checked })}
+                  />
+                  Sempre assim (na próxima importação já vem marcado)
+                </label>
+              )}
+            </div>
             <p className="import-question-ask">O que é isso?</p>
             {current.suggestion && currentAnswer.status !== "answered" && (
               <p className="import-hint">

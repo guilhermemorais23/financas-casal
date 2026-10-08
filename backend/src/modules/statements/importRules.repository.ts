@@ -1,5 +1,6 @@
 import { db } from "../../db/firestore";
 import { memoizeScoped } from "../../utils/readCache";
+import { PAYMENT_METHODS, type PaymentMethod } from "../transactions/transactions.repository";
 
 // "Nome do extrato -> categoria", aprendido nas importações. Uma regra por
 // nome, compartilhada pelo grupo (o casal importa o mesmo mercado). Na próxima
@@ -10,6 +11,8 @@ export interface ImportRule {
   categoryId: string | null;
   // Fatura de cartão, aplicação, transferência entre contas: não entra.
   notExpense: boolean;
+  // "Sempre assim": a forma de pagamento desse nome (null = perguntar toda vez).
+  paymentMethod: PaymentMethod | null;
   updatedAt: number;
 }
 
@@ -44,6 +47,7 @@ export function findRulesByGroup(groupId: string): Promise<ImportRule[]> {
           label: (d.label as string) ?? d.key,
           categoryId: (d.categoryId as string | null) ?? null,
           notExpense: d.notExpense === true,
+          paymentMethod: PAYMENT_METHODS.includes(d.paymentMethod) ? (d.paymentMethod as PaymentMethod) : null,
           updatedAt: (d.updatedAt as number) ?? 0,
         };
       })
@@ -54,13 +58,13 @@ export function findRulesByGroup(groupId: string): Promise<ImportRule[]> {
 export async function upsertRules(
   groupId: string,
   userId: string,
-  rules: { key: string; label: string; categoryId: string | null; notExpense: boolean }[]
+  rules: { key: string; label: string; categoryId: string | null; notExpense: boolean; paymentMethod?: PaymentMethod | null }[]
 ): Promise<void> {
   if (rules.length === 0) return;
   const batch = db.batch();
   const now = Date.now();
   for (const rule of rules) {
-    batch.set(col.doc(docId(groupId, rule.key)), { ...rule, groupId, updatedAt: now, updatedBy: userId });
+    batch.set(col.doc(docId(groupId, rule.key)), { ...rule, paymentMethod: rule.paymentMethod ?? null, groupId, updatedAt: now, updatedBy: userId });
   }
   await batch.commit();
 }

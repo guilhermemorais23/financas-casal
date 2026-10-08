@@ -24,6 +24,7 @@ import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
 import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
+import { NoPaymentModal } from "../components/NoPaymentModal";
 
 interface CategorySummaryRow {
   categoryId: string | null;
@@ -154,6 +155,7 @@ export function ReportsPage() {
   const [groupBy, setGroupBy] = useState<GroupMode>("day");
   const [typeFilter, setTypeFilter] = useState<"expense" | "income" | null>(null);
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | "none" | null>(null);
+  const [isNoPaymentOpen, setIsNoPaymentOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState<"personal" | "joint" | null>(null);
   // Per-group open/closed the user toggled by hand; anything not in here
   // falls back to the default in isGroupOpen below.
@@ -420,6 +422,17 @@ export function ReportsPage() {
       (current) => current?.map((row) => (row.id === transactionId ? { ...row, isSettled: nextSettled } : row)) ?? current
     );
   }
+
+  // Quantos lançamentos do mês tem cada forma (os filtros mostram o número).
+  const paymentCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tx of transactions ?? []) {
+      if (tx.securedCardId || tx.loanId) continue;
+      const key = tx.paymentMethod ?? "none";
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [transactions]);
 
   const visibleTransactions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -727,6 +740,7 @@ export function ReportsPage() {
                     onClick={() => setPaymentFilter((c) => (c === option.value ? null : option.value))}
                   >
                     {option.label}
+                    {paymentCounts[option.value] ? <span className="filter-chip-count">{paymentCounts[option.value]}</span> : null}
                   </button>
                 ))}
                 <button
@@ -735,7 +749,13 @@ export function ReportsPage() {
                   onClick={() => setPaymentFilter((c) => (c === "none" ? null : "none"))}
                 >
                   Sem forma informada
+                  {paymentCounts.none ? <span className="filter-chip-count">{paymentCounts.none}</span> : null}
                 </button>
+                {(paymentCounts.none ?? 0) > 0 && (
+                  <button type="button" className="link-button" onClick={() => setIsNoPaymentOpen(true)}>
+                    Organizar
+                  </button>
+                )}
                 <span className="filter-chip-sep" aria-hidden="true" />
                 <button
                   type="button"
@@ -881,6 +901,9 @@ export function ReportsPage() {
         </div>
       </div>
 
+      {isNoPaymentOpen && (
+        <NoPaymentModal month={month} onClose={() => setIsNoPaymentOpen(false)} onSaved={() => load(month, { silent: true })} />
+      )}
       {isImportOpen && <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { silent: true })} />}
 
       {editingTx && (

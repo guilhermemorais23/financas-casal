@@ -46,6 +46,7 @@ export async function commitStatementHandler(req: Request, res: Response) {
       transactionType: item.transactionType as "expense" | "income",
       occurredAt: item.occurredAt as string,
       categoryId: typeof item.categoryId === "string" && item.categoryId !== "" ? item.categoryId : null,
+      paymentMethod: (item.paymentMethod as ImportItem["paymentMethod"]) ?? null,
     }));
     const normalizedRules: RuleInput[] = (Array.isArray(rules) ? rules : [])
       .filter((rule: unknown): rule is Record<string, unknown> => !!rule && typeof rule === "object")
@@ -54,6 +55,7 @@ export async function commitStatementHandler(req: Request, res: Response) {
         label: typeof rule.label === "string" ? rule.label : "",
         categoryId: typeof rule.categoryId === "string" && rule.categoryId !== "" ? rule.categoryId : null,
         notExpense: rule.notExpense === true,
+        paymentMethod: (rule.paymentMethod as RuleInput["paymentMethod"]) ?? null,
       }));
     const result = await commitStatement(req.user!.id, accountId, normalized, normalizedRules);
     res.status(201).json(result);

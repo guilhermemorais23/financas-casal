@@ -28,6 +28,8 @@ import { hasAiLeft, recordAiTokens, reserveAi } from "../aiUsage/aiUsage";
 import { geminiModel, tokensOf } from "../../utils/gemini";
 import { answerFromSnapshot, buildMonthSnapshot, parseQuickEntry, snapshotAsText, type MonthSnapshot } from "./monthSnapshot";
 import { formatBRL } from "../../utils/money";
+import { paymentFromSpeech } from "../../utils/paymentDetect";
+import { PAYMENT_METHODS, type PaymentMethod } from "../transactions/transactions.repository";
 
 export class AssistantNotConfiguredError extends Error {}
 
@@ -61,6 +63,7 @@ interface AssistantReply {
   description?: string;
   amount?: number;
   categoryName?: string | null;
+  paymentMethod?: string | null;
   goalText?: string;
   reply?: string;
 }
@@ -172,8 +175,8 @@ ${missingProfile}
 ${audio ? "A mensagem do usuário é um áudio -- transcreva mentalmente e entenda a intenção." : `Mensagem do usuário: "${text}"`}
 
 Responda APENAS com um JSON puro (sem markdown, sem texto fora do JSON), em um destes formatos:
-{"intent":"log_expense","description":"...","amount":123.45,"categoryName":"uma categoria da lista ou null"}
-{"intent":"log_income","description":"...","amount":123.45}
+{"intent":"log_expense","description":"...","amount":123.45,"categoryName":"uma categoria da lista ou null","paymentMethod":"pix|credit|debit|cash ou null"}
+{"intent":"log_income","description":"...","amount":123.45,"paymentMethod":"pix|credit|debit|cash ou null"}
 {"intent":"set_financial_goal","goalText":"o objetivo descrito pela pessoa, resumido em 1 frase"}
 {"intent":"set_savings","amount":123.45}
 {"intent":"chat","reply":"resposta curta, direta, em português do Brasil, baseada SOMENTE nos dados reais acima"}
@@ -226,6 +229,12 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
       occurredAt: todayInBrazil(),
       isPrivate: false,
       splitType: "none",
+      // A IA diz quando a pessoa falou ("no pix"); se não, tenta pela mensagem.
+      paymentMethod: PAYMENT_METHODS.includes(parsed.paymentMethod as PaymentMethod)
+        ? (parsed.paymentMethod as PaymentMethod)
+        : text
+        ? paymentFromSpeech(text).method
+        : null,
     });
     const emoji = parsed.intent === "log_expense" ? "💸" : "💰";
     return `${emoji} Registrado: ${transaction.description} — R$ ${parsed.amount.toFixed(2)}${category ? ` (${category.name})` : ""}.` + quotaNote;
@@ -361,16 +370,18 @@ async function basicAnswer(
   if (isAudio || !text) return "Por enquanto só consigo ler mensagens de texto. Me escreve o que precisa?";
   const entry = parseQuickEntry(text);
   if (entry && personalAccountId) {
+    const spoken = paymentFromSpeech(entry.description);
     await createTransaction(userId, {
       accountId: personalAccountId,
       categoryId: null,
       payerId: userId,
-      description: entry.description,
+      description: spoken.rest ? spoken.rest.charAt(0).toUpperCase() + spoken.rest.slice(1) : entry.description,
       amount: entry.amount,
       transactionType: entry.type,
       occurredAt: todayInBrazil(),
       isPrivate: false,
       splitType: "none",
+      paymentMethod: spoken.method,
     });
     return `${entry.type === "expense" ? "💸" : "💰"} Registrado: ${entry.description} — ${formatBRL(entry.amount)}.`;
   }

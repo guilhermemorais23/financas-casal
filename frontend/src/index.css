@@ -8984,3 +8984,22 @@ select {
 .bill-amount.estimate, .upcoming-amount.estimate { color: color-mix(in srgb, var(--status-warning) 60%, var(--color-text)); }
 .bill-amount.unknown, .upcoming-amount.unknown { color: var(--color-text-muted); font-weight: 600; }
 .bill-remind-chips { margin-top: 0.25rem; }
+
+/* ---- Forma de pagamento à vista (lançamento e importação) ---- */
+.payment-chips { margin-top: 0.15rem; }
+.import-payment { display: grid; gap: 0.4rem; margin-bottom: 0.9rem; }
+.import-payment .import-question-ask { margin-bottom: 0; }
+.import-always { font-size: 0.85rem; }
+
+.filter-chip-count { margin-left: 0.35rem; font-size: 0.72rem; font-weight: 700; color: var(--color-text-muted); }
+.filter-chip.active .filter-chip-count { color: inherit; }
+.nopay-row { grid-template-columns: minmax(0, 1fr) auto; }
+@media (max-width: 560px) { .nopay-row { grid-template-columns: 1fr; } }
+/* Nomes do extrato: categoria + forma de pagamento lembradas. */
+.rules-list li { grid-template-columns: 1fr minmax(0, 160px) minmax(0, 140px) auto; }
+.rules-list li > .btn-icon { grid-column: 4; }
+@media (max-width: 520px) {
+  .rules-list li { grid-template-columns: 1fr 1fr auto; }
+  .rules-list li > .btn-icon { grid-column: 3; grid-row: 1; }
+  .rules-list select { grid-column: auto; grid-row: 2; }
+}

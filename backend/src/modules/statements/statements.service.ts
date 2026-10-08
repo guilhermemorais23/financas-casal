@@ -19,6 +19,8 @@ import {
   type TransactionListRow,
 } from "../transactions/transactions.repository";
 import { isValidAmount } from "../../utils/validation";
+import { detectPaymentMethod } from "../../utils/paymentDetect";
+import { PAYMENT_METHODS, type PaymentMethod } from "../transactions/transactions.repository";
 
 export { StatementParseError };
 export class InvalidImportItemError extends Error {}
@@ -42,6 +44,8 @@ export interface PreviewRow {
   time: string | null;
   // Nome normalizado: os lançamentos com o mesmo nome viram uma pergunta só.
   groupKey: string;
+  // Pela resposta guardada ("Sempre assim") ou pelo texto do banco ("PIX").
+  paymentMethod: PaymentMethod | null;
 }
 
 // Uma pergunta da importação: todos os lançamentos (novos) com o mesmo nome e
@@ -59,7 +63,9 @@ export interface PreviewGroup {
   // Sugestão da IA pra pergunta nova (a pessoa confirma).
   suggestion?: Suggestion | null;
   // Resposta guardada de uma importação anterior (null = pergunta nova).
-  rule: { categoryId: string | null; notExpense: boolean } | null;
+  rule: { categoryId: string | null; notExpense: boolean; paymentMethod: PaymentMethod | null } | null;
+  // Forma de pagamento que veio marcada (da regra ou do texto do banco).
+  paymentMethod: PaymentMethod | null;
 }
 
 export interface PdfCheck {
@@ -230,9 +236,11 @@ async function previewRows(
       time: row.time ?? null,
       amount: fromCents(cents),
       transactionType,
-      suggestedCategoryId: rule ? rule.categoryId : (categoryHints.get(normalizeDescription(description)) ?? null),
+      // Regra que só guarda a forma de pagamento não responde a categoria.
+      suggestedCategoryId: rule && (rule.categoryId || rule.notExpense) ? rule.categoryId : (categoryHints.get(normalizeDescription(description)) ?? null),
       isDuplicate: existingKeys.has(duplicateKey(row.date, cents, transactionType)),
       groupKey,
+      paymentMethod: rule?.paymentMethod ?? row.paymentMethod ?? detectPaymentMethod([row.description, row.kind], transactionType),
     };
   });
 
@@ -254,7 +262,11 @@ async function previewRows(
           count: 0,
           total: "0.00",
           rowIndexes: [],
-          rule: rule ? { categoryId: rule.categoryId, notExpense: rule.notExpense } : null,
+          rule:
+            rule && (rule.categoryId || rule.notExpense)
+              ? { categoryId: rule.categoryId, notExpense: rule.notExpense, paymentMethod: rule.paymentMethod }
+              : null,
+          paymentMethod: row.paymentMethod,
         },
       };
       byKey.set(id, entry);
@@ -262,6 +274,7 @@ async function previewRows(
     entry.cents += Math.round(Number(row.amount) * 100);
     entry.group.count += 1;
     entry.group.rowIndexes.push(index);
+    if (!entry.group.paymentMethod && row.paymentMethod) entry.group.paymentMethod = row.paymentMethod;
   });
   const groups = [...byKey.values()]
     .map(({ group, cents }) => ({ ...group, total: fromCents(cents), cents }))
@@ -310,6 +323,7 @@ export interface ImportItem {
   transactionType: "expense" | "income";
   occurredAt: string;
   categoryId: string | null;
+  paymentMethod?: PaymentMethod | null;
 }
 
 export interface RuleInput {
@@ -317,6 +331,12 @@ export interface RuleInput {
   label: string;
   categoryId: string | null;
   notExpense: boolean;
+  // Só vem quando a pessoa marcou "Sempre assim".
+  paymentMethod?: PaymentMethod | null;
+}
+
+function cleanPaymentMethod(value: unknown): PaymentMethod | null {
+  return PAYMENT_METHODS.includes(value as PaymentMethod) ? (value as PaymentMethod) : null;
 }
 
 export async function commitStatement(userId: string, accountId: string, items: ImportItem[], rules: RuleInput[] = []) {
@@ -368,7 +388,7 @@ export async function commitStatement(userId: string, accountId: string, items: 
             occurredAt: item.occurredAt,
             isPrivate: false,
             splitType: "none" as const,
-            paymentMethod: null,
+            paymentMethod: cleanPaymentMethod(item.paymentMethod),
           }))
         : []
     );
@@ -378,18 +398,20 @@ export async function commitStatement(userId: string, accountId: string, items: 
   }
 
   // As respostas viram regras pra próxima importação (só com categoria que o
-  // grupo enxerga; "Não é gasto" vale sem categoria).
+  // grupo enxerga; "Não é gasto" vale sem categoria, e o "Sempre assim" da
+  // forma de pagamento também).
   const validRules: RuleInput[] = [];
   for (const rule of rules.slice(0, 300)) {
     if (typeof rule.key !== "string" || !rule.key.trim()) continue;
     const categoryId = rule.notExpense ? null : typeof rule.categoryId === "string" && rule.categoryId ? rule.categoryId : null;
-    if (!rule.notExpense && !categoryId) continue;
+    if (!rule.notExpense && !categoryId && !cleanPaymentMethod(rule.paymentMethod)) continue;
     if (categoryId && !(await categoryIsVisibleTo(categoryId, groupId))) continue;
     validRules.push({
       key: normalizeStatementName(rule.key),
       label: typeof rule.label === "string" && rule.label.trim() ? rule.label.trim().slice(0, 120) : rule.key,
       categoryId,
       notExpense: rule.notExpense === true,
+      paymentMethod: rule.notExpense ? null : cleanPaymentMethod(rule.paymentMethod),
     });
   }
   await upsertRules(groupId, userId, validRules);
@@ -406,17 +428,21 @@ export async function listImportRules(userId: string) {
   return findRulesByGroup(groupId);
 }
 
-export async function saveImportRule(userId: string, input: { key?: unknown; label?: unknown; categoryId?: unknown; notExpense?: unknown }) {
+export async function saveImportRule(
+  userId: string,
+  input: { key?: unknown; label?: unknown; categoryId?: unknown; notExpense?: unknown; paymentMethod?: unknown }
+) {
   const groupId = await requireGroupId(userId);
   if (typeof input.key !== "string" || !input.key.trim()) throw new InvalidRuleError();
   const notExpense = input.notExpense === true;
   const categoryId = notExpense ? null : typeof input.categoryId === "string" && input.categoryId ? input.categoryId : null;
-  if (!notExpense && !categoryId) throw new InvalidRuleError();
+  if (!notExpense && !categoryId && !cleanPaymentMethod(input.paymentMethod)) throw new InvalidRuleError();
   if (categoryId && !(await categoryIsVisibleTo(categoryId, groupId))) throw new InvalidRuleError();
   const key = normalizeStatementName(input.key);
   const label = typeof input.label === "string" && input.label.trim() ? input.label.trim().slice(0, 120) : key;
-  await upsertRules(groupId, userId, [{ key, label, categoryId, notExpense }]);
-  return { key, label, categoryId, notExpense };
+  const paymentMethod = notExpense ? null : cleanPaymentMethod(input.paymentMethod);
+  await upsertRules(groupId, userId, [{ key, label, categoryId, notExpense, paymentMethod }]);
+  return { key, label, categoryId, notExpense, paymentMethod };
 }
 
 export async function removeImportRule(userId: string, key: string) {
