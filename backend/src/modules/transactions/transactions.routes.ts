@@ -6,6 +6,7 @@ import {
   cancelRecurringHandler,
   createTransactionHandler,
   deleteTransactionHandler,
+  bulkDeleteHandler,
   exportTransactionsHandler,
   getBalanceHandler,
   getDailySeriesHandler,
@@ -38,4 +39,5 @@ transactionsRouter.patch("/:id/settle", asyncHandler(setSplitSettledHandler));
 transactionsRouter.patch("/:id/recurring", asyncHandler(updateRecurringHandler));
 transactionsRouter.patch("/:id", asyncHandler(updateTransactionHandler));
 transactionsRouter.delete("/:id/recurring", asyncHandler(cancelRecurringHandler));
+transactionsRouter.post("/bulk-delete", asyncHandler(bulkDeleteHandler));
 transactionsRouter.delete("/:id", asyncHandler(deleteTransactionHandler));

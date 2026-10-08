@@ -147,6 +147,9 @@ export function ReportsPage() {
   );
   const [isLoading, setIsLoading] = useState(!summary);
   const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
+  // Selecionar vários pra excluir (um dia inteiro ou à mão).
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
@@ -356,6 +359,92 @@ export function ReportsPage() {
     }
   }
 
+  // Fatura paga, parcela, reembolso, transferência: não entram na seleção
+  // (só dá pra desfazer pela tela que criou).
+  const isLocked = (tx: TransactionListRow) => Boolean(tx.securedCardId || tx.loanId) || isLinkedTransaction(tx);
+
+  function toggleSelected(tx: TransactionListRow) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(tx.id)) next.delete(tx.id);
+      else next.add(tx.id);
+      return next;
+    });
+  }
+
+  function selectGroup(items: TransactionListRow[]) {
+    setSelecting(true);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      const free = items.filter((tx) => !isLocked(tx));
+      const allIn = free.length > 0 && free.every((tx) => next.has(tx.id));
+      for (const tx of free) {
+        if (allIn) next.delete(tx.id);
+        else next.add(tx.id);
+      }
+      return next;
+    });
+  }
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelectedIds(new Set());
+  }
+
+  const selectedRows = useMemo(
+    () => (transactions ?? []).filter((tx) => selectedIds.has(tx.id)),
+    [transactions, selectedIds]
+  );
+  const selectedTotal = selectedRows.reduce((sum, tx) => sum + (tx.transactionType === "income" ? 0 : Number(tx.amount)), 0);
+
+  async function handleBulkDelete() {
+    const rows = selectedRows;
+    if (rows.length === 0) return;
+    const confirmed = await confirm({
+      title: `Excluir ${rows.length} ${rows.length === 1 ? "lançamento" : "lançamentos"}?`,
+      body: `Saem do extrato e dos totais do mês. Você ainda vai poder desfazer por alguns segundos.`,
+      confirmLabel: "Excluir",
+    });
+    if (!confirmed) return;
+
+    setError(null);
+    const snapshot = { transactions, summary };
+    const key = `bulk:${Date.now()}`;
+    const targetMonth = month;
+    rows.forEach((tx) => removeLocally(tx));
+    stopSelecting();
+    scheduleDeferred(key, async () => {
+      try {
+        const result = await apiRequest<{ deleted: number; skipped: { id: string; reason: string }[] }>("/transactions/bulk-delete", {
+          method: "POST",
+          token,
+          body: { transactionIds: rows.map((tx) => tx.id) },
+        });
+        if (result.skipped.length > 0) {
+          setError(
+            `${result.skipped.length} ${result.skipped.length === 1 ? "lançamento não pôde" : "lançamentos não puderam"} ser excluído${
+              result.skipped.length === 1 ? "" : "s"
+            } (fatura paga, parcela ou de outra pessoa).`
+          );
+        }
+        await load(targetMonth, { silent: true });
+      } catch (err) {
+        setTransactions(snapshot.transactions);
+        setSummary(snapshot.summary);
+        setError(err instanceof ApiError ? err.message : "Não foi possível excluir");
+      }
+    });
+    showToast(`${rows.length} ${rows.length === 1 ? "lançamento excluído" : "lançamentos excluídos"}`, {
+      actionLabel: "Desfazer",
+      onAction: () => {
+        if (cancelDeferred(key)) {
+          setTransactions(snapshot.transactions);
+          setSummary(snapshot.summary);
+        }
+      },
+    });
+  }
+
   // Delete with Desfazer: the request only goes out once the undo window
   // closes (utils/deferredDelete.ts), so undoing never recreates anything.
   async function handleDelete(tx: TransactionListRow) {
@@ -521,7 +610,23 @@ export function ReportsPage() {
 
   function renderTransactionRow(tx: TransactionListRow) {
     return (
-        <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
+        <li
+          key={tx.id}
+          className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}${selecting ? " is-selecting" : ""}${
+            selectedIds.has(tx.id) ? " is-selected" : ""
+          }`}
+        >
+          {selecting && (
+            <input
+              type="checkbox"
+              className="transaction-check"
+              checked={selectedIds.has(tx.id)}
+              disabled={isLocked(tx)}
+              title={isLocked(tx) ? "Esse só dá pra desfazer pela tela que criou (fatura, parcela, reembolso)" : undefined}
+              onChange={() => toggleSelected(tx)}
+              aria-label={`Selecionar ${tx.description}`}
+            />
+          )}
           <span
             className="transaction-icon"
           >
@@ -780,6 +885,11 @@ export function ReportsPage() {
                     <> · entrou <strong className="income-text">{formatCurrency(visibleTotals.income)}</strong></>
                   )}
                 </span>
+                <span className="report-summary-actions">
+                  <button type="button" className="link-button" onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
+                    {selecting ? "Cancelar seleção" : "Selecionar"}
+                  </button>
+                </span>
                 {groups.length > 1 && (
                   <span className="report-summary-actions">
                     <button type="button" className="link-button" onClick={() => setAllGroups(true)}>
@@ -827,6 +937,13 @@ export function ReportsPage() {
                         {group.income > 0 && <span className="income-text">+{formatCurrency(group.income)}</span>}
                       </span>
                     </button>
+                    {groupBy === "day" && (
+                      <button type="button" className="link-button report-group-select" onClick={() => selectGroup(group.items)}>
+                        {selecting && group.items.filter((tx) => !isLocked(tx)).every((tx) => selectedIds.has(tx.id))
+                          ? "Desmarcar o dia"
+                          : "Selecionar o dia"}
+                      </button>
+                    )}
                   </li>
                   {open && group.items.map((tx) => renderTransactionRow(tx))}
                 </Fragment>
@@ -901,6 +1018,20 @@ export function ReportsPage() {
         </div>
       </div>
 
+      {selecting && (
+        <div className="selection-bar" role="region" aria-label="Lançamentos selecionados">
+          <span className="selection-bar-text">
+            {selectedRows.length} {selectedRows.length === 1 ? "selecionado" : "selecionados"}
+            {selectedTotal > 0 && <> · {formatCurrency(selectedTotal)}</>}
+          </span>
+          <button type="button" className="btn btn-outline" onClick={stopSelecting}>
+            Cancelar
+          </button>
+          <button type="button" className="btn btn-danger" disabled={selectedRows.length === 0} onClick={() => void handleBulkDelete()}>
+            Excluir
+          </button>
+        </div>
+      )}
       {isNoPaymentOpen && (
         <NoPaymentModal month={month} onClose={() => setIsNoPaymentOpen(false)} onSaved={() => load(month, { silent: true })} />
       )}
