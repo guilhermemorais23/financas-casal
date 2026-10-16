@@ -10,10 +10,9 @@ interface ChatMessage {
 // Um toque pras perguntas de quem está acompanhando o mês.
 const SUGGESTIONS = ["Como está meu mês?", "O que vence essa semana?", "Quanto posso gastar por dia?", "Quem me deve?"];
 
-// Trigger button lives in AppLayout's sidebar footer (next to the theme
-// toggle) -- this component only renders the panel itself, so there's a
-// single floating button on screen (the "+" FAB) instead of two competing
-// circles.
+// O botão que abre fica no rodapé do menu lateral do AppLayout (ao lado do
+// botão de tema) -- este componente só desenha o painel, então fica um botão
+// flutuante só na tela (o "+") em vez de dois círculos disputando espaço.
 export function GlobalAssistant({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { token } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -28,8 +27,8 @@ export function GlobalAssistant({ isOpen, onClose }: { isOpen: boolean; onClose:
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, isOpen, isSending, isGreeting]);
 
-  // Opens with something to say instead of a blank box -- fetched once per
-  // session the first time the panel is opened, not on every reopen.
+  // Abre com algo pra dizer em vez de uma caixa vazia -- buscado uma vez por
+  // sessão, na primeira vez que o painel abre, e não a cada reabertura.
   useEffect(() => {
     if (!isOpen || hasGreetedRef.current) return;
     hasGreetedRef.current = true;

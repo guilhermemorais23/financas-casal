@@ -15,12 +15,11 @@ export interface DebtRow {
   totalAmount: string;
   installmentsCount: number;
   startMonth: string;
-  // Day of the month each installment is due ("vence todo dia 10"), or null
-  // for a debt created before this existed / one where the person just
-  // doesn't know/care about an exact day. Optional on purpose -- unlike
-  // cards (where closingDay/dueDay drive the whole statement-cycle math), a
-  // debt installment already books against a real month via referenceMonth
-  // regardless of dueDay.
+  // Dia do mês em que cada parcela vence ("vence todo dia 10"), ou null numa
+  // dívida criada antes disto existir, ou quando a pessoa não sabe/não liga
+  // pro dia exato. Opcional de propósito -- diferente dos cartões (onde
+  // closingDay/dueDay movem toda a conta do ciclo da fatura), a parcela de uma
+  // dívida já entra num mês de verdade pelo referenceMonth, com ou sem dueDay.
   dueDay: number | null;
 }
 
@@ -37,10 +36,10 @@ export interface DebtInstallmentRow {
 
 const debtsCol = db.collection("debts");
 
-// startMonth/referenceMonth didn't exist before the debt-cycle feature, so
-// debts/installments created before that still have these fields missing in
-// Firestore -- default them instead of returning undefined, which would
-// otherwise crash the frontend's month formatting on old data.
+// startMonth/referenceMonth não existiam antes do ciclo das dívidas, então
+// dívidas e parcelas criadas antes disso não têm esses campos no Firestore --
+// aqui vira um valor padrão em vez de undefined, que quebraria a formatação
+// de mês do frontend nos dados antigos.
 function toDebtRow(doc: FirebaseFirestore.DocumentSnapshot): DebtRow {
   const data = doc.data()!;
   return {
@@ -100,12 +99,12 @@ export async function insertDebt(input: {
   return toDebtRow(doc);
 }
 
-// Doc ID = String(installmentNumber) -- matches SQL's
-// UNIQUE(debt_id, installment_number). installmentNumber is also stored as
-// a field since a string doc-ID sort would order "10" before "2".
-// Each installment gets its own referenceMonth ("competência") so marking
-// it paid always books against that month regardless of the real day the
-// user actually clicks it -- installment N defaults to startMonth + (N-1).
+// ID do documento = String(installmentNumber) -- equivale ao
+// UNIQUE(debt_id, installment_number) do SQL. O installmentNumber também é
+// guardado como campo, porque ordenar o ID como texto poria "10" antes de "2".
+// Cada parcela tem o próprio referenceMonth ("competência"), então marcar
+// como paga sempre lança naquele mês, não importa o dia real em que a pessoa
+// clica -- a parcela N fica, por padrão, em startMonth + (N-1).
 export async function insertInstallments(
   debtId: string,
   installments: { amountCents: number; referenceMonth: string }[]
@@ -135,10 +134,10 @@ export async function findDebtsVisibleTo(groupId: string, userId: string): Promi
     .sort((a, b) => (a.id < b.id ? 1 : -1));
 }
 
-// Every debt in the group regardless of owner -- unlike findDebtsVisibleTo
-// this isn't scoped to "what one user can see" (a single equality filter,
-// no new index). Used by the reminders job, same reasoning as
-// cards.repository's findCardsByGroupId.
+// Todas as dívidas do grupo, de qualquer dono -- diferente do
+// findDebtsVisibleTo, não se limita "ao que um usuário pode ver" (um filtro de
+// igualdade só, sem índice novo). Usado pelo job de lembretes, pelo mesmo
+// motivo do findCardsByGroupId do cards.repository.
 export function findDebtsByGroupId(groupId: string): Promise<DebtRow[]> {
   return memoizeScoped(`debts:${groupId}`, [`group:${groupId}`, "debts"], () => loadFindDebtsByGroupId(groupId));
 }
@@ -220,7 +219,7 @@ export async function deleteDebt(debtId: string): Promise<void> {
   batch.delete(debtsCol.doc(debtId));
   await batch.commit();
 
-  // Removes the auto-generated expenses along with the debt they belong to,
-  // instead of leaving orphaned transactions in the extrato.
+  // Apaga os gastos gerados junto com a dívida a que pertencem, em vez de
+  // deixar lançamentos órfãos no extrato.
   await Promise.all(linkedTransactionIds.map((transactionId) => deleteTransaction(transactionId)));
 }

@@ -1,16 +1,17 @@
 import { defineConfig } from "vitest/config";
 
-// Tests hit the real Firestore/Auth emulators (no mocking) -- these env
-// vars have to land before any test file imports db/firestore.ts, which
-// calls initializeApp() at module load time. Vitest applies `test.env`
-// before loading test files, so this is early enough.
+// Os testes usam os emuladores de verdade do Firestore e do Auth (sem
+// simulação) -- estas variáveis precisam estar valendo antes de qualquer
+// teste importar o db/firestore.ts, que chama initializeApp() assim que é
+// carregado. O Vitest aplica o `test.env` antes de carregar os arquivos de
+// teste, então dá tempo.
 //
-// Running tests: the emulators must already be up (`npm run emulators` at
-// the repo root, or `npm run dev`), same as every scratch verification
-// script this project has used all along -- OR run via
-// `firebase emulators:exec` (see root package.json's "test:backend"
-// script), which starts them, runs the suite, and tears them down again
-// for a one-shot/CI run.
+// Pra rodar os testes: os emuladores precisam já estar ligados
+// (`npm run emulators` na raiz do repositório, ou `npm run dev`), igual aos
+// scripts de conferência que o projeto sempre usou -- OU rode pelo
+// `firebase emulators:exec` (ver o script "test:backend" no package.json da
+// raiz), que liga os emuladores, roda tudo e desliga de novo, de uma vez
+// (é assim no CI).
 export default defineConfig({
   test: {
     environment: "node",

@@ -1,3 +1,10 @@
+// CAMADA SERVICE (exemplo comentado das 4 camadas: este módulo).
+// O service guarda a REGRA DE NEGÓCIO: quem pode ver ou mexer (isVisibleTo,
+// requireGroupId), qual mês está pendente, quando avisar, o que acontece ao
+// pagar. Ele não sabe nada de HTTP (não tem req nem res) -- por isso os
+// testes (*.test.ts) chamam estas funções direto. Quando algo está errado,
+// lança um erro com nome (ex.: RecurringBillNotFoundError) e o controller
+// decide a resposta. Pra ler ou gravar, chama o repository.
 import { FieldValue } from "firebase-admin/firestore";
 import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { findMembersByGroupId, findUsableAccount } from "../groups/groups.repository";
@@ -131,8 +138,8 @@ export async function createRecurringBillForUser(userId: string, input: CreateRe
   );
 }
 
-// Same visibility rule as transactions/debts: a joint-account bill is
-// everyone's business, a personal-account one only its own owner's.
+// Mesma regra de visibilidade dos lançamentos e dívidas: conta da conta
+// conjunta é assunto de todos; da conta pessoal, só do dono.
 function isVisibleTo(userId: string, bill: RecurringBillRow): boolean {
   return bill.accountType === "joint" || bill.accountOwnerId === userId;
 }
@@ -413,14 +420,13 @@ export async function snoozeBillForUser(userId: string, billId: string, choice: 
 // Job diário
 // ---------------------------------------------------------------------------
 
-// Entry point for the daily cron (folded into POST /api/reminders/run --
-// same "no per-request user" shape as runDueReminders, no new cron/secret
-// to set up). For every active bill whose day has arrived and that hasn't
-// already generated a transaction this calendar month, creates the real
-// transaction through createTransaction -- the exact same path a manual
-// lancamento takes, so it gets the same validation, splits and denormalized
-// account fields for free. Só as de valor certo: as outras esperam a pessoa
-// confirmar quanto foi.
+// Porta de entrada do cron diário (vem junto com o POST /api/reminders/run --
+// mesmo formato "sem usuário no pedido" do runDueReminders, sem cron nem
+// segredo novo pra configurar). Pra toda conta ativa cujo dia chegou e que
+// ainda não gerou lançamento neste mês, cria o lançamento de verdade pelo
+// createTransaction -- exatamente o mesmo caminho de um lançamento manual,
+// então ganha de graça a mesma validação, divisão e campos de conta. Só as
+// de valor certo: as outras esperam a pessoa confirmar quanto foi.
 export async function generateDueRecurringBills(): Promise<{ billsChecked: number; transactionsCreated: number }> {
   const bills = (await findAllActiveRecurringBills()).filter((bill) => bill.amountMode === "fixed" && bill.amount !== null);
   const today = todayInBrazil();
@@ -447,11 +453,11 @@ export async function generateDueRecurringBills(): Promise<{ billsChecked: numbe
       });
       transactionsCreated++;
     } catch (err) {
-      // A bill whose account/payer/category no longer exists (member left
-      // the group, category got deleted) shouldn't crash the whole cron run
-      // for every other bill -- log and move on, same best-effort posture
-      // as the reminders job. Still stamps lastGeneratedMonth below so a
-      // permanently-broken bill doesn't retry (and fail) every single day.
+      // Uma conta cuja conta bancária, pagador ou categoria não existe mais (o
+      // membro saiu do grupo, a categoria foi apagada) não pode derrubar o cron
+      // inteiro pras outras contas -- registra no log e segue, o mesmo "melhor
+      // esforço" do job de lembretes. Ainda marca o lastGeneratedMonth abaixo, pra
+      // uma conta quebrada de vez não tentar (e falhar) todo santo dia.
       console.error(`generateDueRecurringBills: failed for bill ${bill.id}`, err);
     }
 

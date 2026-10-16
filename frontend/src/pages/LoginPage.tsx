@@ -58,8 +58,8 @@ export function LoginPage() {
     try {
       await resetPassword(email.trim());
     } catch (err) {
-      // "user-not-found" is treated the same as success -- otherwise this
-      // form would leak which emails have an account here.
+      // "user-not-found" é tratado igual a sucesso -- senão este formulário
+      // entregaria quais e-mails têm conta aqui.
       if (!(err instanceof FirebaseError) || err.code !== "auth/user-not-found") {
         setError(authErrorMessage(err, "Não foi possível enviar o email"));
         setIsResetting(false);

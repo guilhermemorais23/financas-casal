@@ -25,10 +25,10 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// Builds a self-contained, print-styled page and opens the browser's print
-// dialog on it ("Salvar como PDF" is one click there). Done client-side on
-// purpose: no PDF library, no server round trip, and the file is generated
-// from exactly the numbers already on screen.
+// Monta uma página completa, com estilo de impressão, e abre a janela de
+// imprimir do navegador nela ("Salvar como PDF" é um clique lá). Feito no
+// navegador de propósito: sem biblioteca de PDF, sem ida ao servidor, e o
+// arquivo sai exatamente dos números que já estão na tela.
 export function printMonthReport(report: PrintableReport): boolean {
   const win = window.open("", "_blank");
   if (!win) return false;
@@ -86,7 +86,8 @@ export function printMonthReport(report: PrintableReport): boolean {
 </body></html>`);
   win.document.close();
   win.focus();
-  // Wait a tick so the document has laid out before the dialog opens.
+  // Espera um instante pro documento terminar de montar antes de a janela
+  // abrir.
   win.setTimeout(() => win.print(), 300);
   return true;
 }

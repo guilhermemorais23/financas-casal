@@ -17,9 +17,9 @@ export interface ShareCategoryTotal {
   total: string;
 }
 
-// A frozen copy of the month at the moment the link was made. Public reads
-// never touch the live transactions collection: what the link shows cannot
-// change afterwards and nothing beyond this document is reachable through it.
+// Uma cópia congelada do mês no momento em que o link foi criado. A leitura
+// pública nunca toca na coleção de lançamentos ao vivo: o que o link mostra
+// não muda depois, e nada além deste documento é alcançável por ele.
 export interface ShareSnapshot {
   month: string;
   ownerName: string;
@@ -56,8 +56,9 @@ function toShareRow(doc: FirebaseFirestore.DocumentSnapshot): ShareRow {
   };
 }
 
-// The document id IS the secret token (unguessable random string), so a
-// lookup by token is a direct get: no query, no index.
+// O id do documento É o token secreto (texto aleatório impossível de
+// adivinhar), então buscar pelo token é um get direto: sem consulta, sem
+// índice.
 export async function insertShare(
   token: string,
   input: ShareSnapshot & { ownerId: string; expiresAt: Date }

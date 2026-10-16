@@ -1,3 +1,10 @@
+// CAMADA CONTROLLER (exemplo comentado das 4 camadas: este módulo).
+// O controller é a "recepção" do pedido HTTP: lê o que veio (req.body,
+// req.params, req.query), confere se os campos fazem sentido (é número? é
+// data?) e responde com res.status(...).json(...). Ele NÃO decide regra de
+// negócio nem fala com o banco: chama uma função do service e transforma o
+// resultado (ou o erro) em resposta. Ex.: InvalidDayOfMonthError do service
+// vira 400 com uma mensagem que a tela mostra.
 import type { Request, Response } from "express";
 import {
   InvalidAccountError,

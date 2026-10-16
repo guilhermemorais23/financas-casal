@@ -113,13 +113,13 @@ export function ParPage() {
 
   async function load() {
     const month = currentMonthParam();
-    // The joint-account extrato needs the joint account's id, which
-    // normally only comes from /groups/me -- but that account rarely
-    // changes, so once we've loaded it once (cached in `group` from a
-    // previous visit), reuse it and fire this request in parallel with the
-    // rest instead of waiting for a fresh /groups/me round trip first. That
-    // "wait for group, then fetch extrato" sequencing was exactly why a
-    // transaction just added to "Nossa conta" took a beat to show up here.
+    // O extrato da conta conjunta precisa do id da conta conjunta, que
+    // normalmente só vem do /groups/me -- mas essa conta quase nunca muda, então,
+    // se já foi carregada uma vez (guardada em `group` de uma visita anterior),
+    // reaproveita e dispara este pedido em paralelo com o resto, em vez de
+    // esperar uma ida e volta nova ao /groups/me antes. Esse "espera o grupo,
+    // depois busca o extrato" era exatamente o motivo de um lançamento recém
+    // feito na "Nossa conta" demorar um pouco pra aparecer aqui.
     const knownJointAccountId = group?.accounts.find((a) => a.type === "joint")?.id;
 
     await whenWritesSettled();
@@ -159,8 +159,8 @@ export function ParPage() {
     load();
   }, [token]);
 
-  // Delete with Desfazer (see utils/deferredDelete.ts): the row leaves the
-  // list right away, the request goes out once the undo window closes.
+  // Apagar com Desfazer (ver utils/deferredDelete.ts): a linha sai da lista na
+  // hora, e o pedido vai quando o tempo de desfazer acaba.
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
@@ -198,9 +198,9 @@ export function ParPage() {
     });
   }
 
-  // Local list update SplitStatusPill drives directly (optimistic flip,
-  // reverted again if its request fails) -- see that component for the
-  // actual settle/reopen calls.
+  // Atualização local da lista que o SplitStatusPill comanda direto (troca
+  // otimista, desfeita se o pedido dele falhar) -- as chamadas de acertar e
+  // reabrir estão naquele componente.
   function setTransactionSettled(transactionId: string, nextSettled: boolean) {
     setTransactions(
       (current) => current?.map((row) => (row.id === transactionId ? { ...row, isSettled: nextSettled } : row)) ?? current
@@ -217,8 +217,9 @@ export function ParPage() {
 
   const jointAccount = group.accounts.find((a) => a.type === "joint");
 
-  // Stable order: you first, then everyone else sorted by id, so color
-  // assignment doesn't jitter between loads (API order isn't guaranteed).
+  // Ordem fixa: você primeiro, depois os outros ordenados pelo id, pra cor de
+  // cada pessoa não ficar trocando entre carregamentos (a ordem da API não é
+  // garantida).
   const others = group.members.filter((m) => m.id !== user?.id).sort((a, b) => a.id.localeCompare(b.id));
   const orderedMembers = user ? [{ id: user.id, displayName: "Você" }, ...others] : others;
 

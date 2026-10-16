@@ -10,10 +10,10 @@ export interface EditableRecurring {
   amount: string;
 }
 
-// "The rent went up" -- rewrites the amount on this occurrence and every
-// future one in the same recurring series (backend: PATCH /:id/recurring).
-// Already-happened occurrences are never touched, same scope as canceling a
-// recurring series from a given point onward.
+// "O aluguel subiu" -- reescreve o valor nesta ocorrência e em todas as
+// futuras da mesma série (backend: PATCH /:id/recurring). As que já
+// aconteceram nunca são tocadas, o mesmo alcance de cancelar uma série a
+// partir de um ponto.
 export function EditRecurringModal({
   transaction,
   onClose,

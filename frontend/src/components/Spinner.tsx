@@ -5,8 +5,9 @@ export function Spinner({ className = "" }: { className?: string }) {
   return <span className={`spinner ${className}`.trim()} aria-hidden="true" />;
 }
 
-// True once `active` has stayed true for `delayMs` -- used to only mention
-// "o servidor está acordando" when a wait is actually long, not on every tap.
+// Vira true quando `active` ficou true por `delayMs` -- usado pra só falar
+// "o servidor está acordando" quando a espera é longa de verdade, e não a
+// cada toque.
 export function useSlowFlag(active: boolean, delayMs = 4000): boolean {
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -30,7 +31,7 @@ export function SlowServerHint({ active }: { active: boolean }) {
   );
 }
 
-// Full-screen "carregando" used while the session is being restored.
+// "Carregando" de tela cheia, usado enquanto a sessão é restaurada.
 export function LoadingScreen({ label = "Carregando..." }: { label?: string }) {
   return (
     <div className="loading-page" role="status" aria-live="polite">

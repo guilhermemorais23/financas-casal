@@ -1,3 +1,19 @@
+// ============================================================================
+// MÓDULO assistant -- endereços /api/assistant
+// ============================================================================
+// O que faz: Assistente com IA (Gemini): chat dentro do app, e o mesmo
+//            assistente pelo Telegram e pelo WhatsApp (webhooks sem login,
+//            conferidos por segredo). Também gera o código de vincular essas
+//            contas.
+// Quem chama: components/GlobalAssistant.tsx (chat) e a tela Conta (vincular
+//             Telegram/WhatsApp).
+//
+// Caminho de um pedido dentro do módulo:
+//   *.routes.ts      endereço -> função (este arquivo)
+//   *.controller.ts  lê e valida o pedido (req.body, req.params), responde
+//   *.service.ts     regra de negócio (quem pode, o que calcula)
+//   *.repository.ts  lê e grava no Firestore
+// ============================================================================
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
@@ -12,12 +28,12 @@ import {
 
 export const assistantRouter = Router();
 
-// Public (validated by TELEGRAM_WEBHOOK_SECRET inside the handler, not by
-// requireAuth -- Telegram has no Firebase user to authenticate as).
+// Público (conferido pelo TELEGRAM_WEBHOOK_SECRET dentro da função, não pelo
+// requireAuth -- o Telegram não tem usuário do Firebase pra se identificar).
 assistantRouter.post("/telegram/webhook", asyncHandler(telegramWebhookHandler));
 
-// Same idea for WhatsApp -- GET is Meta's one-time verify handshake (see
-// whatsappWebhookVerifyHandler), POST is where actual messages arrive.
+// Mesma ideia pro WhatsApp -- o GET é o aperto de mão único da Meta (ver
+// whatsappWebhookVerifyHandler), o POST é por onde chegam as mensagens.
 assistantRouter.get("/whatsapp/webhook", whatsappWebhookVerifyHandler);
 assistantRouter.post("/whatsapp/webhook", asyncHandler(whatsappWebhookHandler));
 

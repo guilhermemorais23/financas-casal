@@ -5,8 +5,8 @@ export interface ConfirmOptions {
   body: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  // "danger" (default) paints the confirm button red -- for anything that
-  // deletes or is hard to reverse. "primary" is for a plain "are you sure?".
+  // "danger" (padrão) pinta o botão de confirmar de vermelho -- pra tudo que
+  // apaga ou é difícil de desfazer. "primary" é pra um simples "tem certeza?".
   tone?: "danger" | "primary";
 }
 
@@ -20,9 +20,9 @@ interface OpenDialog extends ConfirmOptions {
 
 const EXIT_MS = 180;
 
-// Replaces window.confirm everywhere: same "await it, get a boolean" shape,
-// but rendered by the app (themed, animated, keyboard-safe) instead of the
-// browser's native alert box.
+// Substitui o window.confirm em todo lugar: o mesmo jeito "espera e recebe
+// um booleano", mas desenhado pelo app (com o tema, animado, seguro no
+// teclado) em vez da caixa de alerta nativa do navegador.
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<OpenDialog | null>(null);
   const [isClosing, setIsClosing] = useState(false);
@@ -54,14 +54,14 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!dialog) return;
-    // Cancel gets the initial focus: an accidental Enter never destroys data.
+    // O foco começa no Cancelar: um Enter sem querer nunca apaga dados.
     cancelRef.current?.focus();
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
         finish(false);
       } else if (event.key === "Tab") {
-        // Two buttons only -- keep focus cycling between them.
+        // Só dois botões -- o foco fica girando entre eles.
         const order = [cancelRef.current, confirmRef.current].filter(Boolean) as HTMLButtonElement[];
         const index = order.indexOf(document.activeElement as HTMLButtonElement);
         event.preventDefault();

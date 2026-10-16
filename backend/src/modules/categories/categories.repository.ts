@@ -117,12 +117,12 @@ export async function findCategoryById(categoryId: string): Promise<CategoryRow 
   return toCategoryRow(doc);
 }
 
-// Renaming keeps the doc's existing id (derived from the *original* name at
-// create time) rather than migrating to a freshly-derived one -- every
-// transaction/budget referencing this category by id keeps pointing at the
-// right doc. The only cost is the id no longer matches the current name,
-// which is invisible to callers (nothing re-derives an id from a name
-// except insertCategory's own create-time dedupe check).
+// Renomear mantém o id do documento (calculado a partir do nome *original*
+// na criação) em vez de trocar por um id novo -- todo lançamento e orçamento
+// que aponta pra esta categoria pelo id continua apontando pro documento
+// certo. O único custo é o id não bater mais com o nome atual, o que ninguém
+// vê (nada recalcula id a partir de nome, a não ser a checagem de duplicado
+// do próprio insertCategory na criação).
 export async function updateCategory(
   categoryId: string,
   fields: { name?: string; emoji?: string | null }
@@ -135,9 +135,9 @@ export async function updateCategory(
   return toCategoryRow(doc);
 }
 
-// Transactions/budgets that reference this category by id simply degrade to
-// "Sem categoria" afterward (every read site already falls back on a
-// missing category lookup) -- no cascade needed.
+// Lançamentos e orçamentos que apontam pra esta categoria pelo id passam a
+// aparecer como "Sem categoria" (todo lugar que lê já trata categoria que
+// não existe mais) -- não precisa apagar em cascata.
 export async function deleteCategory(categoryId: string): Promise<void> {
   await categoriesCol.doc(categoryId).delete();
 }

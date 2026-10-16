@@ -4,9 +4,9 @@ import { readCache, writeCache } from "./pageCache";
 import { notifyDataChanged, trackWrite } from "./pendingWrites";
 import type { PaymentMethod } from "./paymentMethod";
 
-// A transaction as the lists show it. Fields the pages don't all use
-// (isPrivate, accountType) are here so one shape can feed the Painel and the
-// Relatórios caches.
+// Um lançamento como as listas mostram. Campos que nem toda tela usa
+// (isPrivate, accountType) estão aqui pra um formato só alimentar os caches do
+// Painel e de Relatórios.
 export interface OptimisticTransaction {
   id: string;
   description: string;
@@ -59,10 +59,10 @@ function addToSummary(summary: SummaryShape, tx: OptimisticTransaction): Summary
   return { total: String(Number(summary.total) + amount), byCategory };
 }
 
-// Paints the new transaction into whatever the Painel/Relatórios cached for
-// its month, so those screens open already showing it -- before the server
-// answered. Pages read this cache first and revalidate right after (the
-// revalidation waits for pending writes, see utils/pendingWrites.ts).
+// Desenha o lançamento novo no que o Painel e Relatórios guardaram no cache
+// pro mês dele, pra essas telas já abrirem mostrando -- antes de o servidor
+// responder. As telas leem este cache primeiro e conferem logo depois (a
+// conferência espera as gravações pendentes, ver utils/pendingWrites.ts).
 function patchCaches(userId: string, tx: OptimisticTransaction, direction: 1 | -1): void {
   const month = tx.occurredAt.slice(0, 7);
   const uid = userId || "anon";
@@ -70,8 +70,8 @@ function patchCaches(userId: string, tx: OptimisticTransaction, direction: 1 | -
   const dashKey = `dashboard:full:${month}:${uid}`;
   const dash = readCache<DashboardShape>(dashKey);
   if (dash) {
-    // Rolling back is simpler and safer as "forget it" than as arithmetic:
-    // the next load refetches the truth.
+    // Voltar atrás é mais simples e seguro como "esquecer" do que como conta: o
+    // próximo carregamento busca a verdade de novo.
     if (direction === -1) {
       writeCache(dashKey, null);
     } else {
@@ -112,10 +112,10 @@ interface SaveInBackgroundArgs {
   showToast: (message: string, options?: ToastOptions) => void;
 }
 
-// Fire-and-forget save: the caller has already navigated away and shown the
-// "salvo" toast. If the server rejects it, the optimistic entry is rolled
-// back and a toast offers "Tentar de novo" with the very same payload --
-// nothing the person typed is lost.
+// Gravação que dispara e esquece: quem chamou já saiu da tela e mostrou o
+// aviso "salvo". Se o servidor recusar, o lançamento otimista é desfeito e
+// um aviso oferece "Tentar de novo" com exatamente os mesmos dados -- nada
+// que a pessoa digitou se perde.
 export function saveTransactionInBackground(args: SaveInBackgroundArgs): void {
   const { token, userId, payload, optimistic, showToast } = args;
   patchCaches(userId, optimistic, 1);

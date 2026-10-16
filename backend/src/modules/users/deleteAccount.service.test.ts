@@ -20,7 +20,7 @@ describe("excluir conta", () => {
     expect((await db.collection("users").doc(userAId).get()).exists).toBe(false);
     expect(await countWhere("transactions", "accountOwnerId", userAId)).toBe(0);
     expect((await db.collection("accounts").doc(personalAccountId).get()).exists).toBe(false);
-    // B is still in the group: Nossa Conta and what was booked on it stay.
+    // B continua no grupo: a Nossa Conta e o que foi lançado nela ficam.
     expect(await countWhere("transactions", "accountId", jointAccountId)).toBe(1);
     expect((await db.collection("groups").doc(groupId).get()).exists).toBe(true);
 

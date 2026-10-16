@@ -365,10 +365,10 @@ export function AccountPage() {
     }
   }
 
-  // The link-code endpoint is channel-agnostic (it's just "a code tied to
-  // this user+group", redeemed by whichever bot/webhook it's sent to first)
-  // -- Telegram and WhatsApp share the exact same call, just displayed in
-  // their own card with their own loading state.
+  // A rota do código de vínculo não liga pro canal (é só "um código ligado a
+  // este usuário e grupo", usado pelo bot/webhook que o receber primeiro) --
+  // Telegram e WhatsApp fazem exatamente a mesma chamada, só mostrada no card
+  // de cada um, com o próprio carregando.
   async function generateLinkCode(): Promise<string> {
     const res = await apiRequest<{ code: string }>("/assistant/telegram/link-code", { method: "POST", token });
     return res.code;

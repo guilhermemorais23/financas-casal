@@ -1,3 +1,26 @@
+// ============================================================================
+// MONTAGEM DO SERVIDOR: segurança, limites e o MAPA DE ROTAS da API
+// ============================================================================
+// O Express é a biblioteca que recebe pedidos HTTP e decide qual função
+// responde. Um pedido do frontend passa por estas etapas, NESTA ORDEM (é a
+// ordem dos app.use lá embaixo):
+//
+//   1. cabeçalhos de proteção (nosniff, não abrir dentro de outro site...)
+//   2. CORS: só o site do PAR. pode chamar a API (ALLOWED_ORIGIN)
+//   3. express.json: transforma o corpo do pedido (JSON) em objeto (req.body)
+//   4. limite de pedidos por IP (apiLimiter) e limite apertado pras rotas
+//      caras (heavyLimiter)
+//   5. readCacheScope: liga o cache de leituras e o limpa depois de gravar
+//   6. a ROTA: app.use("/api/debts", debtsRouter) manda tudo que começa com
+//      /api/debts pro módulo de dívidas (backend/src/modules/debts/)
+//   7. errorHandler: se qualquer etapa der erro, vira uma resposta JSON
+//
+// Quer saber quem responde um endereço? Procure aqui o começo dele
+// (ex.: "/api/recurring-bills") e abra o *.routes.ts daquele módulo.
+// Dentro de cada módulo, o caminho é sempre o mesmo:
+//   routes (endereço -> função) -> controller (lê e valida o pedido)
+//   -> service (regra de negócio) -> repository (lê/grava no Firestore)
+// ============================================================================
 import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
@@ -43,17 +66,18 @@ import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
 import { readCacheScope } from "./middleware/readCacheScope";
 
-// Render sits behind a reverse proxy, so req.ip is otherwise the proxy's own
-// address -- trust its X-Forwarded-For so rate limiting (and any future
-// IP-based logic) keys on the real client, not "everyone is one IP".
+// O Render fica atrás de um proxy reverso, então o req.ip seria o endereço
+// do próprio proxy -- confiar no X-Forwarded-For dele faz o limite de pedidos
+// (e qualquer lógica futura por IP) usar o cliente real, e não tratar "todo
+// mundo como um IP só".
 const TRUST_PROXY = process.env.NODE_ENV === "production" ? 1 : false;
 
-// Every request here hits Firestore (a real cost, and the thing that
-// actually falls over under load -- a burst of concurrent connections was
-// measured to push single-digit-ms responses past 1.5s median). 300
-// requests/15min/IP is far above normal usage (the frontend caches and only
-// refetches on navigation) but stops a flood well before it reaches
-// Firestore or exhausts the Render instance.
+// Todo pedido aqui bate no Firestore (custa de verdade, e é o que cai sob
+// carga -- uma rajada de conexões simultâneas levou respostas de poucos ms
+// pra mais de 1,5 s de mediana, medido). 300 pedidos a cada 15 min por IP é
+// bem acima do uso normal (o frontend guarda em cache e só busca de novo ao
+// trocar de tela), mas segura uma enxurrada muito antes de ela chegar no
+// Firestore ou derrubar a instância do Render.
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 300,
@@ -98,13 +122,13 @@ export function createApp() {
     next();
   });
 
-  // ALLOWED_ORIGIN unset (local dev) => allow any origin. Set it in
-  // production to the real frontend URL(s), comma-separated, to stop
-  // other sites from calling this API with a signed-in user's token.
+  // ALLOWED_ORIGIN vazio (no seu PC) => aceita qualquer origem. Em produção,
+  // coloque a(s) URL(s) do frontend, separadas por vírgula, pra impedir que
+  // outros sites chamem esta API usando o token de quem está logado.
   const allowedOrigins = process.env.ALLOWED_ORIGIN?.split(",").map((origin) => origin.trim());
   app.use(cors(allowedOrigins ? { origin: allowedOrigins } : undefined));
-  // Default 100kb body limit is too small for a profile photo data URL
-  // (base64 blows up ~33% over the raw image bytes).
+  // O limite padrão de 100kb pro corpo é pequeno demais pra foto de perfil em
+  // data URL (o base64 fica ~33% maior que os bytes da imagem).
   // Extrato em PDF vem em base64 (até 4MB de arquivo => ~5.4MB de JSON).
   app.use("/api/statements/preview", express.json({ limit: "6mb" }));
   // O webhook do WhatsApp precisa do corpo cru pra conferir a assinatura da Meta.
@@ -122,10 +146,10 @@ export function createApp() {
   app.use("/api", (req, res, next) => (isHeavyRequest(req.method, req.path) ? heavyLimiter(req, res, next) : next()));
   app.use("/api", readCacheScope);
 
-  // Unauthenticated on purpose -- this is what the keep-alive cron pings.
-  // /api/me always answers 401 when hit without a token, which cron-job.org
-  // (and similar services) count as a failed execution; enough of those in
-  // a row auto-disables the cronjob even though the ping was doing its job.
+  // Sem login de propósito -- é o que o cron de "manter acordado" chama.
+  // O /api/me sempre responde 401 sem token, e o cron-job.org (e serviços
+  // parecidos) conta isso como execução com falha; várias seguidas desligam o
+  // cron sozinhas, mesmo com o ping fazendo o trabalho dele.
   app.get("/api/health", (_req, res) => {
     void maybeRunDailyJobs();
     void maybeRunOpsChecks();

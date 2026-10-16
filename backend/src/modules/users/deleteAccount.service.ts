@@ -3,10 +3,10 @@ import { findMembersByGroupId } from "../groups/groups.repository";
 import { invalidateTransactionReads } from "../../utils/readCache";
 import { findUserById } from "./users.repository";
 
-// Collections whose docs belong to a whole group (groupId field). When the
-// last member deletes their account there's nobody left to see any of it,
-// so all of it goes -- the App Store and the LGPD both require that
-// "excluir conta" actually erases the data, not just hides it.
+// Coleções cujos documentos pertencem ao grupo inteiro (campo groupId).
+// Quando o último membro exclui a conta, não sobra ninguém pra ver nada
+// disso, então vai tudo -- a App Store e a LGPD exigem que "excluir conta"
+// apague os dados de verdade, e não só esconda.
 const GROUP_COLLECTIONS = [
   "transactions",
   "cards",
@@ -23,8 +23,8 @@ const GROUP_COLLECTIONS = [
 
 async function deleteDocs(query: FirebaseFirestore.Query): Promise<void> {
   const snapshot = await query.get();
-  // recursiveDelete also takes the subcollections (splits, purchases,
-  // statements, installments) that a plain delete would leave orphaned.
+  // O recursiveDelete também leva as subcoleções (divisões, compras, faturas,
+  // parcelas), que um delete simples deixaria órfãs.
   await Promise.all(snapshot.docs.map((doc) => db.recursiveDelete(doc.ref)));
 }
 
@@ -35,10 +35,10 @@ async function deleteWholeGroup(groupId: string): Promise<void> {
   await db.recursiveDelete(db.collection("groups").doc(groupId));
 }
 
-// Someone else is still in the group: joint data (Nossa Conta, cartões do
-// grupo, metas...) is theirs too and stays. What goes is everything that
-// only this person could see -- their personal account and whatever was
-// booked on it, their personal cards and debts.
+// Ainda tem alguém no grupo: os dados conjuntos (Nossa Conta, cartões do
+// grupo, metas...) são dessa pessoa também e ficam. O que vai embora é tudo
+// que só quem está saindo podia ver -- a conta pessoal e o que foi lançado
+// nela, os cartões e as dívidas pessoais.
 async function deletePersonalData(groupId: string, userId: string): Promise<void> {
   await Promise.all([
     deleteDocs(db.collection("transactions").where("groupId", "==", groupId).where("accountOwnerId", "==", userId)),
@@ -78,8 +78,8 @@ export async function deleteAccountForUser(userId: string): Promise<void> {
   try {
     await auth.deleteUser(userId);
   } catch (err) {
-    // Already gone from Firebase Auth (a retry after a partial failure) --
-    // the data above is what mattered.
+    // Já não existe mais no Firebase Auth (nova tentativa depois de uma falha no
+    // meio do caminho) -- o que importava eram os dados acima.
     if ((err as { code?: string }).code !== "auth/user-not-found") throw err;
   }
 }

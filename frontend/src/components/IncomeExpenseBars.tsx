@@ -1,16 +1,16 @@
 import { formatCurrency } from "../utils/format";
 
-// Same series-1/series-2 pair as IncomeExpenseDonut -- validated CVD-safe
-// (scripts/validate_palette.js) and consistent with how "Entrada"/"Saída"
-// already read everywhere else in the app.
+// O mesmo par series-1/series-2 do IncomeExpenseDonut -- validado pra
+// daltonismo (scripts/validate_palette.js) e coerente com como "Entrada" e
+// "Saída" já aparecem no resto do app.
 const BARS = [
   { key: "income" as const, label: "Entrada", color: "var(--series-1)" },
   { key: "expense" as const, label: "Saída", color: "var(--series-2)" },
 ];
 
 export function IncomeExpenseBars({ income, expense }: { income: number; expense: number }) {
-  // Both bars share one scale (the larger of the two) so their lengths stay
-  // comparable -- never each bar normalized to its own 100%.
+  // As duas barras usam a mesma escala (a maior das duas), pra os comprimentos
+  // serem comparáveis -- nunca cada barra no seu próprio 100%.
   const max = Math.max(income, expense, 1);
   const values = { income, expense };
 

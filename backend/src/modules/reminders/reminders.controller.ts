@@ -3,16 +3,16 @@ import { env } from "../../config/env";
 import { generateDueRecurringBills } from "../recurringBills/recurringBills.service";
 import { runDueReminders } from "./reminders.service";
 
-// Not a Firebase-authenticated route -- an external daily cron (cron-job.org,
-// same one already used for the /api/health keep-alive ping) calls this with
-// no signed-in user, so it's gated by a shared secret header instead.
-// CRON_SECRET unset means the route is unreachable, same "off by default"
-// posture as missing Gmail SMTP credentials (see email/mailer.ts).
+// Não é uma rota com login do Firebase -- um cron externo diário
+// (cron-job.org, o mesmo que já faz o ping de /api/health) chama isto sem
+// ninguém logado, então a proteção é um cabeçalho com segredo compartilhado.
+// CRON_SECRET vazio = a rota fica inacessível, o mesmo "desligado por padrão"
+// de quando faltam as credenciais do SMTP do Gmail (ver email/mailer.ts).
 //
-// Recurring bills piggyback on this exact same daily hit (rather than a
-// second cron-job.org job) -- both are "once a day, no per-user context"
-// background work, and this is the one external trigger that already
-// exists and is already configured in production.
+// As contas fixas pegam carona nessa mesma chamada diária (em vez de um
+// segundo cron no cron-job.org) -- as duas são trabalho de fundo "uma vez por
+// dia, sem usuário", e esta é a chamada externa que já existe e já está
+// configurada em produção.
 export async function runRemindersHandler(req: Request, res: Response) {
   if (!env.cronSecret || req.header("x-cron-secret") !== env.cronSecret) {
     res.status(401).json({ error: "unauthorized" });

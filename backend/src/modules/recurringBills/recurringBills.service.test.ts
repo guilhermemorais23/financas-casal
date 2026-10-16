@@ -64,8 +64,8 @@ describe("recurringBills", () => {
     expect(afterFirstRun.size).toBe(1);
     expect(afterFirstRun.docs[0].data().description).toBe("Academia");
 
-    // Same day, run again (cron fires more than once, or twice in one day) --
-    // must not create a second transaction for the same month.
+    // Mesmo dia, roda de novo (o cron dispara mais de uma vez, ou duas no mesmo
+    // dia) -- não pode criar um segundo lançamento pro mesmo mês.
     await generateDueRecurringBills();
     const afterSecondRun = await db.collection("transactions").where("groupId", "==", groupId).get();
     expect(afterSecondRun.size).toBe(1);

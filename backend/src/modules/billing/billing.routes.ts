@@ -1,3 +1,17 @@
+// ============================================================================
+// MÓDULO billing -- endereços /api/billing
+// ============================================================================
+// O que faz: Assinatura Premium pelo Asaas: situação do plano, pagar,
+//            cancelar, cortesia dada pelo Admin, e o webhook do Asaas avisando
+//            pagamento.
+// Quem chama: Tela Plano (pages/PlanPage.tsx, /plano) e Admin > Assinaturas.
+//
+// Caminho de um pedido dentro do módulo:
+//   *.routes.ts      endereço -> função (este arquivo)
+//   *.controller.ts  lê e valida o pedido (req.body, req.params), responde
+//   *.service.ts     regra de negócio (quem pode, o que calcula)
+//   *.repository.ts  lê e grava no Firestore
+// ============================================================================
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";

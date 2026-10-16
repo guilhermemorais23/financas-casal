@@ -1,13 +1,14 @@
-// "Excluir" with a real Desfazer: the row disappears from the screen right
-// away, but the DELETE request is only sent once the undo window has passed.
-// Undoing inside that window just cancels the timer -- nothing was ever
-// deleted on the server, so there's nothing to recreate (a recreated
-// transaction would lose its id, split status, recurring link, etc).
+// "Excluir" com Desfazer de verdade: a linha some da tela na hora, mas o
+// pedido de DELETE só é enviado depois que o tempo de desfazer passou.
+// Desfazer dentro desse tempo só cancela o timer -- nada foi apagado no
+// servidor, então não há o que recriar (um lançamento recriado perderia o
+// id, o status da divisão, a ligação da recorrência etc.).
 //
-// State lives at module level, not inside a component, on purpose: leaving
-// the page during the undo window must not drop the pending delete (the
-// toast, which lives at the app root, is still on screen and still offers
-// Desfazer). Closing the tab flushes whatever is still pending.
+// O estado fica no nível do módulo, e não dentro de um componente, de
+// propósito: sair da tela durante o tempo de desfazer não pode perder o
+// apagar pendente (o aviso, que fica na raiz do app, continua na tela e
+// continua oferecendo Desfazer). Fechar a aba manda o que ainda estiver
+// pendente.
 const pending = new Map<string, { timer: number; run: () => Promise<void> }>();
 
 export const UNDO_WINDOW_MS = 6000;
@@ -21,7 +22,8 @@ export function scheduleDeferred(key: string, run: () => Promise<void>, ms: numb
   pending.set(key, { timer, run });
 }
 
-// True when the pending delete was still cancellable (i.e. undo worked).
+// true quando o apagar pendente ainda podia ser cancelado (ou seja, desfazer
+// funcionou).
 export function cancelDeferred(key: string): boolean {
   const entry = pending.get(key);
   if (!entry) return false;
@@ -30,9 +32,9 @@ export function cancelDeferred(key: string): boolean {
   return true;
 }
 
-// A list refetched during the undo window still contains the row (the
-// server hasn't deleted it yet) -- pages filter these out so it doesn't
-// pop back on screen.
+// Uma lista buscada de novo durante o tempo de desfazer ainda tem a linha (o
+// servidor ainda não apagou) -- as telas filtram estas, pra ela não voltar a
+// aparecer.
 export function isDeferredPending(key: string): boolean {
   return pending.has(key);
 }

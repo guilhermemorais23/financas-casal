@@ -8,9 +8,9 @@ interface CategoryBarsProps {
   onSelect?: (id: string | null) => void;
 }
 
-// Ranked bars instead of a pie: the name and the value sit next to each
-// other (no legend to decode), the biggest category is first, and tapping
-// one filters the extrato below -- same contract as CategoryPieChart.
+// Barras em ranking em vez de pizza: nome e valor ficam lado a lado (sem
+// legenda pra decifrar), a maior categoria vem primeiro, e tocar numa filtra
+// o extrato abaixo -- o mesmo combinado do CategoryPieChart.
 export function CategoryBars({ slices, selectedId = null, onSelect }: CategoryBarsProps) {
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
   const ranked = slices.slice().sort((a, b) => b.value - a.value);

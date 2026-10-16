@@ -26,9 +26,9 @@ export function nextMonthParam(monthParam: string = currentMonthParam()): string
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// Tolerates a missing/malformed month string instead of throwing -- a
-// render crash here has no error boundary to catch it and blanks the whole
-// page, so this degrades to a placeholder instead.
+// Aguenta um mês vazio ou mal formatado em vez de dar erro -- uma quebra de
+// desenho aqui não tem error boundary pra pegar e deixa a página inteira em
+// branco, então vira um texto reserva.
 export function monthLongName(monthParam: string | null | undefined): string {
   if (!monthParam) return "—";
   const [year, month] = monthParam.split("-").map(Number);
@@ -42,17 +42,17 @@ export function monthYearLabel(monthParam: string | null | undefined): string {
   return `${monthLongName(monthParam)}/${monthParam.slice(0, 4)}`;
 }
 
-// "2026-08-20" -> a Date at local midnight. `new Date("2026-08-20")` alone
-// parses as UTC midnight, which then renders as the day *before* once
-// formatted in any timezone behind UTC (all of Brazil) -- this is why dates
-// were showing one day earlier than what was actually entered.
+// "2026-08-20" -> uma Date à meia-noite local. `new Date("2026-08-20")` sozinho
+// lê como meia-noite UTC, que vira o dia *anterior* quando formatada em
+// qualquer fuso atrás do UTC (o Brasil inteiro) -- era por isso que as datas
+// apareciam um dia antes do que foi digitado.
 export function parseLocalDate(dateStr: string): Date {
   const [year, month, day] = dateStr.split("-").map(Number);
   return new Date(year, month - 1, day);
 }
 
-// "Hoje" / "Ontem" / "5 de agosto" -- assumes callers pass a date-only string
-// (YYYY-MM-DD), same as `occurredAt` everywhere else in this app.
+// "Hoje" / "Ontem" / "5 de agosto" -- supõe que quem chama passa uma data sem
+// hora (YYYY-MM-DD), igual o `occurredAt` no resto do app.
 export function dayLabel(dateStr: string): string {
   const date = parseLocalDate(dateStr);
   const today = new Date();
@@ -63,9 +63,9 @@ export function dayLabel(dateStr: string): string {
   return date.toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
 }
 
-// Buckets an already date-sorted list into same-day runs, so a list view can
-// show one "Hoje" / "Ontem" header per day instead of repeating the date on
-// every row.
+// Separa uma lista já ordenada por data em blocos do mesmo dia, pra uma tela
+// de lista mostrar um cabeçalho "Hoje" / "Ontem" por dia, em vez de repetir a
+// data em cada linha.
 export function groupByDay<T extends { occurredAt: string }>(items: T[]): { label: string; items: T[] }[] {
   const groups: { label: string; items: T[] }[] = [];
   for (const item of items) {

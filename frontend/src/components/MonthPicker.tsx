@@ -9,11 +9,11 @@ interface MonthPickerProps {
   isLoading?: boolean;
 }
 
-// Replaces the browser's native <input type="month"> -- its popup renders
-// with the OS/browser's own chrome (plain white box, default font, "Limpar"
-// that doesn't even make sense here since a month is always selected), which
-// looks out of place next to the rest of the app's styling. Same
-// toggle-panel-with-outside-click pattern usado nos menus do app.
+// Substitui o <input type="month"> nativo do navegador -- o popup dele vem
+// com a cara do sistema/navegador (caixa branca simples, fonte padrão, um
+// "Limpar" que nem faz sentido aqui, já que sempre tem um mês escolhido), o
+// que destoa do resto do visual do app. O mesmo padrão de painel que abre e
+// fecha clicando fora usado nos menus do app.
 export function MonthPicker({ value, onChange, isLoading = false }: MonthPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewYear, setViewYear] = useState(() => Number(value.slice(0, 4)));
@@ -21,8 +21,8 @@ export function MonthPicker({ value, onChange, isLoading = false }: MonthPickerP
 
   const [selectedYear, selectedMonthNum] = value.split("-").map(Number);
 
-  // Re-center the year grid on whatever month is actually selected each
-  // time the panel opens, rather than staying wherever it was last left.
+  // Centraliza de novo a grade do ano no mês que está escolhido toda vez que
+  // o painel abre, em vez de ficar onde parou da última vez.
   useEffect(() => {
     if (isOpen) setViewYear(Number(value.slice(0, 4)));
   }, [isOpen, value]);

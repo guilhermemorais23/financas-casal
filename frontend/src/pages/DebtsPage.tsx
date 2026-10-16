@@ -67,9 +67,9 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
       setDebts(result);
       writeCache(cacheKey, result);
     } catch (err) {
-      // Leaves `debts` as whatever it was (cached or null) -- the empty-
-      // state sections below only render once `debts` is non-null, so a
-      // failed load never gets mistaken for "confirmed no debts".
+      // Deixa `debts` como estava (do cache ou null) -- as seções de "vazio" abaixo
+      // só aparecem quando `debts` não é null, então uma falha ao carregar nunca é
+      // confundida com "confirmado: nenhuma dívida".
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar as dívidas");
     }
   }

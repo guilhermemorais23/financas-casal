@@ -12,9 +12,10 @@ export interface BudgetRow {
 
 const budgetsCol = db.collection("budgets");
 
-// Deterministic doc ID gives true create-time uniqueness (via .create()),
-// unlike the old SQL UNIQUE(couple_id, period_month, category_id) which
-// didn't actually dedupe NULL category_id rows in Postgres.
+// ID do documento fixo (calculado) garante que não existe duplicado na
+// criação (via .create()), diferente do antigo UNIQUE(couple_id,
+// period_month, category_id) do SQL, que não evitava linhas repetidas com
+// category_id NULL no Postgres.
 function budgetDocId(groupId: string, periodMonth: string, categoryId: string | null): string {
   return `${groupId}_${periodMonth}_${categoryId ?? "none"}`;
 }
@@ -58,10 +59,10 @@ export async function upsertGroupBudget(input: {
   return toBudgetRow(doc);
 }
 
-// Deterministic doc gets in parallel, one per category -- avoids a Firestore
-// composite-index requirement that a `.where(groupId).where(periodMonth)`
-// query would need, and a group's category count is small enough that N
-// parallel .get()s cost nothing.
+// Busca os documentos de ID fixo em paralelo, um por categoria -- evita o
+// índice composto que uma consulta `.where(groupId).where(periodMonth)`
+// exigiria no Firestore, e um grupo tem poucas categorias, então N .get() em
+// paralelo não custam nada.
 export async function findCategoryBudgets(
   groupId: string,
   periodMonth: string,

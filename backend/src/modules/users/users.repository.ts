@@ -48,10 +48,10 @@ export function findUserById(userId: string): Promise<UserRow | null> {
   });
 }
 
-// Idempotent: called on every sign-in, not just first-ever sign-up, so the
-// profile doc always exists by the time any other endpoint needs it.
-// isNew tells the caller whether this was the very first sign-in (e.g. to
-// gate a welcome email so it doesn't fire on every login).
+// Pode chamar várias vezes: roda em todo login, não só no primeiro cadastro,
+// então o documento de perfil sempre existe quando qualquer outra rota
+// precisa. O isNew diz a quem chamou se foi o primeiríssimo login (ex.: pra
+// mandar o e-mail de boas-vindas uma vez só, e não a cada login).
 export async function upsertUserProfile(input: {
   id: string;
   email: string;

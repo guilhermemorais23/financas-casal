@@ -1,3 +1,11 @@
+// A trava das páginas que exigem login. Em App.tsx, toda página "de dentro"
+// fica embrulhada assim: <ProtectedRoute requireGroup><DashboardPage /></ProtectedRoute>.
+//   - ainda conferindo a sessão -> tela de carregando;
+//   - ninguém logado -> manda pro /login;
+//   - requireGroup e a pessoa ainda não tem grupo -> manda pro /group-setup;
+//   - tudo certo -> mostra a página.
+// É só conforto de tela: a segurança de verdade está no backend, que confere
+// o token em todo pedido (backend/src/middleware/auth.ts).
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { LoadingScreen } from "../components/Spinner";

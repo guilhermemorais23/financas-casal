@@ -1,6 +1,6 @@
-// Full months between today and a goal's deadline -- 22/09 -> 22/12 is 3,
-// 22/09 -> 21/12 is 2 (the third month isn't complete yet). Negative once
-// the deadline has passed.
+// Meses completos entre hoje e o prazo de uma meta -- 22/09 -> 22/12 dá 3,
+// 22/09 -> 21/12 dá 2 (o terceiro mês ainda não fechou). Negativo depois que
+// o prazo passou.
 export function monthsUntil(deadline: string, today: Date = new Date()): number {
   const [year, month, day] = deadline.split("-").map(Number);
   let months = (year - today.getFullYear()) * 12 + (month - 1 - today.getMonth());
@@ -13,11 +13,11 @@ export interface MonthlySaving {
   months: number;
 }
 
-// The least someone has to put in each month to hit the target by the
-// deadline: what's missing / months left, rounded UP to the cent (rounding
-// down would leave the goal a few cents short on the last month). A
-// deadline less than a month away counts as 1 month. null when there's no
-// deadline, the goal is already reached, or the deadline has passed.
+// O mínimo que a pessoa precisa guardar por mês pra chegar no objetivo até o
+// prazo: o que falta / meses restantes, arredondado PRA CIMA no centavo
+// (arredondar pra baixo deixaria a meta uns centavos curta no último mês). Um
+// prazo a menos de um mês conta como 1 mês. null quando não há prazo, a meta
+// já foi atingida ou o prazo passou.
 export function minimumMonthlySaving(
   targetAmount: number,
   currentAmount: number,

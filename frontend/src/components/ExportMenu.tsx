@@ -20,10 +20,10 @@ interface Item {
   requiresData?: boolean;
 }
 
-// One "Exportar" button instead of a growing row of "⬇ CSV", "⬇ Tudo"...:
-// every way of getting data out lives in one menu, each with a verb and a
-// one-line hint. Importar tem botão próprio ao lado deste (Relatórios) e na
-// tela inicial.
+// Um botão "Exportar" em vez de uma fileira crescente de "⬇ CSV", "⬇ Tudo"...:
+// todo jeito de tirar dados fica num menu só, cada um com um verbo e uma
+// dica de uma linha. Importar tem botão próprio ao lado deste (Relatórios) e
+// na tela inicial.
 export function ExportMenu(props: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);

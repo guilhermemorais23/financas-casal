@@ -1,7 +1,7 @@
-// Shared fixture builders for tests -- same "fabricate directly in
-// Firestore, bypass HTTP/auth" pattern this project has used in every
-// scratch verification script all along, just kept around permanently and
-// run through vitest instead of a throwaway .mjs file.
+// Funções que montam os dados dos testes -- o mesmo padrão de "criar direto
+// no Firestore, pulando HTTP e login" que o projeto sempre usou nos scripts
+// de conferência avulsos, só que guardado de vez e rodando pelo vitest em vez
+// de um .mjs descartável.
 import { db } from "./db/firestore";
 import { addUserToGroup, createAccount, createGroup } from "./modules/groups/groups.repository";
 
@@ -15,8 +15,8 @@ export interface TestGroup {
   jointAccountId: string;
 }
 
-// Two-person group with one personal account (owned by "A") and one joint
-// account -- covers the shape almost every test in this project needs.
+// Grupo de duas pessoas com uma conta pessoal (do "A") e uma conta conjunta --
+// o formato de que quase todo teste do projeto precisa.
 export async function createTestGroup(): Promise<TestGroup> {
   const group = await createGroup();
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

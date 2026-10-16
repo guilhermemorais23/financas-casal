@@ -1,5 +1,34 @@
+// ============================================================================
+// CONVERSA COM O BACKEND -- todo pedido do app pro servidor passa por aqui
+// ============================================================================
+// As telas nunca chamam fetch() direto. Elas chamam:
+//
+//   apiRequest<Tipo>("/recurring-bills", { token })              // GET
+//   apiRequest("/debts", { method: "POST", token, body: {...} }) // POST
+//
+// e o apiRequest cuida do resto:
+//   1. junta API_URL (o endereço do backend) + o caminho;
+//   2. põe o token de login no cabeçalho Authorization ("Bearer ...") -- é
+//      como o backend sabe quem está pedindo (middleware/auth.ts no backend);
+//   3. põe o grupo aberto no cabeçalho X-Group-Id (ver activeGroup.ts);
+//   4. se o token estava velho (401), pede um novo e tenta de novo uma vez;
+//   5. devolve o JSON da resposta, ou lança ApiError com a mensagem do
+//      backend (as telas mostram err.message).
+//
+// Por que centralizar: o endereço, o login e o tratamento de erro ficam num
+// lugar só. Mudou o servidor? Muda uma variável, não 100 telas.
+// ============================================================================
 import { getActiveGroupId, setActiveGroupId } from "./activeGroup";
 
+// Endereço do backend. TODO pedido do app pro servidor começa com isto.
+// Vem da variável de ambiente VITE_API_URL:
+//   - no seu PC: frontend/.env -> VITE_API_URL=http://localhost:4000/api
+//   - em produção: o CI (.github/workflows/ci.yml) define
+//     VITE_API_URL=https://financas-casal-m496.onrender.com/api na hora do build.
+// O Vite troca `import.meta.env.VITE_API_URL` pelo valor escrito durante o
+// build -- o navegador recebe o endereço já pronto. Só variáveis que começam
+// com VITE_ chegam no navegador (as outras ficam de fora de propósito, pra
+// nenhum segredo vazar). O tipo dela está declarado em src/vite-env.d.ts.
 const API_URL = import.meta.env.VITE_API_URL;
 
 function groupHeader(): Record<string, string> {
@@ -27,9 +56,9 @@ export class ApiError extends Error {
   }
 }
 
-// Set once by AuthContext on mount -- gives this module a way to force a
-// fresh Firebase ID token without importing AuthContext itself (would be a
-// dependency cycle: AuthContext is the thing that calls apiRequest).
+// O AuthContext preenche isto uma vez, quando abre. É o jeito deste arquivo
+// pedir um token novo ao Firebase sem importar o AuthContext (daria um ciclo
+// de dependência: o AuthContext é justamente quem chama o apiRequest).
 let refreshToken: (() => Promise<string | null>) | null = null;
 export function setTokenRefresher(fn: (() => Promise<string | null>) | null): void {
   refreshToken = fn;
@@ -53,11 +82,11 @@ export async function apiRequest<T>(
 
   let response = await doFetch(options.token);
 
-  // A 401 on a request that DID carry a token usually means the ID token
-  // was stale, not that the user is actually signed out -- most often
-  // because the background tab was suspended long enough that Firebase's
-  // own auto-refresh timer never got to run. Force one fresh token and
-  // retry exactly once before surfacing anything to the caller.
+  // Um 401 num pedido que FOI com token normalmente quer dizer que o token
+  // estava velho, e não que a pessoa saiu -- quase sempre porque a aba ficou
+  // em segundo plano tanto tempo que o renovador automático do Firebase não
+  // chegou a rodar. Pede um token novo e tenta de novo uma única vez, antes de
+  // devolver qualquer erro pra quem chamou.
   if (response.status === 401 && options.token && refreshToken) {
     const freshToken = await refreshToken().catch(() => null);
     if (freshToken && freshToken !== options.token) {
@@ -84,9 +113,10 @@ export async function apiRequest<T>(
   return data as T;
 }
 
-// For file downloads (CSV export, etc.) -- apiRequest always parses the
-// response as JSON, which a file response isn't. Fetches with the same auth
-// header, then hands the browser a real file via a throwaway <a download>.
+// Pra baixar arquivo (exportar CSV etc.) -- o apiRequest sempre lê a
+// resposta como JSON, e arquivo não é JSON. Busca com o mesmo cabeçalho de
+// login e entrega um arquivo de verdade pro navegador por um <a download>
+// descartável.
 export async function apiDownload(path: string, token: string | null, filename: string): Promise<void> {
   const fetchWith = (t: string | null) =>
     fetch(`${API_URL}${path}`, { headers: { ...groupHeader(), ...(t ? { Authorization: `Bearer ${t}` } : {}) } });
@@ -118,11 +148,12 @@ export async function apiDownload(path: string, token: string | null, filename: 
   URL.revokeObjectURL(url);
 }
 
-// The backend runs on Render's free plan, which puts it to sleep after a
-// while idle -- the first request after that can take 30s+ while it boots.
-// Firing a throwaway /health ping as soon as the app opens lets that boot
-// overlap with the person typing their email/password (or Firebase
-// restoring their session), instead of it all landing on the "Entrar" tap.
+// O backend roda no plano grátis do Render, que põe o servidor pra dormir
+// depois de um tempo parado -- o primeiro pedido depois disso pode levar mais
+// de 30 s enquanto ele liga. Mandar um ping descartável no /health assim que
+// o app abre faz essa partida acontecer enquanto a pessoa digita e-mail e
+// senha (ou o Firebase restaura a sessão), em vez de cair tudo no toque em
+// "Entrar".
 let warmUpStarted = false;
 export function warmUpApi(): void {
   if (warmUpStarted || !API_URL) return;

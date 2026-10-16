@@ -7,23 +7,22 @@ interface SplitStatusPillProps {
   transactionId: string;
   totalAmount: number;
   isSettled: boolean;
-  // Called immediately (before the request resolves) so the pill flips
-  // right away; called again with the previous value if the request fails,
-  // to revert it.
+  // Chamado na hora (antes de o pedido terminar) pra etiqueta mudar já;
+  // chamado de novo com o valor anterior se o pedido falhar, pra desfazer.
   onOptimisticChange: (nextIsSettled: boolean) => void;
-  // Fire-and-forget signal that something changed server-side -- the parent
-  // reloads in the background to catch up anything derived from this (the
-  // "Divisões em aberto" total), without blocking the pill itself.
+  // Sinal de "algo mudou no servidor", dispara e esquece -- a tela de cima
+  // recarrega em segundo plano pra atualizar o que depende disto (o total de
+  // "Divisões em aberto"), sem travar a etiqueta.
   onSettled: () => void;
   onError: (message: string) => void;
 }
 
-// Self-contained pago/aberto toggle for a split expense. "Em aberto" opens
-// a tiny inline form to confirm the amount actually paid back (prefilled
-// with half the total -- editable, since it's not always an exact 50/50 in
-// practice) before booking it as a real income transaction on the backend.
-// "✓ Pago" reopens in one click, no form needed, since undoing never asks
-// for an amount (the linked income transaction is just deleted).
+// Botão pago/em aberto de um gasto dividido, que se vira sozinho. "Em aberto"
+// abre um formulário pequeno pra confirmar quanto foi devolvido de fato
+// (preenchido com metade do total -- editável, porque na prática nem sempre
+// é 50/50 exato) antes de lançar como receita de verdade no backend.
+// "✓ Pago" reabre com um clique, sem formulário, porque desfazer nunca pede
+// valor (a receita ligada só é apagada).
 export function SplitStatusPill({
   token,
   transactionId,
@@ -40,9 +39,9 @@ export function SplitStatusPill({
 
   function startSettling(event: React.MouseEvent) {
     event.stopPropagation();
-    // A simple half-of-total default -- most splits here are between 2
-    // people, and it's editable anyway for anything else (a partial
-    // payback, an uneven split in practice, etc).
+    // Metade do total como padrão simples -- a maioria das divisões aqui é entre
+    // 2 pessoas, e dá pra editar em qualquer outro caso (devolução parcial,
+    // divisão desigual na prática etc.).
     setAmount((totalAmount / 2).toFixed(2).replace(".", ","));
     setIsFormOpen(true);
   }

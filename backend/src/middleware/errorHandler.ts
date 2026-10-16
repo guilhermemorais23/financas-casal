@@ -1,3 +1,8 @@
+// Última etapa de todo pedido (registrada por último no app.ts): qualquer erro
+// que escapou de uma rota cai aqui e vira uma resposta JSON { error: "..." },
+// que o frontend mostra (ApiError em api/client.ts). Erros conhecidos viram
+// o código certo (403, 404, 503); o resto vira 500 e vai pro log (logError),
+// que o Admin mostra e que avisa o dono por e-mail quando acumula.
 import type { NextFunction, Request, Response } from "express";
 import { GroupAccessError, NoGroupError } from "../modules/groups/groups.service";
 import { isQuotaError, logError } from "../utils/errorLog";

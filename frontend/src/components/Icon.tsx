@@ -1,7 +1,7 @@
-// One line-icon set for the whole app (replaces emoji-as-icon in the nav,
-// buttons and menus): same drawing on Windows, Mac and phones, and it takes
-// the text color of whatever it sits in, so themes and active states just
-// work.
+// Um conjunto só de ícones de linha pro app todo (no lugar de emoji como
+// ícone no menu, nos botões e nos menus): mesmo desenho no Windows, no Mac e
+// no celular, e pega a cor do texto de onde estiver, então tema e estado
+// ativo funcionam sozinhos.
 const PATHS = {
   home: "M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10",
   heart: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z",

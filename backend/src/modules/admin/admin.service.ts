@@ -40,10 +40,10 @@ export interface AdminOverview {
   firestoreUnavailable?: boolean;
 }
 
-// "Casal completo" (paired) vs "sozinho" (solo) isn't a stored flag -- it's
-// derived by counting how many users share each groupId. Reading just the
-// groupId field (not full user docs) keeps this cheap even as the user
-// count grows.
+// "Casal completo" (paired) e "sozinho" (solo) não são um campo guardado --
+// é calculado contando quantos usuários têm o mesmo groupId. Ler só o campo
+// groupId (e não o documento inteiro de cada usuário) mantém isso barato
+// mesmo com muitos usuários.
 export async function getAdminOverview(): Promise<AdminOverview> {
   try {
     return await loadAdminOverview();

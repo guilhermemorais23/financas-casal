@@ -1,3 +1,18 @@
+// ============================================================================
+// MÓDULO recurringBills -- endereços /api/recurring-bills
+// ============================================================================
+// O que faz: Contas fixas: as de valor certo lançam sozinhas todo mês (job
+//            diário); as "mais ou menos" e "não sei ainda" avisam antes de
+//            vencer e perguntam quanto foi (pagar, lembrar mais tarde).
+// Quem chama: A pagar -> Contas (RecurringBillsPage), avisos no Painel e
+//             "Contas do mês" (components/BillReminders.tsx).
+//
+// Caminho de um pedido dentro do módulo:
+//   *.routes.ts      endereço -> função (este arquivo)
+//   *.controller.ts  lê e valida o pedido (req.body, req.params), responde
+//   *.service.ts     regra de negócio (quem pode, o que calcula)
+//   *.repository.ts  lê e grava no Firestore
+// ============================================================================
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";

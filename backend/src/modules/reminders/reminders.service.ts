@@ -23,9 +23,9 @@ import {
 } from "./reminders.repository";
 import { formatBRL } from "../../utils/money";
 
-// A card's due-date reminder fires the first time the cron notices its
-// current statement is unpaid and within this many days of (or already
-// past) the due date -- one email per statement, not one per day in range.
+// O lembrete de vencimento de um cartão sai na primeira vez que o cron vê a
+// fatura atual em aberto e a até tantos dias do vencimento (ou já vencida) --
+// um e-mail por fatura, e não um por dia dentro da janela.
 const CARD_REMINDER_WINDOW_DAYS = 7;
 
 function formatBRDate(isoDate: string): string {
@@ -78,8 +78,8 @@ async function runCardReminders(groupId: string, members: MemberWithEmail[]): Pr
     const key = `card:${card.id}:${statementMonth}`;
     if (await wasReminderSent(key)) continue;
 
-    // ownerUserId null -> a joint card, everyone in the group used it and
-    // should hear about it; otherwise just its owner.
+    // ownerUserId null -> cartão conjunto: todo o grupo usou e deve saber; senão,
+    // só o dono.
     const recipients = card.ownerUserId
       ? membersById.has(card.ownerUserId)
         ? [membersById.get(card.ownerUserId)!]
@@ -106,8 +106,8 @@ async function runCardReminders(groupId: string, members: MemberWithEmail[]): Pr
   return emailsSent;
 }
 
-// Same reasoning as CARD_REMINDER_WINDOW_DAYS -- one email per installment,
-// the first time it's noticed to be due soon (or already overdue).
+// Mesmo raciocínio do CARD_REMINDER_WINDOW_DAYS -- um e-mail por parcela, na
+// primeira vez que ela aparece perto de vencer (ou já vencida).
 const DEBT_REMINDER_WINDOW_DAYS = 7;
 
 async function runDebtReminders(groupId: string, members: MemberWithEmail[]): Promise<number> {
@@ -127,8 +127,8 @@ async function runDebtReminders(groupId: string, members: MemberWithEmail[]): Pr
 
   let emailsSent = 0;
   for (const debt of debtsWithDueDay) {
-    // Only the next unpaid parcela can be "coming due" -- once it's paid,
-    // whichever one is next takes its place next time this runs.
+    // Só a próxima parcela não paga pode estar "chegando" -- quando ela for paga,
+    // a seguinte toma o lugar dela na próxima rodada.
     const nextUnpaid = (installmentsByDebtId.get(debt.id) ?? [])
       .filter((installment) => !installment.isPaid)
       .sort((a, b) => a.installmentNumber - b.installmentNumber)[0];
@@ -387,9 +387,9 @@ async function runMonthCloseEmails(groupId: string, members: MemberWithEmail[], 
   return emailsSent;
 }
 
-// Entry point for the daily cron (POST /api/reminders/run). Generates the
-// whole batch of due reminders across every group in one pass -- there's no
-// per-user request context here, unlike everything else in the app.
+// Porta de entrada do cron diário (POST /api/reminders/run). Gera de uma vez
+// todos os lembretes que venceram, de todos os grupos -- aqui não existe
+// usuário no pedido, diferente de todo o resto do app.
 export async function runDueReminders(): Promise<{ groupsChecked: number; emailsSent: number }> {
   const groups = await findAllGroupIds();
   let emailsSent = 0;
@@ -489,7 +489,7 @@ export async function maybeRunDailyJobs(now = new Date()): Promise<void> {
   try {
     await claimDailyRun(today);
   } catch {
-    return; // already claimed today (here or on another instance)
+    return; // já foi pego hoje (aqui ou em outra instância)
   }
   try {
     const [reminders, recurringBills, prunedMessages] = await Promise.all([

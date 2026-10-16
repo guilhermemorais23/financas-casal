@@ -1,9 +1,8 @@
-// Shimmering placeholder blocks, shaped like the content that's about to
-// load, instead of a plain "Carregando..." line -- reads as "getting there"
-// rather than "something might be broken". Purely decorative, so each block
-// is aria-hidden; the accessible "loading" announcement lives once on the
-// PageSkeleton wrapper instead (role="status"), matching what a screen
-// reader got from the plain text this replaces.
+// Blocos brilhando, com o formato do conteúdo que vai carregar, em vez de
+// uma linha "Carregando..." -- passa a ideia de "está chegando", e não de
+// "pode ter quebrado". Só decoração, então cada bloco é aria-hidden; o aviso
+// acessível de "carregando" fica uma vez só no PageSkeleton (role="status"),
+// igual ao que o leitor de tela recebia do texto que isto substituiu.
 export function Skeleton({
   width = "100%",
   height = "0.9rem",
@@ -39,10 +38,10 @@ export function PageSkeleton({ cards = 3 }: { cards?: number }) {
   );
 }
 
-// Mirrors the Dashboard's actual two-column layout (.dashboard-grid /
-// .dashboard-col) instead of PageSkeleton's single stacked column -- a
-// generic skeleton there would flash as one wide column, then jump to two
-// once real data lands.
+// Imita o layout real de duas colunas do Painel (.dashboard-grid /
+// .dashboard-col) em vez da coluna única do PageSkeleton -- um esqueleto
+// genérico ali apareceria como uma coluna larga e depois pularia pra duas
+// quando os dados chegassem.
 export function DashboardSkeleton() {
   return (
     <div className="page-stack" role="status" aria-label="Carregando">

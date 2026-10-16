@@ -55,7 +55,7 @@ export async function updateAppSettings(patch: { billingEnabled?: boolean; maint
   return next;
 }
 
-// Test hook.
+// Gancho pros testes.
 export function clearAppSettingsCache(): void {
   cached = null;
 }

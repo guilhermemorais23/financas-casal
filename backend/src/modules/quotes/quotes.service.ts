@@ -14,9 +14,9 @@ export interface QuoteSeries {
   points: QuoteHistoryPoint[];
 }
 
-// A small, fixed watchlist (not user-configurable yet) -- Ibovespa plus a
-// handful of large-cap tickers, so there's always something meaningful to
-// show without needing a portfolio feature first.
+// Uma lista pequena e fixa (a pessoa ainda não escolhe) -- Ibovespa mais
+// algumas ações grandes, pra sempre ter algo com sentido pra mostrar sem
+// precisar antes de uma carteira de investimentos.
 const DEFAULT_TICKERS = ["^BVSP", "PETR4", "VALE3", "ITUB4", "BBDC4"];
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -34,8 +34,8 @@ interface BrapiErrorBody {
   code: string;
 }
 
-// brapi answers HTTP 200 even for a missing/invalid token or an over-limit
-// request -- the failure only shows up in the body ({error: true, code}).
+// A brapi responde HTTP 200 mesmo com token faltando ou inválido, ou acima do
+// limite -- a falha só aparece no corpo ({error: true, code}).
 function isBrapiError(body: unknown): body is BrapiErrorBody {
   return typeof body === "object" && body !== null && (body as { error?: unknown }).error === true;
 }
@@ -83,10 +83,10 @@ async function fetchTickerHistory(ticker: string, token: string): Promise<QuoteS
   };
 }
 
-// The free brapi plan allows exactly one symbol per request (asking for
-// more comes back as a QUOTES_PER_REQUEST_EXCEEDED body error, not a
-// rejected request) -- so the watchlist is fetched as N parallel
-// single-ticker requests instead of one combined call.
+// O plano grátis da brapi aceita um símbolo só por pedido (pedir mais volta
+// com erro QUOTES_PER_REQUEST_EXCEEDED no corpo, e não com pedido recusado) --
+// então a lista é buscada em N pedidos de um papel só, em paralelo, em vez de
+// uma chamada combinada.
 export async function getQuoteHistory(): Promise<QuoteSeries[]> {
   if (cache && cache.expiresAt > Date.now()) {
     return cache.data;
@@ -122,9 +122,9 @@ interface BrapiV2QuoteResult {
   data: StockQuoteData;
 }
 
-// One-off "current quote for a single symbol" lookup via brapi's v2 stocks
-// endpoint -- kept separate from getQuoteHistory() above (which needs
-// historicalDataPrice, only available on the older v1-style endpoint).
+// Consulta avulsa da "cotação atual de um papel" pelo endpoint v2 de ações
+// da brapi -- separada do getQuoteHistory() acima (que precisa do
+// historicalDataPrice, que só existe no endpoint antigo, estilo v1).
 export async function fetchStockQuote(symbol: string): Promise<StockQuoteData> {
   const token = requireToken();
   const url = `https://brapi.dev/api/v2/stocks/quote?symbols=${encodeURIComponent(symbol)}`;

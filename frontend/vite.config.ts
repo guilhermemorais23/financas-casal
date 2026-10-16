@@ -3,9 +3,14 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// The version lives in the repo root's package.json (bumped automatically
-// by semantic-release), not this package's own -- frontend/package.json
-// stays at 0.0.0 since it's never published on its own.
+// Configuração do Vite: a ferramenta que roda o app no seu PC (`npm run dev`,
+// em http://localhost:5173) e monta a versão final pra publicar (`npm run
+// build`, que gera a pasta dist/). As variáveis VITE_* dos arquivos .env são
+// lidas pelo Vite sozinho; não precisa configurar nada aqui pra elas.
+
+// A versão fica no package.json da raiz do repositório (o semantic-release
+// sobe sozinho), não no deste pacote -- o frontend/package.json fica em
+// 0.0.0 porque nunca é publicado sozinho.
 const rootPackageJson = JSON.parse(readFileSync('../package.json', 'utf-8'))
 
 // https://vite.dev/config/
@@ -14,25 +19,26 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // manifest.json + its <link> tag already exist by hand in
-      // public/manifest.json and index.html (icons, name, theme color) --
-      // this plugin only needs to generate and register the service
-      // worker, not a second manifest.
+      // O manifest.json e a tag <link> dele já existem feitos à mão em
+      // public/manifest.json e no index.html (ícones, nome, cor do tema) --
+      // este plugin só precisa gerar e registrar o service worker, não um
+      // segundo manifest.
       manifest: false,
       injectRegister: 'auto',
       workbox: {
-        // Precache only this build's own static output (JS/CSS/fonts/
-        // icons) -- deliberately no runtimeCaching entries, so /api/*
-        // requests are untouched by the service worker and always hit the
-        // network. This app already has its own per-user
-        // stale-while-revalidate cache (utils/pageCache.ts) for API data;
-        // letting a service worker cache API responses too would be a
-        // second, uncoordinated cache in front of a finance app's numbers.
+        // Guarda de antemão só os arquivos estáticos deste build (JS, CSS,
+        // fontes, ícones) -- de propósito sem runtimeCaching, então os
+        // pedidos /api/* passam direto pelo service worker e sempre vão à
+        // rede. O app já tem o próprio cache por usuário, que mostra o velho
+        // enquanto busca o novo (utils/pageCache.ts), pros dados da API;
+        // deixar o service worker guardar respostas da API também seria um
+        // segundo cache, sem combinação com o primeiro, na frente dos números
+        // de um app de finanças.
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        // autoUpdate already calls skipWaiting/clientsClaim so a new
-        // deploy (backend+frontend now ship on every push to master, see
-        // .github/workflows/ci.yml) takes effect on next navigation
-        // instead of someone getting stuck on a stale bundle indefinitely.
+        // O autoUpdate já chama skipWaiting/clientsClaim, então um deploy
+        // novo (backend e frontend saem a cada push no master, ver
+        // .github/workflows/ci.yml) vale na próxima navegação, em vez de
+        // alguém ficar preso num pacote velho pra sempre.
         cleanupOutdatedCaches: true,
         // Notificações no celular: push + clique (public/push-sw.js).
         importScripts: ['push-sw.js'],

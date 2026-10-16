@@ -3,9 +3,9 @@ interface FinancialHealthBadgeProps {
   monthlyExpense: number;
 }
 
-// Scoped entirely to the selected month (never the account's all-time
-// balance) -- net <= 0 is critical, a thin leftover (less than what was
-// spent) is a warning, a comfortable leftover reads as healthy.
+// Considera só o mês escolhido (nunca o saldo de sempre da conta) -- sobra
+// <= 0 é crítico, uma sobra pequena (menor que o que foi gasto) é atenção, e
+// uma sobra folgada é saudável.
 export function FinancialHealthBadge({ monthlyIncome, monthlyExpense }: FinancialHealthBadgeProps) {
   const net = monthlyIncome - monthlyExpense;
   let level: "good" | "warning" | "critical";

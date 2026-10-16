@@ -117,8 +117,8 @@ export function CardsPage() {
   const [purchaseInstallments, setPurchaseInstallments] = useState("1");
   const [isAddingPurchase, setIsAddingPurchase] = useState(false);
 
-  // "Guardar mais" / "Resgatar" on a cartão com limite garantido -- one
-  // inline form at a time, tied to whichever card opened it.
+  // "Guardar mais" / "Resgatar" num cartão com limite garantido -- um
+  // formulário na linha por vez, ligado ao cartão que abriu.
   const [limitAdjust, setLimitAdjust] = useState<{ cardId: string; direction: "deposit" | "withdraw" } | null>(null);
   const [limitAdjustAmount, setLimitAdjustAmount] = useState("");
   const [limitAdjustError, setLimitAdjustError] = useState<string | null>(null);
@@ -129,9 +129,9 @@ export function CardsPage() {
       setCards(result);
       writeCache(cacheKey, result);
     } catch (err) {
-      // Leaves `cards` as whatever it was (cached or null) -- the empty-
-      // state sections below only render once `cards` is non-null, so a
-      // failed load never gets mistaken for "confirmed no cards".
+      // Deixa `cards` como estava (do cache ou null) -- as seções de "vazio" abaixo
+      // só aparecem quando `cards` não é null, então uma falha ao carregar nunca é
+      // confundida com "confirmado: nenhum cartão".
       setError(err instanceof ApiError ? err.message : "Não foi possível carregar os cartões");
     }
   }
@@ -860,9 +860,9 @@ export function CardsPage() {
 
   const jointCards = cards?.filter((c) => c.scope === "joint") ?? [];
   const personalCards = cards?.filter((c) => c.scope === "personal") ?? [];
-  // With no card yet the form IS the page; once there's one, the cards come
-  // first (on a phone the form used to push them a full screen down) and
-  // the form opens from the button.
+  // Sem nenhum cartão ainda, o formulário É a tela; quando já existe um, os
+  // cartões vêm primeiro (no celular o formulário empurrava eles uma tela
+  // inteira pra baixo) e o formulário abre pelo botão.
   const showCreateForm = isCreateOpen || cards?.length === 0;
 
   return (

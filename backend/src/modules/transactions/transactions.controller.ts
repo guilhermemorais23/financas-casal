@@ -34,7 +34,7 @@ import {
 import { PAYMENT_METHODS, type PaymentMethod, type SplitType, type TransactionType } from "./transactions.repository";
 import { isIsoDate, isNonEmptyString, isValidAmount, MAX_DESCRIPTION_LENGTH } from "../../utils/validation";
 
-// undefined = not sent, null = "não informado" (clears it on update).
+// undefined = não enviado, null = "não informado" (apaga ao editar).
 function isValidPaymentMethod(value: unknown): boolean {
   return value === undefined || value === null || PAYMENT_METHODS.includes(value as PaymentMethod);
 }
@@ -102,8 +102,9 @@ export async function createTransactionHandler(req: Request, res: Response) {
 }
 
 export async function listTransactionsHandler(req: Request, res: Response) {
-  // 500, not 100: the Relatórios page builds its totals and groupings from this
-  // list, so a busy month cut off at 100 rows made every number wrong.
+  // 500, e não 100: a tela Relatórios monta os totais e agrupamentos a partir
+  // desta lista, e um mês movimentado cortado em 100 linhas deixava todos os
+  // números errados.
   const limit = Math.min(Number(req.query.limit) || 20, 500);
   const month = typeof req.query.month === "string" ? req.query.month : undefined;
   const accountId = typeof req.query.accountId === "string" ? req.query.accountId : undefined;
@@ -206,7 +207,7 @@ export async function exportTransactionsHandler(req: Request, res: Response) {
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    // UTF-8 BOM so Excel (which otherwise guesses Latin-1) shows acentos right.
+    // BOM de UTF-8 pro Excel (que senão chuta Latin-1) mostrar os acentos certo.
     res.status(200).send("﻿" + csv);
   } catch (err) {
     if (err instanceof InvalidMonthError) {
@@ -310,8 +311,8 @@ export async function deleteTransactionHandler(req: Request, res: Response) {
   }
 }
 
-// Cancels a recurring series from this occurrence onward (this one + every
-// future one); past occurrences stay in the ledger untouched.
+// Cancela uma série recorrente a partir desta ocorrência (esta + todas as
+// futuras); as passadas ficam no extrato sem mudança.
 export async function cancelRecurringHandler(req: Request, res: Response) {
   try {
     const result = await cancelRecurringForUser(req.user!.id, req.params.id);
@@ -325,9 +326,8 @@ export async function cancelRecurringHandler(req: Request, res: Response) {
   }
 }
 
-// Rewrites amount/description on this occurrence and every future one in
-// the same recurring series (e.g. the rent went up) -- past occurrences are
-// never touched.
+// Reescreve valor e descrição nesta ocorrência e em todas as futuras da mesma
+// série (ex.: o aluguel subiu) -- as passadas nunca são tocadas.
 export async function updateRecurringHandler(req: Request, res: Response) {
   const { amount, description } = req.body ?? {};
   if (
@@ -357,16 +357,16 @@ export async function updateRecurringHandler(req: Request, res: Response) {
   }
 }
 
-// Marks a split expense as settled (someone paid their share back outside
-// the app) or reopens it -- doesn't touch the transaction's amount.
+// Marca um gasto dividido como acertado (alguém devolveu a sua parte fora do
+// app) ou reabre -- não muda o valor do lançamento.
 export async function setSplitSettledHandler(req: Request, res: Response) {
   const { isSettled, amount } = req.body ?? {};
   if (typeof isSettled !== "boolean") {
     res.status(400).json({ error: "isSettled must be a boolean" });
     return;
   }
-  // amount only matters (and is required) when settling -- reopening never
-  // needs one, it just deletes the reembolso transaction created earlier.
+  // O valor só importa (e é obrigatório) ao acertar -- reabrir nunca precisa,
+  // só apaga o lançamento de reembolso criado antes.
   if (isSettled && !isValidAmount(amount)) {
     res.status(400).json({ error: "amount is required and must be a positive number when isSettled is true" });
     return;

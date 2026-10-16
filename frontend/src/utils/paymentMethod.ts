@@ -1,6 +1,6 @@
-// How a lançamento was actually paid -- separate from which PAR account it's
-// booked on and from parcelamento (a compra no crédito à vista is still
-// "credit"). Must match PAYMENT_METHODS in the backend.
+// Como um lançamento foi pago de fato -- não depende de em qual conta do
+// PAR. ele está, nem de parcelamento (uma compra no crédito à vista continua
+// "credit"). Tem que bater com o PAYMENT_METHODS do backend.
 export type PaymentMethod = "credit" | "debit" | "pix" | "cash";
 
 // Na ordem dos botões: o mais comum primeiro.

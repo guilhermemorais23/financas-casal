@@ -1,7 +1,7 @@
-// All money is stored in Firestore as integer cents (avoids float-precision
-// bugs -- Firestore numbers are JS doubles). The REST API contract to the
-// frontend stays decimal strings like "200.00"; conversion happens only at
-// the repository boundary.
+// Todo dinheiro fica no Firestore como centavos inteiros (evita erro de
+// arredondamento -- número no Firestore é double do JS). O contrato da API
+// com o frontend continua em texto decimal, como "200.00"; a conversão
+// acontece só na borda do repository.
 export function toCents(amount: number): number {
   return Math.round(amount * 100);
 }
@@ -10,10 +10,10 @@ export function fromCents(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-// Splits totalAmount into `count` shares as evenly as possible in cents,
-// with any leftover cent distributed to the earliest shares (so nothing is
-// lost/gained to rounding). Used both for debt installments and for
-// equal-split transaction shares across however many group members there are.
+// Divide totalAmount em `count` partes o mais iguais possível, em centavos,
+// dando o centavo que sobra pras primeiras partes (assim nada se perde nem
+// aparece no arredondamento). Usado nas parcelas de dívida e nas partes de
+// gasto dividido igual entre os membros do grupo.
 export function splitEvenly(totalAmount: number, count: number): number[] {
   const totalCents = toCents(totalAmount);
   const base = Math.floor(totalCents / count);

@@ -1,3 +1,12 @@
+// A MOLDURA DO APP: tudo que aparece em volta de uma tela logada.
+//   - no PC: o menu lateral (app-sidebar), com a marca, o seletor de grupo,
+//     os links e o rodapé com o nome e o menu da conta;
+//   - no celular: a barra do topo (app-mobile-topbar) e a barra de baixo
+//     (app-bottom-nav), com o botão "+" no meio.
+// Cada página usa assim: <AppLayout> ...miolo da tela... </AppLayout>. A
+// página desenha só o miolo; o que é igual em todas fica aqui. Qual barra
+// aparece (lateral ou de baixo) é decidido pelo CSS conforme a largura da
+// tela (index.css), não por código.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
@@ -43,8 +52,8 @@ const NAV_ITEMS: (NavItem & { couple?: boolean; solo?: boolean })[] = [
   { to: "/account", label: "Conta e grupo", icon: "sliders" },
 ];
 
-// Admin isn't a plain link -- it expands into a submenu (handled separately
-// in the JSX below) instead of navigating straight to a page.
+// Admin não é um link simples -- ele abre um submenu (tratado à parte no JSX
+// abaixo) em vez de ir direto pra uma página.
 const ADMIN_SUBLINKS = [
   { section: "overview", label: "Visão geral" },
   { section: "users", label: "Usuários" },
@@ -106,9 +115,9 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const userMenuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const isOnNewTransaction = location.pathname === "/transactions/new";
-  // Dashboard/Reports keep their selected month in the URL (?month=...) --
-  // read the same value here so these widgets track whatever month is being
-  // browsed instead of always defaulting to the real current month.
+  // Painel e Relatórios guardam o mês escolhido na URL (?month=...) -- lê o
+  // mesmo valor aqui, pra estes widgets seguirem o mês que está sendo visto, e
+  // não sempre o mês atual de verdade.
   const [searchParams] = useSearchParams();
   const sidebarMonth = searchParams.get("month") ?? currentMonthParam();
   // Cada página monta o próprio AppLayout, então sem cache a barra lateral
@@ -123,7 +132,8 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
 
   useEffect(() => {
     if (!token) return;
-    // Decorative sidebar widgets -- a failed fetch just hides them, no error UI.
+    // Widgets decorativos do menu lateral -- se a busca falhar, eles só somem,
+    // sem mensagem de erro.
     apiRequest<BudgetSummary>(`/budgets/current?month=${sidebarMonth}`, { token })
       .then((data) => {
         sidebarCache.set(`${user?.id}:budget:${sidebarMonth}`, data);

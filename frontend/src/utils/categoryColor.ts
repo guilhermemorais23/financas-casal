@@ -1,6 +1,7 @@
-// Fixed categorical order (validated for CVD-safe adjacent contrast — see the
-// dataviz skill's palette reference). Categories get a stable slot via a hash
-// of their id, never a randomly-cycled color.
+// Ordem fixa de cores por categoria (validada pra contraste entre vizinhas
+// com daltonismo -- ver a referência de paleta da skill dataviz). Cada
+// categoria ganha uma posição estável por um hash do id, nunca uma cor
+// sorteada.
 const CATEGORY_SLOTS = [
   "var(--series-1)",
   "var(--series-2)",
@@ -21,11 +22,12 @@ export function categoryColor(id: string | null): string {
   return CATEGORY_SLOTS[hash % CATEGORY_SLOTS.length];
 }
 
-// Person/identity colors are brand-matched (terracotta for "Você", olive
-// green for the next member) rather than the CVD-safe chart palette above --
-// identity is always paired with a name label too, so strict CVD contrast
-// between just two fixed slots matters less than matching the brand look.
-// Falls back to the categorical slots for a 3rd+ member.
+// As cores de pessoa seguem a marca (roxo --person-1 pra "Você", azul
+// --person-2 pro próximo membro) em vez da paleta de gráfico acima, que é
+// segura pra daltonismo -- a cor da pessoa sempre vem junto com o nome, então
+// o contraste rigoroso entre só duas posições fixas importa menos que
+// combinar com a marca. Do 3º membro em diante, usa as posições das
+// categorias.
 const PERSON_SLOTS = ["var(--person-1)", "var(--person-2)", ...CATEGORY_SLOTS];
 
 export function personColor(memberIndex: number): string {

@@ -40,8 +40,8 @@ export class InvalidCategoryError extends Error {}
 export class UnsupportedSplitTypeError extends Error {}
 export class TransactionNotFoundError extends Error {}
 export class InvalidRecurrenceError extends Error {}
-// Guardar/resgatar de um cartão com limite garantido -- only changes from the
-// card itself, so the card's limit and the account never disagree.
+// Guardar/resgatar de um cartão com limite garantido -- só muda pelo próprio
+// cartão, pra o limite do cartão e a conta nunca discordarem.
 export class SecuredCardTransferError extends Error {}
 // Lançamento criado por outra tela (fatura paga, parcela, reembolso, lista de
 // compras): só dá pra desfazer por lá.
@@ -83,10 +83,10 @@ export async function linkKindOf(groupId: string, transaction: TransactionRow): 
 
 const SUPPORTED_SPLIT_TYPES: SplitType[] = ["none", "equal"];
 
-// A recurring series is generated whole at creation time (no cron): 2
-// occurrences is the smallest thing worth calling "recurring" at all, 36
-// (3 years of a subscription/rent) is a sane upper bound so nobody fat-fingers
-// a 4-digit month count into a Firestore batch write.
+// Uma série recorrente é gerada inteira na criação (sem cron): 2 ocorrências
+// é o mínimo que vale chamar de "recorrente", e 36 (3 anos de assinatura ou
+// aluguel) é um teto sensato, pra ninguém digitar sem querer um número de 4
+// dígitos de meses num lote de gravação do Firestore.
 export const MIN_RECURRENCE_MONTHS = 2;
 export const MAX_RECURRENCE_MONTHS = 36;
 
@@ -101,9 +101,9 @@ export interface CreateTransactionInput {
   isPrivate: boolean;
   splitType: SplitType;
   paymentMethod?: PaymentMethod | null;
-  // When set, generates `months` occurrences (this one plus months-1 more,
-  // one per month, same day-of-month clamped to shorter months) in one go
-  // instead of just this single transaction.
+  // Quando preenchido, gera `months` ocorrências (esta mais months-1, uma por
+  // mês, no mesmo dia do mês, ajustado nos meses mais curtos) de uma vez, em
+  // vez de só este lançamento.
   recurring?: { months: number };
 }
 
@@ -156,9 +156,10 @@ export async function createTransaction(userId: string, input: CreateTransaction
       paymentMethod: input.paymentMethod ?? null,
     },
     occurredAtDates,
-    // Splits model who owes whom on a shared expense; income has no such debt.
-    // Divides evenly across however many members the group actually has. Every
-    // occurrence of a recurring series gets its own splits, same as a one-off.
+    // As divisões registram quem deve quem num gasto compartilhado; receita não
+    // tem dívida assim. Divide igual entre quantos membros o grupo tiver. Cada
+    // ocorrência de uma série recorrente ganha as suas próprias divisões, igual a
+    // um lançamento avulso.
     (input.transactionType === "expense" && input.splitType === "equal" ? equalSplits(input.amount, members) : undefined) ?? []
   );
 
@@ -176,18 +177,18 @@ export async function listTransactions(
   return findTransactionsVisibleTo(groupId, userId, limit, range, accountId);
 }
 
-// Same visibility rules as the normal list -- export never leaks a
-// groupmate's private personal transaction either. 10k is far above what
-// any group would have in a single month; a hard cap just protects the
-// export from growing unbounded if someone ever calls it without a month.
+// Mesmas regras de visibilidade da lista normal -- a exportação também nunca
+// vaza lançamento pessoal privado de um colega de grupo. 10 mil é muito acima
+// do que qualquer grupo teria num mês; o teto só protege a exportação de
+// crescer sem limite se alguém chamar sem mês.
 export async function exportTransactionsForUser(userId: string, monthParam?: string) {
   const groupId = await requireGroupId(userId);
   const range = monthParam ? parseMonthRange(monthParam) : undefined;
   return findTransactionsVisibleTo(groupId, userId, 10000, range);
 }
 
-// Pairwise "who owes whom" across every member pair with a shared-expense
-// debt. Not currently surfaced in any UI page.
+// "Quem deve quem" par a par, entre todo par de membros com dívida de gasto
+// compartilhado. Nenhuma tela mostra isto hoje.
 export async function getBalance(userId: string) {
   const groupId = await requireGroupId(userId);
   const rows = await getBalanceRows(groupId);
@@ -236,10 +237,10 @@ export interface MonthlyTrendPoint {
   month: string; // "YYYY-MM"
   income: number;
   expense: number;
-  // Net money moved from the personal account into cartões com limite
-  // garantido this month (deposits minus resgates) -- not an expense, but it
-  // did leave the account, so the hero number subtracts it while "Saída do
-  // mês" and every report leave it out.
+  // Dinheiro líquido que foi da conta pessoal pra cartões com limite garantido
+  // neste mês (depósitos menos resgates) -- não é gasto, mas saiu da conta,
+  // então o número principal desconta, enquanto a "Saída do mês" e todos os
+  // relatórios deixam de fora.
   savedInCards: number;
   // Mesma ideia pros Empréstimos: quanto saiu emprestado no mês (emprestado
   // menos recebido de volta).
@@ -247,13 +248,13 @@ export interface MonthlyTrendPoint {
   net: number;
 }
 
-// One query covers three things the Painel needs: the 6-month trend line,
-// AND (since the window always includes the current and previous month)
-// this month's and last month's income/expense totals -- what used to take
-// two more separate fetches of up to 100 full transaction rows each, just
-// to sum two numbers each. Personal scope on purpose: matches exactly what
-// the hero number above it ("Você tem no mês") already means, so the two
-// never disagree.
+// Uma consulta cobre três coisas que o Painel precisa: a linha de tendência
+// de 6 meses E (como a janela sempre inclui o mês atual e o anterior) os
+// totais de entrada e saída deste mês e do passado -- o que antes custava
+// mais duas buscas de até 100 lançamentos inteiros cada, só pra somar dois
+// números. Escopo pessoal de propósito: bate exatamente com o que o número
+// principal acima ("Você tem no mês") já significa, então os dois nunca
+// discordam.
 export async function getMonthlyTrendForUser(
   userId: string,
   monthParam?: string,
@@ -274,7 +275,7 @@ export async function getMonthlyTrendForUser(
   }
   for (const row of rows) {
     const entry = byMonth.get(row.month);
-    if (!entry) continue; // outside the requested window -- can't happen given the query's own range, kept defensive
+    if (!entry) continue; // fora da janela pedida -- não acontece com a faixa da própria consulta, fica por segurança
     if (row.isAccountsTransfer) {
       continue;
     } else if (row.isSecuredCardTransfer || row.isGoalTransfer) {
@@ -298,9 +299,9 @@ export async function getMonthlyTrendForUser(
   }));
 }
 
-// Joint-account transactions are manageable by any group member (same rule
-// as joint debts); personal-account transactions stay restricted to whoever
-// created them.
+// Lançamentos da conta conjunta podem ser mexidos por qualquer membro do
+// grupo (mesma regra das dívidas conjuntas); os da conta pessoal, só por quem
+// criou.
 export function canManageTransaction(userId: string, transaction: { accountType: string; createdBy: string }): boolean {
   return transaction.accountType === "joint" || transaction.createdBy === userId;
 }
@@ -365,13 +366,14 @@ export async function deleteTransactionsForUser(
 export class NotSplitError extends Error {}
 export class InvalidSettlementAmountError extends Error {}
 
-// "Marcar como pago" -- unlike a plain status flag, this actually books the
-// money: creates a real income transaction for whatever the other member(s)
-// paid back (a Pix, cash...) on the same account the original expense hit,
-// so the Painel/saldo reflects it too, not just a "not owed anymore" label.
-// Same linked-transaction pattern as debts/cards/shopping: settlementTransactionId
-// on the original expense points at it, and reopening ("em aberto" again)
-// deletes it -- the split status and that income entry always move together.
+// "Marcar como pago" -- diferente de uma simples marca, isto lança o
+// dinheiro: cria uma receita de verdade com o que o(s) outro(s) membro(s)
+// devolveu(ram) (um Pix, dinheiro...) na mesma conta do gasto original, pra
+// o Painel e o saldo refletirem também, e não só uma etiqueta "ninguém deve
+// mais". Mesmo padrão de lançamento ligado das dívidas, cartões e lista de
+// compras: o settlementTransactionId no gasto original aponta pra ela, e
+// reabrir ("em aberto" de novo) apaga -- o status da divisão e essa receita
+// sempre andam juntos.
 export async function setSplitSettledForUser(
   userId: string,
   transactionId: string,
@@ -428,9 +430,9 @@ export async function setSplitSettledForUser(
   return (await findTransactionById(transactionId))!;
 }
 
-// "Cancel this subscription/rent/salary" -- deletes this occurrence and
-// every later one in the same recurring series, leaving past occurrences
-// (already-happened months) untouched in the ledger.
+// "Cancelar esta assinatura/aluguel/salário" -- apaga esta ocorrência e todas
+// as seguintes da mesma série, deixando as passadas (meses que já
+// aconteceram) intactas no extrato.
 export async function cancelRecurringForUser(userId: string, transactionId: string) {
   const groupId = await requireGroupId(userId);
   const transaction = await findTransactionById(transactionId);
@@ -453,11 +455,11 @@ export async function cancelRecurringForUser(userId: string, transactionId: stri
 
 export class InvalidRecurringUpdateError extends Error {}
 
-// "The rent went up" -- unlike a plain edit (which only ever touches the
-// one occurrence you clicked), this rewrites the amount/description on
-// this occurrence and every later one in the same series, leaving past
-// (already-happened) occurrences exactly as they were. Same "this and
-// future" scope as cancelRecurringForUser above.
+// "O aluguel subiu" -- diferente de uma edição simples (que só mexe na
+// ocorrência em que você clicou), isto reescreve valor e descrição nesta
+// ocorrência e em todas as seguintes da mesma série, deixando as passadas
+// exatamente como estavam. O mesmo alcance "esta e as futuras" do
+// cancelRecurringForUser acima.
 export async function updateRecurringForUser(
   userId: string,
   transactionId: string,
@@ -486,10 +488,10 @@ export async function updateRecurringForUser(
   const members = input.amount !== undefined ? await findMembersByGroupId(groupId) : [];
   await Promise.all(
     futureOccurrences.map((occurrence) =>
-      // Each occurrence carries its own splits (independent docs, created
-      // per-occurrence when the series was first generated) -- an amount
-      // change has to resync every one of them individually, same as a
-      // regular single-transaction edit does for its own splits.
+      // Cada ocorrência tem as suas próprias divisões (documentos separados,
+      // criados por ocorrência quando a série foi gerada) -- mudar o valor exige
+      // atualizar cada uma delas, igual a edição de um lançamento avulso faz com
+      // as divisões dele.
       updateTransaction(
         occurrence.id,
         { amount: input.amount, description: input.description },
@@ -545,12 +547,12 @@ export async function updateTransactionForUser(
     throw new InvalidCategoryError();
   }
 
-  // Moving a transaction to a different account means the target account
-  // must also belong to this group -- otherwise you could quietly move
-  // money into (or a private expense onto) an account nobody here owns.
-  // accountType/accountOwnerId are denormalized onto the transaction from
-  // the account at write time (same as on create) and have to be
-  // refreshed together whenever accountId changes.
+  // Mudar um lançamento de conta exige que a conta de destino também seja
+  // deste grupo -- senão daria pra mover dinheiro (ou um gasto privado) pra
+  // uma conta que ninguém aqui é dono, sem ninguém perceber. accountType e
+  // accountOwnerId são copiados da conta pro lançamento na hora de gravar
+  // (igual na criação) e precisam ser atualizados juntos sempre que o
+  // accountId muda.
   let accountFields: { accountId?: string; accountType?: "personal" | "joint"; accountOwnerId?: string | null } = {};
   if (input.accountId !== undefined && input.accountId !== transaction.accountId) {
     const account = await findUsableAccount(groupId, userId, input.accountId);
@@ -567,9 +569,10 @@ export async function updateTransactionForUser(
     }
   }
 
-  // Keep "who owes whom" consistent with the edited amount/type: income has
-  // no debt, and an equal-split expense's shares must track the new amount
-  // (or appear, when an income becomes an expense). Vai no mesmo lote da edição.
+  // Mantém o "quem deve quem" coerente com o valor e o tipo editados: receita
+  // não gera dívida, e as partes de um gasto dividido igual têm que acompanhar
+  // o valor novo (ou aparecer, quando uma receita vira gasto). Vai no mesmo
+  // lote da edição.
   const nextType = input.transactionType ?? transaction.transactionType;
   let splits: SplitInput[] | undefined;
   if (nextType === "income") {

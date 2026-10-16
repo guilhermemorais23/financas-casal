@@ -72,8 +72,8 @@ interface TransactionListRow {
   recurringGroupId: string | null;
   splitType: "none" | "equal" | "custom";
   isSettled: boolean;
-  // Guardar/resgatar de um cartão com limite garantido -- managed from the
-  // card itself, so the extrato shows it without edit/delete.
+  // Guardar/resgatar de um cartão com limite garantido -- controlado pelo
+  // próprio cartão, então o extrato mostra sem editar nem apagar.
   securedCardId?: string | null;
   loanId?: string | null;
   // Dinheiro guardado numa meta (goalId) ou entre as suas contas: transferência.
@@ -165,8 +165,8 @@ interface MonthlyTrendPoint {
 interface MonthTotals {
   income: number;
   expense: number;
-  // Net money moved into cartões com limite garantido this month -- left
-  // the account without being a gasto (see getMonthlyTrendForUser).
+  // Dinheiro líquido que foi pra cartões com limite garantido neste mês --
+  // saiu da conta sem ser gasto (ver getMonthlyTrendForUser).
   savedInCards?: number;
   // Quanto saiu emprestado pelos Empréstimos no mês -- mesmo tratamento.
   lentOut?: number;
@@ -296,10 +296,10 @@ export function DashboardPage() {
   const { user, token } = useAuth();
   const confirm = useConfirm();
   const { showToast } = useToast();
-  // Kept in the URL (not just local state) so the sidebar in AppLayout --
-  // which fetches its own "spending this month" widgets -- can read the
-  // same selected month instead of always defaulting to the real current
-  // month, which was confusing when browsing a different month here.
+  // Fica na URL (e não só no estado da tela) pra que o menu lateral do
+  // AppLayout -- que busca os próprios widgets de "gasto do mês" -- leia o
+  // mesmo mês escolhido, em vez de sempre usar o mês atual, o que confundia
+  // quando se olhava outro mês aqui.
   const [searchParams, setSearchParams] = useSearchParams();
   const month = searchParams.get("month") ?? currentMonthParam();
   function setMonth(nextMonth: string) {
@@ -330,16 +330,16 @@ export function DashboardPage() {
   const [jointSummary, setJointSummary] = useState<JointSummaryResponse | null>(() =>
     readCache(monthKey("jointSummary"))
   );
-  // Lifetime, not per-month (see dashboard.service.ts) -- cached under the
-  // static key, same as group/debts.
+  // De sempre, não por mês (ver dashboard.service.ts) -- guardado na chave
+  // fixa, igual grupo e dívidas.
   const [balance, setBalance] = useState<BalanceResponse | null>(() => readCache(staticKey("balance")));
   const [budget, setBudget] = useState<BudgetResponse | null>(() => readCache(monthKey("budget")));
   const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgetRow[]>(
     () => readCache(monthKey("categoryBudgets")) ?? []
   );
-  // Neither depends on the selected month (a goal/card due date isn't tied
-  // to which month you're browsing) -- static key, same reasoning as
-  // debts/balance above.
+  // Nenhum dos dois depende do mês escolhido (o vencimento de uma meta ou de
+  // um cartão não muda conforme o mês que se olha) -- chave fixa, mesmo motivo
+  // de dívidas e saldo acima.
   const [, setGoalHighlight] = useState<GoalHighlight | null>(() =>
     readCache(staticKey("goalHighlight"))
   );
@@ -372,14 +372,14 @@ export function DashboardPage() {
   }, [searchParams]);
   const firstImport = useFirstImportPrompt(user?.id, token, month === currentMonthParam() && !isLoading && recent.length === 0);
   const [editingRecurringTx, setEditingRecurringTx] = useState<TransactionListRow | null>(null);
-  // Rows playing their exit animation (see .is-leaving in index.css) before
-  // they're actually dropped from `recent`.
+  // Linhas fazendo a animação de saída (ver .is-leaving no index.css) antes de
+  // sair de verdade da lista `recent`.
   const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
 
-  // warmCacheOnly=true: a month not on screen (the user switched away mid-load)
-  // -- writes the cache same as a real load, but never touches component
-  // state (nothing should visibly change just because a background prefetch
-  // finished).
+  // warmCacheOnly=true: um mês que não está na tela (a pessoa trocou no meio do
+  // carregamento) -- grava o cache como um carregamento normal, mas nunca mexe
+  // no estado da tela (nada deve mudar visivelmente só porque uma busca
+  // antecipada em segundo plano terminou).
   function applyDashboard(selectedMonth: string, data: DashboardResponse, warmCacheOnly: boolean) {
     const sKey = (name: string) => `dashboard:${name}:${user?.id ?? "anon"}`;
     const mKey = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
@@ -404,7 +404,8 @@ export function DashboardPage() {
       setLoansOutstanding(Number(data.loansSummary?.outstanding ?? 0));
       setOwedToPeople(Number(data.owedSummary?.outstanding ?? 0));
       setUpcoming(data.upcoming ?? []);
-      // ?? []: a response cached by an older build has no `alerts` at all.
+      // ?? []: uma resposta guardada por uma versão antiga do app não tem
+      // `alerts`.
       setAlerts(data.alerts ?? []);
     }
 
@@ -428,60 +429,61 @@ export function DashboardPage() {
     writeCache(mKey("dailyTrend"), data.dailyTrend);
     writeCache(mKey("alerts"), data.alerts ?? []);
     writeCache(mKey("painel"), painelFrom(data));
-    // The whole response, one key -- lets load() below check "do we already
-    // have this month?" with a single readCache instead of guessing from
-    // one field. This is what prefetchMonth's warm-up actually pays off:
-    // without this, the neighbor-month prefetch below wrote a cache that
-    // load() never consulted, so switching to an already-prefetched month
-    // still paid a full network round trip for no reason.
+    // A resposta inteira, numa chave só -- deixa o load() abaixo conferir "já
+    // temos este mês?" com um readCache só, em vez de adivinhar por um campo. É
+    // isso que faz a busca antecipada valer a pena: sem isto, a busca dos meses
+    // vizinhos gravava um cache que o load() nunca consultava, e trocar pra um
+    // mês já buscado ainda pagava uma ida e volta inteira à toa.
     writeCache(mKey("full"), data);
   }
 
-  // One request instead of the 7 separate ones this used to fire (group,
-  // recent, debts, summary, budget, categoryBudgets, dailyTrend, plus 2 more
-  // for personal tx this/prev month) -- each of those paid its own round
-  // trip AND its own Firebase token verification on the backend, on top of
-  // the Firestore reads (which already ran in parallel server-side either
-  // way). GET /api/dashboard bundles the same reads into one response.
-  // Tracks whichever month is *actually* selected right now, read inside
-  // load()'s async callbacks -- state (`month`) can't be trusted there since
-  // a slow response's continuation runs after later state updates. Without
-  // this, switching quickly between months let an older, slower request's
-  // response land last and overwrite a newer month's already-painted data
-  // (and clear isLoading out from under whichever month is really pending).
+  // Um pedido só, em vez dos 7 separados que isto fazia (grupo, recentes,
+  // dívidas, resumo, orçamento, orçamento por categoria, tendência diária, mais
+  // 2 pros lançamentos pessoais deste mês e do anterior) -- cada um pagava a
+  // sua ida e volta E a sua conferência de token do Firebase no backend, além
+  // das leituras do Firestore (que já rodavam em paralelo no servidor de
+  // qualquer jeito). O GET /api/dashboard junta as mesmas leituras numa
+  // resposta só.
+  // Guarda qual mês está *de fato* escolhido agora, lido dentro dos callbacks
+  // assíncronos do load() -- o estado (`month`) não é confiável ali, porque a
+  // continuação de uma resposta lenta roda depois de atualizações de estado
+  // mais novas. Sem isto, trocar rápido de mês deixava a resposta de um pedido
+  // mais velho e lento chegar por último e sobrescrever os dados já desenhados
+  // de um mês mais novo (e desligar o isLoading do mês que ainda está
+  // carregando).
   const activeMonthRef = useRef(month);
   activeMonthRef.current = month;
 
-  // skipCache=true is what every post-mutation reload below uses: painting
-  // the *previous* cached snapshot first would, for an instant, visually
-  // undo the change that was just confirmed by the server (a settled split
-  // flashing back to "open", a deleted transaction reappearing) before the
-  // fresh fetch corrects it again. A plain month switch still wants the
-  // cache-first paint -- that's the whole point of the neighbor prefetch.
+  // skipCache=true é o que todo recarregamento depois de uma alteração usa:
+  // desenhar antes a foto *anterior* do cache desfaria na tela, por um
+  // instante, a mudança que o servidor acabou de confirmar (uma divisão
+  // acertada voltando pra "em aberto", um lançamento apagado reaparecendo) até
+  // a busca nova corrigir. Uma simples troca de mês continua querendo o cache
+  // primeiro -- é pra isso que serve a busca antecipada dos meses vizinhos.
   async function load(selectedMonth: string, options?: { skipCache?: boolean; silent?: boolean }) {
     setError(null);
     const mKeyLocal = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
     const cached = options?.skipCache ? null : readCache<DashboardResponse>(mKeyLocal("full"));
 
     if (cached) {
-      // Already warmed (a previous visit, or the neighbor-month prefetch
-      // below) -- paint instantly, no loading state at all, then quietly
-      // refetch underneath to catch anything that changed since.
+      // Já aquecido (uma visita anterior, ou a busca antecipada do mês vizinho
+      // abaixo) -- desenha na hora, sem estado de carregando, e busca de novo por
+      // baixo, em silêncio, pra pegar o que mudou desde então.
       applyDashboard(selectedMonth, cached, false);
     } else if (selectedMonth === activeMonthRef.current && !options?.silent) {
       setIsLoading(true);
     }
 
     try {
-      // An optimistic write still in flight (a just-saved transaction) must
-      // land first, or this GET could answer without it and erase what the
-      // cache already showed.
+      // Uma gravação otimista ainda a caminho (um lançamento recém-salvo) tem que
+      // chegar antes, senão este GET pode responder sem ela e apagar o que o cache
+      // já mostrava.
       await whenWritesSettled();
       const data = await apiRequest<DashboardResponse>(`/dashboard?month=${selectedMonth}`, { token });
-      // The user may have already switched to a different month while this
-      // was in flight -- an abandoned month's response is discarded instead
-      // of overwriting whatever's actually on screen now. Still worth
-      // caching (see writeCache below via applyDashboard), just not painted.
+      // A pessoa pode ter trocado de mês enquanto isto estava a caminho -- a
+      // resposta de um mês abandonado é descartada, em vez de sobrescrever o que
+      // está na tela agora. Ainda vale guardar no cache (ver writeCache abaixo,
+      // via applyDashboard), só não desenhar.
       const isStillActive = selectedMonth === activeMonthRef.current;
       applyDashboard(selectedMonth, data, !isStillActive);
 
@@ -491,10 +493,10 @@ export function DashboardPage() {
       // o app foi divulgado. Trocar de mês agora busca na hora (e fica no
       // cache do navegador e do servidor depois disso).
     } catch (err) {
-      // A month we already had cached still shows that cached data -- no
-      // reason to blow it away with an error banner over a background
-      // refresh failing silently (same "fail quiet" policy as prefetchMonth).
-      // Also skip it for a month the user has already navigated away from.
+      // Um mês que já estava no cache continua mostrando esses dados -- não tem por
+      // que trocar por uma faixa de erro só porque uma atualização em segundo
+      // plano falhou calada (a mesma regra "falha quieta" do prefetchMonth).
+      // Também não mostra pra um mês de onde a pessoa já saiu.
       if (!cached && selectedMonth === activeMonthRef.current) {
         setError(err instanceof ApiError ? err.message : "Não foi possível carregar o painel");
       }
@@ -509,17 +511,18 @@ export function DashboardPage() {
     load(month);
   }, [token, month]);
 
-  // An optimistic write that failed asks every screen to re-fetch the truth.
+  // Uma gravação otimista que falhou pede a toda tela que busque a verdade de
+  // novo.
   useEffect(() => {
     const refetch = () => void load(month, { skipCache: true, silent: true });
     window.addEventListener(DATA_CHANGED_EVENT, refetch);
     return () => window.removeEventListener(DATA_CHANGED_EVENT, refetch);
   }, [token, month]);
 
-  // Instant local update for a removed row: the row plays its exit
-  // animation, then leaves `recent`, and the month totals/category slice it
-  // contributed to shrink right away. The server confirms in the background
-  // (see the callers) -- nothing here waits on the network.
+  // Atualização local imediata de uma linha removida: a linha faz a animação
+  // de saída, depois sai de `recent`, e os totais do mês e a fatia da
+  // categoria em que ela entrava diminuem na hora. O servidor confirma em
+  // segundo plano (ver quem chama) -- nada aqui espera a rede.
   function removeLocally(tx: TransactionListRow) {
     const amount = Number(tx.amount);
     const sign = tx.transactionType === "expense" ? "expense" : "income";
@@ -564,9 +567,9 @@ export function DashboardPage() {
     setSummary(snapshot.summary);
   }
 
-  // Delete with Desfazer: the request is only sent once the undo window
-  // closes (see utils/deferredDelete.ts), so undoing never has to recreate
-  // anything on the server.
+  // Apagar com Desfazer: o pedido só é enviado quando o tempo de desfazer
+  // acaba (ver utils/deferredDelete.ts), então desfazer nunca precisa recriar
+  // nada no servidor.
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
@@ -618,19 +621,20 @@ export function DashboardPage() {
     }
   }
 
-  // Local list update SplitStatusPill drives directly (optimistic flip,
-  // reverted again if its request fails) -- see that component for the
-  // actual settle/reopen calls.
+  // Atualização local da lista que o SplitStatusPill comanda direto (troca
+  // otimista, desfeita se o pedido dele falhar) -- as chamadas de acertar e
+  // reabrir estão naquele componente.
   function setRecentSettled(transactionId: string, nextSettled: boolean) {
     setRecent((current) => current.map((row) => (row.id === transactionId ? { ...row, isSettled: nextSettled } : row)));
   }
 
-  // Derived values below must stay above any conditional `return` -- they're
-  // hooks (useMemo), and hook calls can't be conditional. Cheap arithmetic
-  // (percentChange, budget math) stays as plain consts; the array-heavy work
-  // (filtering/reducing up to 100 rows, regrouping by day) is memoized so
-  // opening/closing a modal (editingTx) doesn't redo it for no
-  // reason -- none of those state changes affect this derived data.
+  // Os valores calculados abaixo têm que ficar acima de qualquer `return`
+  // condicional -- são hooks (useMemo), e hook não pode ser chamado
+  // condicionalmente. Conta simples (percentChange, conta do orçamento) fica
+  // como const comum; o trabalho pesado com listas (filtrar e somar até 100
+  // linhas, reagrupar por dia) é memorizado, pra abrir ou fechar uma janela
+  // (editingTx) não refazer tudo à toa -- nenhuma dessas mudanças de estado
+  // afeta estes dados.
   const income = personalMonthTotals.income;
   const expense = personalMonthTotals.expense;
   const savedInCards = personalMonthTotals.savedInCards ?? 0;
@@ -657,17 +661,17 @@ export function DashboardPage() {
   const categoryRows = useMemo(() => (summary?.byCategory ?? []).slice(0, 6), [summary]);
   const categoryMax = Math.max(1, ...categoryRows.map((row) => Number(row.total)));
 
-  // "Seu dinheiro hoje": what's in the accounts this person can see (their
-  // own + Nossa Conta -- the backend never sends anyone else's personal
-  // balance) plus what's guardado in cartões com limite garantido.
+  // "Seu dinheiro hoje": o que está nas contas que esta pessoa pode ver (a dela
+  // + a Nossa Conta -- o backend nunca manda o saldo pessoal de mais ninguém)
+  // mais o que está guardado em cartões com limite garantido.
   const visibleAccounts = group?.accounts ?? [];
   const accountsTotal = visibleAccounts.reduce((sum, account) => sum + account.balance, 0);
   // Guardado em metas também é seu (saiu da conta, ou já estava guardado).
   const moneyTotal = accountsTotal + savedInSecuredCards + painel.savedInGoals;
 
 
-  // "Dá pra gastar por dia": only for the month actually being lived --
-  // browsing a past month, "até o fim do mês" means nothing.
+  // "Dá pra gastar por dia": só pro mês que está sendo vivido -- olhando um mês
+  // passado, "até o fim do mês" não quer dizer nada.
   const monthLeft = income - expense - savedInCards - lentOut;
   const dailyAllowance = useMemo(() => {
     if (month !== currentMonthParam()) return null;
@@ -694,8 +698,9 @@ export function DashboardPage() {
   const recentGroups = useMemo(() => groupByDay(recent), [recent]);
 
   const jointAccount = group?.accounts.find((account) => account.type === "joint");
-  // Stable order: you first, then everyone else sorted by id -- same rule
-  // ParPage uses, so color assignment doesn't jitter between the two pages.
+  // Ordem fixa: você primeiro, depois os outros ordenados pelo id -- a mesma
+  // regra da ParPage, pra cor de cada pessoa não ficar trocando entre as duas
+  // telas.
   const orderedMembers = useMemo(() => {
     if (!group || !user) return [];
     const others = group.members.filter((member) => member.id !== user.id).sort((a, b) => a.id.localeCompare(b.id));
@@ -742,10 +747,10 @@ export function DashboardPage() {
           <MonthPicker value={month} onChange={setMonth} isLoading={isLoading} />
         </div>
 
-        {/* Only visible while isLoading -- a month not already cached is
-            being fetched for real. An already-cached month never sets
-            isLoading, so switching between recently-viewed months never
-            shows this at all. */}
+        {/* Só aparece enquanto isLoading -- um mês que não estava no cache
+            está sendo buscado de verdade. Um mês que já estava no cache nunca
+            liga o isLoading, então trocar entre meses vistos há pouco nunca
+            mostra isto. */}
         <div className={`top-progress${isLoading ? " is-loading" : ""}`} aria-hidden="true">
           <div className="top-progress-fill" />
         </div>

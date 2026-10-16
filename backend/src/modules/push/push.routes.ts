@@ -1,3 +1,16 @@
+// ============================================================================
+// MÓDULO push -- endereços /api/push
+// ============================================================================
+// O que faz: Notificação no celular (Web Push): chave pública, registrar e
+//            cancelar o aparelho, mandar um teste.
+// Quem chama: components/PushSettingsCard.tsx (tela Conta) e utils/push.ts.
+//
+// Caminho de um pedido dentro do módulo:
+//   *.routes.ts      endereço -> função (este arquivo)
+//   *.controller.ts  lê e valida o pedido (req.body, req.params), responde
+//   *.service.ts     regra de negócio (quem pode, o que calcula)
+//   *.repository.ts  lê e grava no Firestore
+// ============================================================================
 import { Router, type Request, type Response } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";

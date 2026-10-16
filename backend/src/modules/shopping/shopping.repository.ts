@@ -47,8 +47,8 @@ export async function insertItem(input: {
   return toItemRow(doc);
 }
 
-// One shared list per group -- unlike accounts/debts/cards there's no
-// personal/joint split here, the whole point is everyone sees the same list.
+// Uma lista só por grupo -- diferente das contas, dívidas e cartões, aqui não
+// existe pessoal/conjunto: a ideia é todo mundo ver a mesma lista.
 export async function findItemsByGroupId(groupId: string): Promise<ShoppingItemRow[]> {
   const snapshot = await itemsCol.where("groupId", "==", groupId).get();
   return snapshot.docs.map(toItemRow).sort((a, b) => a.createdAt.localeCompare(b.createdAt));

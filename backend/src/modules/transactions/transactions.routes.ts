@@ -1,3 +1,20 @@
+// ============================================================================
+// MÓDULO transactions -- endereços /api/transactions
+// ============================================================================
+// O que faz: Lançamentos (gastos e receitas): criar, listar, editar, apagar,
+//            apagar vários, séries recorrentes, divisão entre o grupo e acerto
+//            ("pago"), saldo de quem deve quem, resumos do mês e do ano, série
+//            diária, organizar sem categoria e sem forma de pagamento,
+//            exportar CSV.
+// Quem chama: Quase todas as telas: Painel, Par, Relatórios, Nova despesa,
+//             edição de lançamento.
+//
+// Caminho de um pedido dentro do módulo:
+//   *.routes.ts      endereço -> função (este arquivo)
+//   *.controller.ts  lê e valida o pedido (req.body, req.params), responde
+//   *.service.ts     regra de negócio (quem pode, o que calcula)
+//   *.repository.ts  lê e grava no Firestore
+// ============================================================================
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";

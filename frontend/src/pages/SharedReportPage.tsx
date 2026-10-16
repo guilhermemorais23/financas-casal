@@ -26,9 +26,9 @@ interface SharedReport {
   }[];
 }
 
-// Public, read-only page behind the "Copiar link do extrato" button. No
-// login and no app chrome: whoever has the link sees this month's snapshot
-// until it expires or the owner revokes it.
+// Página pública, só de leitura, por trás do botão "Copiar link do extrato".
+// Sem login e sem a moldura do app: quem tem o link vê a foto deste mês até
+// ela vencer ou o dono revogar.
 export default function SharedReportPage() {
   const { token } = useParams();
   const [report, setReport] = useState<SharedReport | null>(null);
