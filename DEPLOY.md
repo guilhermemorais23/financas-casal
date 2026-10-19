@@ -2,11 +2,11 @@
 
 Produção usa um projeto real do Firebase (`par-projeto`): **Render** hospeda o backend, **Firebase Hosting** hospeda o frontend, e ambos falam com o **Firestore/Auth reais** desse projeto (não o emulador).
 
-Isso só roda depois que um PR de `desenvolvimento` foi mergeado em `master` — veja [CONTRIBUTING.md](CONTRIBUTING.md) para o fluxo de branches.
+O deploy é automático: quando um PR é mergeado no `master`, o CI (`.github/workflows/ci.yml`) roda build e testes e, se passarem, publica o backend e o frontend. Não precisa rodar nada à mão — veja [CONTRIBUTING.md](CONTRIBUTING.md) para o fluxo de branches.
 
 ## Backend (Render)
 
-Deploy automático: o serviço no Render está conectado ao repositório do GitHub e configurado para redeployar sozinho a cada push em `master`. Não precisa rodar nada manualmente — só mergear o PR.
+Deploy automático pelo CI: no push em `master`, o passo "Deploy do backend (Render)" chama o deploy hook do Render (secret `RENDER_DEPLOY_HOOK_URL` no GitHub). O Render então builda a imagem Docker e troca o serviço.
 
 URL atual: `https://financas-casal-m496.onrender.com` (plano free — "dorme" depois de um tempo sem uso; a primeira requisição depois disso demora alguns segundos pra acordar).
 
@@ -23,7 +23,11 @@ A chave de service account **nunca** vai pro Git (está no `.gitignore`) nem ent
 
 ## Frontend (Firebase Hosting)
 
-Deploy manual, depois do merge em `master`:
+Deploy automático pelo CI: no push em `master`, o CI builda o frontend com `VITE_API_URL` apontando pro Render e as variáveis `VITE_FIREBASE_*` vindas dos secrets do GitHub, autentica com a conta de serviço (secret `FIREBASE_SERVICE_ACCOUNT`) e roda `firebase deploy --only hosting`.
+
+Pra conferir se publicou: o cabeçalho `Last-Modified` de `https://par-projeto.web.app/` tem que ser logo depois do commit `chore(release)` mais recente.
+
+Deploy manual (plano B, se o CI estiver fora do ar):
 
 ```
 cd frontend

@@ -2,25 +2,29 @@
 
 ## Branches
 
-- **`master`** — produção. É o que está rodando no Render (backend) e é o que se publica no Firebase Hosting (frontend). Ninguém commita direto aqui.
-- **`desenvolvimento`** — branch de teste/staging. É onde qualquer mudança passa antes de ir pra produção.
+- **`master`** — produção. É o que está rodando no Render (backend) e no Firebase Hosting (frontend). Ninguém commita direto aqui.
+- **Um branch por tarefa**, criado a partir do `master` e nomeado pelo tipo: `feat/conta-so-esta-vez`, `fix/painel-cartao`, `docs/readme-atualizado`. Cada branch leva só o que é daquela tarefa.
 
 Fluxo de qualquer mudança, sempre nessa ordem:
 
-1. **Testar localmente** — rodar `npm run dev` (emulador + backend + frontend), confirmar que o fluxo que você mexeu continua funcionando (veja o roteiro em [README.md](README.md#verificando-que-funciona)) e que `npm --prefix backend run build` / `npm --prefix frontend run build` compilam sem erro.
-2. **Commitar e subir pra `desenvolvimento`**:
+1. **Criar o branch a partir do `master` atualizado** (guarde com `git stash` qualquer coisa que não seja da tarefa):
    ```
-   git checkout desenvolvimento
+   git checkout master
    git pull
+   git checkout -b feat/minha-tarefa
+   ```
+2. **Testar localmente** — rodar `npm run dev` (emulador + backend + frontend), confirmar que o fluxo que você mexeu continua funcionando (veja o roteiro em [README.md](README.md#verificando-que-funciona)) e que `npm --prefix backend run build`, `npm --prefix frontend run build` e `npm run test:backend` passam.
+3. **Commitar e subir o branch**:
+   ```
    git add <arquivos>
    git commit -m "feat: adiciona X"
-   git push origin desenvolvimento
+   git push -u origin feat/minha-tarefa
    ```
-3. **Testar de novo a partir da branch** (rodar local em cima do que foi de fato commitado — pega qualquer coisa que só existia sem commitar na sua máquina).
-4. **Se funcionou, abrir PR de `desenvolvimento` para `master`** no GitHub e revisar o diff antes de mergear.
-5. **Mergear o PR** → isso é o que efetivamente sobe pra produção:
-   - Backend: o Render está configurado para redeployar automaticamente a cada push em `master`.
-   - Frontend: precisa rodar `firebase deploy --only hosting --project par-projeto` manualmente depois do merge (não é automático ainda — ver [DEPLOY.md](DEPLOY.md)).
+4. **Abrir o PR do branch para o `master`** no GitHub. O CI roda build e testes no PR; revise o diff antes de mergear.
+5. **Mergear o PR** → isso é o que sobe pra produção, sozinho: o CI testa de novo, publica o backend (Render) e o frontend (Firebase Hosting) e o semantic-release cria a versão nova (`chore(release): X.Y.Z`). Detalhes em [DEPLOY.md](DEPLOY.md).
+6. **Apagar o branch** depois do merge (botão "Delete branch" no PR).
+
+O branch `Desenvolvimento` (com D maiúsculo) ainda existe no GitHub, mas não faz parte do fluxo atual. O CI está configurado pra rodar em push no `desenvolvimento` minúsculo (`.github/workflows/ci.yml`), então push nele não dispara o CI; PRs disparam normalmente.
 
 Nunca dar `git push origin master` direto. Se `master` tiver proteção de branch ativada no GitHub (Settings → Branches → Branch protection rules → exigir PR), isso nem deixa acontecer por acidente.
 
