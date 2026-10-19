@@ -11,20 +11,18 @@ export interface CardRow {
   name: string;
   closingDay: number;
   dueDay: number;
-  // Optional on purpose -- a card someone already had before this existed
-  // keeps working exactly as it did, with no limit bar shown at all, until
-  // they fill one in themselves.
+  // Opcional de propósito -- um cartão que alguém já tinha antes disto existir
+  // continua funcionando igual, sem barra de limite, até a pessoa preencher.
   limit: string | null;
-  // "secured" = cartão com limite garantido: the limit IS money the person
-  // parked in the card (it only moves through adjustSecuredLimit, never
-  // typed in directly). Cards created before this existed have no field and
-  // read back as "normal".
+  // "secured" = cartão com limite garantido: o limite É dinheiro que a pessoa
+  // guardou no cartão (só muda pelo adjustSecuredLimit, nunca digitado direto).
+  // Cartões criados antes disto não têm o campo e são lidos como "normal".
   limitType: LimitType;
-  // Only matters for "secured": whether guardar/resgatar move money out of
-  // (and back into) the owner's account. false = the money was already
-  // parked somewhere the app doesn't track (a poupança/caixinha), so the
-  // limit is extra room and the account balance is left alone. Cards from
-  // before this existed always booked the transfer, so they read as true.
+  // Só importa no "secured": se guardar/resgatar tiram (e devolvem) dinheiro
+  // da conta do dono. false = o dinheiro já estava guardado num lugar que o app
+  // não acompanha (poupança, caixinha), então o limite é espaço extra e o
+  // saldo da conta não muda. Cartões de antes disto sempre lançavam a
+  // transferência, então são lidos como true.
   securedFromAccount: boolean;
 }
 
@@ -39,11 +37,11 @@ export interface PurchaseRow {
   buyerId: string;
   purchaseDate: string;
   statementMonth: string;
-  // A purchase made at once (installmentsCount === 1) or the Nth of a
-  // parcelado one -- every installment of the same original purchase shares
-  // purchaseGroupId, one doc per statement month it lands in (same pattern
-  // as transactions' recurringGroupId). Deleting one installment only
-  // deletes that doc, on purpose -- see removePurchase in cards.service.ts.
+  // Uma compra à vista (installmentsCount === 1) ou a N-ésima de uma
+  // parcelada -- todas as parcelas da mesma compra têm o mesmo
+  // purchaseGroupId, um documento por mês de fatura em que cai (mesmo padrão
+  // do recurringGroupId dos lançamentos). Apagar uma parcela apaga só aquele
+  // documento, de propósito -- ver removePurchase em cards.service.ts.
   installmentNumber: number;
   installmentsCount: number;
   purchaseGroupId: string;
@@ -84,8 +82,8 @@ function toPurchaseRow(cardId: string, doc: FirebaseFirestore.DocumentSnapshot):
     buyerId: data.buyerId,
     purchaseDate: data.purchaseDate,
     statementMonth: data.statementMonth,
-    // Purchases created before parcelamento existed have neither field --
-    // treat every one of those as its own 1/1 purchase.
+    // Compras de antes do parcelamento existir não têm nenhum dos dois campos --
+    // cada uma delas é tratada como compra 1/1.
     installmentNumber: data.installmentNumber ?? 1,
     installmentsCount: data.installmentsCount ?? 1,
     purchaseGroupId: data.purchaseGroupId ?? doc.id,
@@ -141,11 +139,12 @@ async function loadFindCardsVisibleTo(groupId: string, userId: string): Promise<
   return [...jointSnap.docs, ...ownSnap.docs].map(toCardRow).sort((a, b) => (a.id < b.id ? 1 : -1));
 }
 
-// Every card in the group regardless of owner -- unlike findCardsVisibleTo
-// this isn't scoped to "what one user can see" (a single equality filter,
-// no new index). Used by the reminders job, which runs outside any one
-// user's request and decides per-card who to email based on ownerUserId
-// itself (null -> everyone in the group, set -> just that owner).
+// Todos os cartões do grupo, de qualquer dono -- diferente do
+// findCardsVisibleTo, não se limita "ao que um usuário pode ver" (um filtro
+// de igualdade só, sem índice novo). Usado pelo job de lembretes, que roda
+// fora do pedido de qualquer usuário e decide, por cartão, pra quem mandar
+// e-mail pelo próprio ownerUserId (null -> todo mundo do grupo, preenchido ->
+// só o dono).
 export function findCardsByGroupId(groupId: string): Promise<CardRow[]> {
   return memoizeScoped(`cards:${groupId}`, [`group:${groupId}`, "cards"], () => loadFindCardsByGroupId(groupId));
 }
@@ -180,10 +179,11 @@ export async function updateCard(
   return toCardRow(doc);
 }
 
-// Deposit (positive) or withdrawal (negative) on a secured card's limit --
-// an increment, so two people moving money at once don't overwrite each
-// other. The "can't withdraw more than what's free" check lives in the
-// service, which knows how much of the limit purchases are holding.
+// Depósito (positivo) ou retirada (negativo) no limite de um cartão
+// garantido -- é um incremento, então duas pessoas mexendo ao mesmo tempo não
+// apagam o valor uma da outra. A trava "não dá pra retirar mais do que está
+// livre" fica no service, que sabe quanto do limite as compras estão
+// segurando.
 export async function setCardSecuredFromAccount(cardId: string, securedFromAccount: boolean): Promise<CardRow> {
   const ref = cardsCol.doc(cardId);
   await ref.update({ securedFromAccount, updatedAt: FieldValue.serverTimestamp() });
@@ -222,11 +222,11 @@ export async function deleteCard(cardId: string): Promise<string[]> {
   return linkedTransactionIds;
 }
 
-// A parcela 1/N posts to `statementMonth` (the month the purchase date
-// itself falls into); parcela 2/N to the next month, and so on -- every
-// installment shares one amount split via splitEvenly (same utility debts
-// use), and one purchaseGroupId. count === 1 is the plain, unparcelled case
-// and produces exactly one doc, same as the old insertPurchase did.
+// A parcela 1/N cai em `statementMonth` (o mês em que cai a data da compra);
+// a parcela 2/N no mês seguinte, e assim por diante -- todas as parcelas
+// dividem um valor só via splitEvenly (o mesmo utilitário das dívidas) e um
+// purchaseGroupId. count === 1 é a compra à vista e gera exatamente um
+// documento, igual o antigo insertPurchase.
 export async function insertPurchaseSeries(
   cardId: string,
   input: {
@@ -248,9 +248,9 @@ export async function insertPurchaseSeries(
   refs.forEach((ref, index) => {
     batch.set(ref, {
       description: input.description,
-      // splitEvenly already returns cents, unlike every other money field
-      // here (which take reais and convert with toCents) -- no double
-      // conversion.
+      // O splitEvenly já devolve centavos, diferente de todo outro campo de
+      // dinheiro aqui (que recebe reais e converte com toCents) -- sem converter
+      // duas vezes.
       amountCents: shares[index],
       categoryId: input.categoryId,
       buyerId: input.buyerId,
@@ -268,11 +268,10 @@ export async function insertPurchaseSeries(
   return docs.map((doc) => toPurchaseRow(cardId, doc));
 }
 
-// Every purchase on a card, any statement month -- used to compute how much
-// of the limit is currently locked (every installment not yet paid off,
-// which can span several months into the future). Cheap: a card's whole
-// purchase history tops out in the hundreds of docs, not worth a
-// per-month-range query for this.
+// Todas as compras do cartão, de qualquer mês de fatura -- usado pra calcular
+// quanto do limite está preso agora (toda parcela ainda não paga, que pode ir
+// vários meses pra frente). Barato: o histórico inteiro de um cartão fica na
+// casa das centenas de documentos, não compensa consultar por faixa de mês.
 export function findAllPurchasesByCardId(cardId: string): Promise<PurchaseRow[]> {
   return memoizeScoped(`purchases:${cardId}`, ["cards"], () => loadFindAllPurchasesByCardId(cardId));
 }

@@ -28,7 +28,7 @@ export async function revokeShareHandler(req: Request, res: Response) {
   }
 }
 
-// Public: no auth. The unguessable token is the only credential.
+// Público: sem login. O token impossível de adivinhar é a única credencial.
 export async function getPublicShareHandler(req: Request, res: Response) {
   try {
     const share = await getPublicShare(String(req.params.token));

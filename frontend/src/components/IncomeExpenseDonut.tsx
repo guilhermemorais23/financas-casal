@@ -10,8 +10,8 @@ const SIZE = 152;
 const RADIUS = 56;
 const STROKE = 20;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-// Small breathing gap between the two arcs (Apple-Health-ring style) instead
-// of them butting into each other -- reads much cleaner than a hard seam.
+// Um pequeno respiro entre os dois arcos (estilo anel do Apple Saúde) em vez
+// de um encostar no outro -- fica bem mais limpo que uma emenda seca.
 const GAP = 9;
 
 export function IncomeExpenseDonut({ income, expense }: IncomeExpenseDonutProps) {

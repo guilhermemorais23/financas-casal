@@ -169,8 +169,8 @@ export function GoalsPage() {
 
   const memberName = (id: string) => (id === user?.id ? "Você" : members.find((m) => m.id === id)?.displayName ?? "Alguém");
 
-  // Delete with Desfazer (utils/deferredDelete.ts): the card leaves the list
-  // at once, the DELETE goes out after the undo window.
+  // Apagar com Desfazer (utils/deferredDelete.ts): o card sai da lista na hora,
+  // e o DELETE vai depois que o tempo de desfazer acaba.
   async function handleDelete(goal: GoalRow) {
     const confirmed = await confirm({
       title: `Excluir a meta “${goal.name}”?`,
@@ -329,8 +329,8 @@ export function GoalsPage() {
           const target = Number(goal.targetAmount);
           const percent = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
           const monthly = goal.achievedAt ? null : minimumMonthlySaving(target, current, goal.deadline);
-          // minimumMonthlySaving only returns null for a dated, unfinished goal
-          // once its deadline is behind us.
+          // O minimumMonthlySaving só devolve null numa meta com prazo e não terminada
+          // quando o prazo já passou.
           const isOverdue = !goal.achievedAt && goal.deadline !== null && monthly === null && current < target;
           const forMoney: GoalForMoney = {
             id: goal.id,

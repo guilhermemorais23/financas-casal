@@ -8,8 +8,8 @@ import { SlowServerHint, Spinner } from "./Spinner";
 
 const LABELS: Record<SocialProvider, string> = { google: "Google", apple: "Apple" };
 
-// "Continuar com Google / Apple" -- shared by Entrar and Criar conta, since
-// both do the exact same thing (the first sign-in creates the account).
+// "Continuar com Google / Apple" -- usado por Entrar e por Criar conta, porque
+// os dois fazem exatamente a mesma coisa (o primeiro login cria a conta).
 export function SocialLoginButtons({
   onSuccess,
   onError,
@@ -24,8 +24,8 @@ export function SocialLoginButtons({
     onError(null);
     setBusy(provider);
     try {
-      // false = the popup wasn't possible (iPhone app na tela de início) and
-      // the page is being sent to the provider instead; nothing to do here.
+      // false = não deu pra abrir o popup (app do iPhone na tela de início) e a
+      // página está sendo levada ao provedor; nada a fazer aqui.
       if (await loginWithProvider(provider)) onSuccess();
     } catch (err) {
       if (err instanceof FirebaseError && err.code === "auth/operation-not-allowed") {

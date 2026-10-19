@@ -20,8 +20,9 @@
   --series-7: #4a3aa7; /* violet */
   --series-8: #e34948; /* red    */
 
-  /* Sequential blue ramp (magnitude / meters) -- charts only, kept as-is
-     regardless of brand palette so categorical colors stay CVD-validated */
+  /* Rampa sequencial de azul (tamanho / medidores) -- só pros gráficos, mantida
+     igual independente da paleta da marca, pra as cores das categorias
+     continuarem validadas pra daltonismo */
   --blue-100: #cde2fb;
   --blue-200: #9ec5f4;
   --blue-300: #6da7ec;
@@ -38,11 +39,11 @@
   --status-critical: #d03b3b;
   --success-text: #006300;
 
-  /* Brand palette (purple + blue, on off-white) -- decoupled from the
-     --series-* categorical chart colors on purpose, so re-theming the
-     brand never touches the validated chart palette. Variable names kept
-     from the previous coffee/peach/olive theme so every usage site below
-     picks up the new palette without needing to be touched individually. */
+  /* Paleta da marca (roxo + azul, sobre quase branco) -- separada das cores
+     de gráfico --series-* de propósito, pra mudar o tema da marca nunca mexer
+     na paleta de gráficos já validada. Os nomes das variáveis ficaram do
+     tema antigo (coffee/peach/olive), assim todo lugar que usa elas abaixo
+     pega a paleta nova sem precisar ser mexido um por um. */
   --coffee-100: #ece9fc;
   --coffee-300: #b3a4f5;
   --coffee-500: #6d54ec;
@@ -53,29 +54,30 @@
   --peach: #3e79f7;
   --peach-dark: #2b5fe0;
 
-  /* Blue -- the second brand accent (Par's partner identity color,
-     shared/group progress bars) kept distinct from the purple primary so
-     "your stuff" vs "shared stuff" reads at a glance. */
+  /* Azul -- o segundo destaque da marca (cor de identidade do par, barras de
+     progresso compartilhadas/do grupo), mantido diferente do roxo principal
+     pra "o que é seu" e "o que é dividido" se distinguirem de relance. */
   --olive-100: #e4ecfe;
   --olive-500: #3e79f7;
   --olive-600: #2b5fe0;
   --olive-700: #1f47ab;
 
-  /* Person identity slots (Você / parceiro) -- brand-matched, decoupled
-     from the CVD-safe --series-* chart palette on purpose. */
+  /* Posições de cor de pessoa (Você / parceiro) -- seguem a marca, separadas
+     de propósito da paleta de gráficos --series-*, que é segura pra
+     daltonismo. */
   --person-1: var(--coffee-500);
   --person-2: var(--olive-500);
 
-  /* Card/input surfaces -- off-white cards on the faint warm-grey page
-     plane, so a card reads as "lifted" from thin contrast + a hairline
-     border instead of a filled tone. */
+  /* Superfícies de card e campo -- cards quase brancos sobre o fundo cinza
+     bem claro da página, pra o card parecer "levantado" por um contraste
+     leve + uma borda fina, em vez de uma cor de fundo cheia. */
   --tan-card: #ffffff;
   --tan-input: #f3f4f6;
   --tan-track: #e6e7eb;
 
-  /* App aliases -- primary is purple (buttons/FAB/active nav); blue is
-     reserved for the "peach" accent slots (badges, secondary highlights) so
-     the two stay visually distinct. */
+  /* Apelidos do app -- o principal é roxo (botões, botão +, menu ativo); o
+     azul fica pros destaques "peach" (selos, destaques secundários), pra os
+     dois continuarem visualmente diferentes. */
   --color-primary: var(--coffee-500);
   --color-primary-dark: var(--coffee-600);
   --color-primary-soft: var(--coffee-100);
@@ -814,7 +816,7 @@ input:focus {
   border-width: 3px;
 }
 
-/* On the filled purple button: white track so it's visible. */
+/* No botão roxo cheio: trilho branco pra aparecer. */
 .spinner-on-primary {
   border-color: rgba(255, 255, 255, 0.35);
   border-top-color: #fff;
@@ -844,8 +846,8 @@ input:focus {
   }
 }
 
-/* Instant tap feedback on phones -- otherwise nothing visibly changes until
-   the async work behind the button starts re-rendering. */
+/* Resposta imediata ao toque no celular -- senão nada muda na tela até o
+   trabalho assíncrono por trás do botão começar a redesenhar. */
 .btn {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -911,8 +913,8 @@ input:focus {
   }
 }
 
-/* Toast confirmations -- a save action gets a brief, dismissable "it
-   worked" instead of just closing silently. --------------------------- */
+/* Avisos de confirmação -- salvar ganha um "deu certo" rápido, que dá pra
+   fechar, em vez de só fechar calado. --------------------------------- */
 
 .toast-stack {
   position: fixed;
@@ -1241,9 +1243,9 @@ input:focus {
   padding: 0 0.5rem 1.5rem;
 }
 
-/* Links + widgets live in their own scroll area so, on a short window, only
-   this middle part scrolls -- the brand on top and the profile footer below
-   stay put. */
+/* Os links e widgets ficam numa área de rolagem própria, então numa janela
+   baixa só esta parte do meio rola -- a marca em cima e o rodapé do perfil
+   embaixo ficam parados. */
 .app-sidebar-scroll {
   flex: 1;
   min-height: 0;
@@ -1252,9 +1254,10 @@ input:focus {
   overflow-y: auto;
 }
 
-/* Desktop: the sidebar is pinned to the viewport instead of stretching to
-   the full page height (which made it scroll away with a long page and
-   hid the profile footer). The mobile drawer has its own rules below. */
+/* PC: o menu lateral fica preso na janela em vez de esticar até a altura da
+   página inteira (o que fazia ele rolar junto com uma página longa e
+   esconder o rodapé do perfil). A gaveta do celular tem regras próprias
+   abaixo. */
 @media (min-width: 721px) {
   .app-sidebar {
     position: sticky;
@@ -1567,8 +1570,8 @@ input:focus {
 
 .app-main {
   flex: 1;
-  /* Extra room at the bottom so the last row can scroll out from under the
-     floating "+" instead of being covered by it. */
+  /* Espaço extra embaixo pra última linha poder rolar pra fora do "+"
+     flutuante, em vez de ficar escondida por ele. */
   padding: 2rem 2rem 6rem;
   max-width: 720px;
   margin: 0 auto;
@@ -1593,8 +1596,9 @@ input:focus {
   min-width: 0;
 }
 
-/* .card's 380px cap is for the auth/setup forms -- on the Painel the cards
-   fill their column, otherwise wide screens get big empty gaps. */
+/* O limite de 380px do .card é pros formulários de login/configuração --
+   no Painel os cards preenchem a coluna, senão telas largas ficam com
+   buracos grandes. */
 .dashboard-col > .card {
   max-width: none;
 }
@@ -1753,10 +1757,11 @@ input:focus {
   pointer-events: none;
 }
 
-/* Thin sweep under the header while a month with no cache is being fetched
-   for real -- an already-cached month never sets isLoading, so switching
-   between recently-viewed months never shows this at all. Always 3px tall
-   (transparent track when idle) so it never shifts anything below it. */
+/* Faixa fina embaixo do cabeçalho enquanto um mês sem cache está sendo
+   buscado de verdade -- um mês já no cache nunca liga o isLoading, então
+   trocar entre meses vistos há pouco nunca mostra isto. Sempre com 3px de
+   altura (trilho transparente quando parado), pra nunca empurrar nada
+   abaixo dela. */
 .top-progress {
   height: 3px;
   margin-top: -0.5rem;
@@ -2096,10 +2101,10 @@ input:focus {
   margin: 0;
 }
 
-/* Budget card gets its own hero treatment (olive gradient) so it reads as
-   a second "highlight" distinct from the coffee-gradient hero cards
-   ("Nossa conta" / "Você tem no mês") -- same warm/cool complementary
-   pairing as the terracotta-vs-olive person-identity colors. */
+/* O card de orçamento ganha um destaque próprio (degradê oliva) pra ser lido
+   como um segundo "destaque", diferente dos cards principais com degradê
+   café ("Nossa conta" / "Você tem no mês") -- o mesmo par quente/frio das
+   cores de pessoa terracota e oliva. */
 .budget-card {
   position: relative;
   overflow: hidden;
@@ -2152,9 +2157,9 @@ input:focus {
   margin: 0;
 }
 
-/* Without a cap set there's no ring to show, so the card collapses to a
-   compact prompt instead of keeping the full "feature card" height that
-   only makes sense once there's a progress ring to display. */
+/* Sem teto definido não há anel pra mostrar, então o card encolhe pra um
+   convite compacto, em vez de manter a altura de "card de destaque", que
+   só faz sentido quando existe um anel de progresso. */
 .budget-card.is-empty {
   padding: 1.1rem 1.5rem;
 }
@@ -2337,7 +2342,7 @@ input:focus {
   color: var(--color-text);
 }
 
-/* Month-over-month delta on stat boxes ---------------------------------------- */
+/* Variação contra o mês anterior nos quadros de número ------------------------ */
 
 .stat-delta {
   font-size: 0.8rem;
@@ -2691,9 +2696,9 @@ input:focus {
   transition: filter 0.1s ease;
 }
 
-/* A little "toque pra mudar" hint -- without this the pill just reads as a
-   static status label, which is exactly what confused the first person who
-   used it (nothing else about a colored badge says "click me"). */
+/* Uma dica "toque pra mudar" -- sem ela a etiqueta parece só um status
+   parado, que foi exatamente o que confundiu a primeira pessoa que usou
+   (nada mais num selo colorido diz "clique em mim"). */
 .split-status-pill::after {
   content: "↻";
   font-size: 0.8rem;
@@ -2835,14 +2840,14 @@ input:focus {
   }
 }
 
-/* Global assistant widget -- opened from a button in the sidebar footer
-   (next to the theme toggle), not a floating FAB, so it never competes
-   with the "nova despesa" + button for the same corner. ---------------- */
+/* Assistente -- aberto por um botão no rodapé do menu lateral (ao lado do
+   botão de tema), e não por um botão flutuante, pra nunca disputar o mesmo
+   canto com o + de "nova despesa". ------------------------------------- */
 
 .assistant-panel {
   position: fixed;
   bottom: 1.5rem;
-  /* Past the 220px sidebar on desktop, where it's always visible. */
+  /* Depois do menu lateral de 220px no PC, onde ele está sempre visível. */
   left: calc(220px + 1.5rem);
   width: 340px;
   max-width: calc(100vw - 2rem);
@@ -3042,11 +3047,12 @@ select {
   width: auto;
 }
 
-/* Native checkboxes inherit color-scheme:dark from :root in dark mode --
-   browsers then render an UNCHECKED box with a dark/filled background too,
-   which reads as "already checked" at a glance. Forcing color-scheme:light
-   on the control itself keeps its native chrome (white box, clear check)
-   regardless of the page theme; accent-color still themes the checked fill. */
+/* Caixinhas de marcar nativas herdam o color-scheme:dark do :root no modo
+   escuro -- aí o navegador desenha a caixa DESMARCADA com fundo escuro
+   cheio, que de relance parece "já marcada". Forçar color-scheme:light no
+   próprio controle mantém a cara nativa (caixa branca, marca clara)
+   qualquer que seja o tema; o accent-color continua colorindo o
+   preenchimento marcado. */
 input[type="checkbox"] {
   color-scheme: light;
   accent-color: var(--color-primary);
@@ -3271,8 +3277,8 @@ input[type="checkbox"] {
 .stat-card {
   position: relative;
   overflow: hidden;
-  /* Purple-to-blue duotone (was a single-hue coffee gradient) -- matches
-     the two-color mockup approved for the rebrand. */
+  /* Degradê roxo pro azul (antes era um degradê café de um tom só) -- igual
+     à maquete de duas cores aprovada na mudança de marca. */
   background: linear-gradient(135deg, var(--coffee-600), var(--olive-600) 140%);
   color: var(--cream);
   border-radius: var(--radius);
@@ -3472,8 +3478,8 @@ input[type="checkbox"] {
   margin-top: 0;
 }
 
-/* Exit animation for a deleted row -- collapses instead of just vanishing.
-   The row is removed from state right after (see removeLocally). */
+/* Animação de saída de uma linha apagada -- encolhe em vez de só sumir.
+   A linha sai do estado logo depois (ver removeLocally). */
 .transaction-row.is-leaving {
   overflow: hidden;
   pointer-events: none;
@@ -4212,7 +4218,7 @@ input[type="checkbox"] {
   border: 1px solid var(--color-danger-text);
 }
 
-/* "Seu dinheiro hoje" on the Painel ---------------------------------------- */
+/* "Seu dinheiro hoje" no Painel -------------------------------------------- */
 
 .money-card-total {
   font-family: var(--font-display);

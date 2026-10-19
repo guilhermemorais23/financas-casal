@@ -31,8 +31,8 @@ function isValidDay(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 31;
 }
 
-// limit is opt-in on purpose -- undefined/null both mean "no limit set",
-// only a positive number is accepted otherwise.
+// O limite é opcional de propósito -- undefined e null significam "sem
+// limite"; fora isso, só aceita número positivo.
 function isValidLimit(value: unknown): value is number | null {
   return value === null || value === undefined || isValidAmount(value);
 }

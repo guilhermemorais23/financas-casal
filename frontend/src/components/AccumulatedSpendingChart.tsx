@@ -14,8 +14,8 @@ const PAD_BOTTOM = 24;
 const PAD_LEFT = 8;
 const PAD_RIGHT = 8;
 
-// Single series -- the card title already names it, so no legend box is
-// needed here (dataviz rule: a legend is only mandatory for >=2 series).
+// Uma série só -- o título do card já diz o que é, então não precisa de
+// legenda (regra de gráfico: legenda só é obrigatória com 2 séries ou mais).
 const EXPENSE_COLOR = "var(--series-2)";
 
 function dayOfMonth(iso: string): number {

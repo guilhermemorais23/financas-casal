@@ -64,8 +64,8 @@ interface TransactionListRow {
   recurringGroupId: string | null;
   splitType: "none" | "equal" | "custom";
   isSettled: boolean;
-  // Guardar/resgatar de um cartão com limite garantido -- managed from the
-  // card itself, so the extrato shows it without edit/delete.
+  // Guardar/resgatar de um cartão com limite garantido -- controlado pelo
+  // próprio cartão, então o extrato mostra sem editar nem apagar.
   securedCardId?: string | null;
   loanId?: string | null;
   // Dinheiro guardado numa meta (goalId) ou entre as suas contas: transferência.
@@ -99,9 +99,10 @@ function makeGroup(key: string, label: string, icon: string | null, items: Trans
   return { key, label, icon, items, expense, income };
 }
 
-// One collapsible section per day / category / forma de pagamento, each with
-// its own count and subtotal -- a month with hundreds of lançamentos reads as
-// a handful of headers first, details on demand.
+// Uma seção que abre e fecha por dia / categoria / forma de pagamento, cada
+// uma com a sua contagem e subtotal -- um mês com centenas de lançamentos
+// vira primeiro um punhado de cabeçalhos, e os detalhes quando a pessoa
+// quiser.
 function buildGroups(rows: TransactionListRow[], mode: GroupMode): TxGroup[] {
   if (mode === "day") {
     return groupByDay(rows).map((group) => makeGroup(group.label, group.label, null, group.items));
@@ -132,9 +133,9 @@ export function ReportsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const cacheKey = (name: string, forMonth: string) => `reports:${name}:${forMonth}:${user?.id ?? "anon"}`;
 
-  // Same URL-backed month as DashboardPage, so AppLayout's sidebar widgets
-  // track whatever month is being browsed here instead of the real current
-  // month.
+  // O mesmo mês guardado na URL da DashboardPage, pra os widgets do menu
+  // lateral do AppLayout seguirem o mês visto aqui, e não o mês atual de
+  // verdade.
   const [searchParams, setSearchParams] = useSearchParams();
   const month = searchParams.get("month") ?? currentMonthParam();
   function setMonth(nextMonth: string) {
@@ -163,13 +164,13 @@ export function ReportsPage() {
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | "none" | null>(null);
   const [isNoPaymentOpen, setIsNoPaymentOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState<"personal" | "joint" | null>(null);
-  // Per-group open/closed the user toggled by hand; anything not in here
-  // falls back to the default in isGroupOpen below.
+  // Aberto/fechado de cada grupo que a pessoa mudou à mão; o que não está aqui
+  // usa o padrão do isGroupOpen abaixo.
   const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>({});
   const [showYearly, setShowYearly] = useState(true);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  // Previous month's total spending, only to write the one-line insight
-  // under the numbers ("gastou X% menos que em agosto").
+  // Gasto total do mês anterior, só pra escrever a frase de uma linha embaixo
+  // dos números ("gastou X% menos que em agosto").
   const [prevExpenseTotal, setPrevExpenseTotal] = useState<number | null>(null);
 
   const [selectedYear, setSelectedYear] = useState(() => Number(month.slice(0, 4)));
@@ -178,7 +179,7 @@ export function ReportsPage() {
   );
 
   useEffect(() => {
-    // Collapsed by default -- don't fetch a whole year until it's opened.
+    // Fechado por padrão -- não busca um ano inteiro até a seção ser aberta.
     if (!showYearly) return;
     const yearCacheKey = `reports:year:${selectedYear}:${user?.id ?? "anon"}`;
     const cached = readCache<YearlySummaryResponse>(yearCacheKey);
@@ -189,8 +190,8 @@ export function ReportsPage() {
         writeCache(yearCacheKey, res);
       })
       .catch(() => {
-        // Best-effort widget -- a failed fetch just leaves whatever was
-        // there (cached or null) instead of showing an error banner.
+        // Widget de melhor esforço -- se a busca falhar, fica o que já estava (do
+        // cache ou null) em vez de mostrar uma faixa de erro.
       });
   }, [token, selectedYear, showYearly]);
 
@@ -257,9 +258,9 @@ export function ReportsPage() {
     }
   }
 
-  // Same endpoint, just without ?month= -- exportTransactionsForUser
-  // already treats a missing month as "no date filter" (up to 10k rows,
-  // far above what any group would realistically have).
+  // A mesma rota, só que sem ?month= -- o exportTransactionsForUser já trata
+  // mês ausente como "sem filtro de data" (até 10 mil linhas, muito acima do
+  // que qualquer grupo teria de verdade).
   async function handleExportAll() {
     setIsExporting(true);
     setError(null);
@@ -330,9 +331,9 @@ export function ReportsPage() {
     }
   }
 
-  // Instant local update for a removed row (exit animation, then out of the
-  // list, and the category slice shrinks) -- the server confirms in the
-  // background, nothing here waits on the network.
+  // Atualização local imediata de uma linha removida (animação de saída,
+  // depois sai da lista, e a fatia da categoria diminui) -- o servidor
+  // confirma em segundo plano, nada aqui espera a rede.
   function removeLocally(tx: TransactionListRow) {
     const amount = Number(tx.amount);
     setLeavingIds((current) => new Set(current).add(tx.id));
@@ -448,8 +449,8 @@ export function ReportsPage() {
     });
   }
 
-  // Delete with Desfazer: the request only goes out once the undo window
-  // closes (utils/deferredDelete.ts), so undoing never recreates anything.
+  // Apagar com Desfazer: o pedido só sai quando o tempo de desfazer acaba
+  // (utils/deferredDelete.ts), então desfazer nunca recria nada.
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
@@ -506,9 +507,9 @@ export function ReportsPage() {
     }
   }
 
-  // Local list update SplitStatusPill drives directly (optimistic flip,
-  // reverted again if its request fails) -- see that component for the
-  // actual settle/reopen calls.
+  // Atualização local da lista que o SplitStatusPill comanda direto (troca
+  // otimista, desfeita se o pedido dele falhar) -- as chamadas de acertar e
+  // reabrir estão naquele componente.
   function setTransactionSettled(transactionId: string, nextSettled: boolean) {
     setTransactions(
       (current) => current?.map((row) => (row.id === transactionId ? { ...row, isSettled: nextSettled } : row)) ?? current
@@ -548,9 +549,10 @@ export function ReportsPage() {
     searchQuery.trim() !== "";
   const groups = useMemo(() => buildGroups(visibleTransactions, groupBy), [visibleTransactions, groupBy]);
   const visibleTotals = useMemo(() => makeGroup("all", "", null, visibleTransactions), [visibleTransactions]);
-  // Default: with a filter on, results are few and the point is to read them
-  // -- everything open. Otherwise only the 3 most recent days start open and
-  // category/payment views start collapsed so the subtotals are what you see.
+  // Padrão: com filtro ligado, os resultados são poucos e a ideia é lê-los --
+  // tudo aberto. Sem filtro, só os 3 dias mais recentes começam abertos, e as
+  // visões por categoria e por forma de pagamento começam fechadas, pra o que
+  // se vê primeiro serem os subtotais.
   function isGroupOpen(group: TxGroup, index: number): boolean {
     const override = groupOverrides[`${groupBy}:${group.key}`];
     if (override !== undefined) return override;
@@ -565,9 +567,9 @@ export function ReportsPage() {
   const selectedCategoryLabel = selectedCategoryId
     ? summary?.byCategory.find((row) => (row.categoryId ?? "none") === selectedCategoryId)
     : null;
-  // Guardar/resgatar no cartão garantido isn't income or spending, but it
-  // did move money out of (or back into) the account -- kept apart so
-  // Entrada/Saída match the categories and the Saldo still adds up.
+  // Guardar/resgatar no cartão garantido não é receita nem gasto, mas tirou
+  // (ou devolveu) dinheiro da conta -- fica separado, pra Entrada e Saída
+  // baterem com as categorias e o Saldo continuar fechando.
   const { incomeTotal, expenseTotal, savedInCards, lentOut } = useMemo(() => {
     let income = 0;
     let expense = 0;

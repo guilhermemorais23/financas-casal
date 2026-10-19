@@ -1,9 +1,9 @@
 import { db } from "../../db/firestore";
 
-// One shared code pool for every channel -- a code generated for "vincular
-// conta" doesn't care yet whether it's about to be redeemed on Telegram or
-// WhatsApp, only consumeLinkCode's caller (whichever webhook receives it
-// first) decides that.
+// Um só estoque de códigos pra todos os canais -- um código gerado em
+// "vincular conta" ainda não sabe se vai ser usado no Telegram ou no
+// WhatsApp; quem decide é quem chama o consumeLinkCode (o webhook que
+// receber o código primeiro).
 const linkCodesCol = db.collection("telegramLinkCodes");
 const linksCol = db.collection("telegramLinks");
 const whatsappLinksCol = db.collection("whatsappLinks");
@@ -24,8 +24,8 @@ export async function saveLinkCode(code: string, userId: string, groupId: string
   await linkCodesCol.doc(code).set({ userId, groupId, expiresAt });
 }
 
-// One-shot: a code is deleted the moment it's read, valid or not, so it
-// can never be replayed even if the caller ignores the null return.
+// Uso único: o código é apagado no momento em que é lido, válido ou não,
+// então nunca dá pra reaproveitar, mesmo que quem chamou ignore o null.
 export async function consumeLinkCode(code: string): Promise<{ userId: string; groupId: string } | null> {
   // Lido e apagado na mesma transação: o mesmo código mandado no Telegram e
   // no WhatsApp ao mesmo tempo só vincula um deles.

@@ -1,9 +1,10 @@
-// Writes that were shown on screen before the server confirmed them
-// (optimistic updates). A page that fetches fresh data right after such a
-// write would otherwise race it -- the GET can land before the POST
-// commits, and the "real" (stale) answer would erase what was just shown.
-// Pages call whenWritesSettled() before their revalidation fetch, so the
-// fetch always runs after the in-flight writes finished.
+// Gravações que apareceram na tela antes de o servidor confirmar
+// (atualizações otimistas). Uma tela que busca dados novos logo depois de uma
+// gravação dessas apostaria corrida com ela -- o GET pode chegar antes de o
+// POST confirmar, e a resposta "de verdade" (velha) apagaria o que acabou de
+// aparecer. As telas chamam whenWritesSettled() antes da busca de
+// conferência, então a busca sempre roda depois que as gravações a caminho
+// terminaram.
 const inFlight = new Set<Promise<unknown>>();
 
 export function trackWrite<T>(promise: Promise<T>): Promise<T> {
@@ -20,8 +21,8 @@ export async function whenWritesSettled(): Promise<void> {
   await Promise.allSettled(Array.from(inFlight));
 }
 
-// Fired when an optimistic write failed and the screens that showed it
-// should re-fetch the truth (see useDataChangedListener users).
+// Disparado quando uma gravação otimista falhou e as telas que a mostraram
+// devem buscar a verdade de novo (ver quem usa o useDataChangedListener).
 export const DATA_CHANGED_EVENT = "par:data-changed";
 
 export function notifyDataChanged(): void {

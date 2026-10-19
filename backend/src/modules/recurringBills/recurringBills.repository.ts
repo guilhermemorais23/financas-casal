@@ -1,14 +1,19 @@
+// CAMADA REPOSITORY (exemplo comentado das 4 camadas: este módulo).
+// O repository é o único que conhece o formato do banco: o nome da coleção
+// ("recurringBills"), os campos de cada documento e a conversão de dinheiro
+// (no banco é centavo inteiro; pro resto do código é reais -- toCents e
+// fromCents). Ele não decide nada: só lê, grava e devolve objetos (o tipo
+// RecurringBillRow). Se o formato do banco mudar, só este arquivo muda.
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
 import { fromCents, toCents } from "../../utils/money";
 import type { SplitType, TransactionType } from "../transactions/transactions.repository";
 
-// "Aluguel/assinaturas" -- unlike a transaction's recurringMonths (which
-// generates a fixed batch of occurrences up front, see
-// transactions.service.ts), a bill here is a standing definition with no end
-// date: the daily cron (generateDueRecurringBills) creates one real
-// transaction from it whenever its day comes around, month after month,
-// until someone pauses or deletes it.
+// "Aluguel/assinaturas" -- diferente do recurringMonths de um lançamento (que
+// gera de uma vez um lote fixo de ocorrências, ver transactions.service.ts),
+// uma conta aqui é um cadastro permanente, sem data de fim: o cron diário
+// (generateDueRecurringBills) cria um lançamento de verdade a partir dela
+// sempre que chega o dia, mês após mês, até alguém pausar ou apagar.
 // Como é o valor da conta:
 // - fixed: sabe quanto é (aluguel, assinatura) -- lança sozinha no dia.
 // - estimate: varia (água, luz) -- `amount` é a estimativa; não lança
@@ -40,10 +45,10 @@ export interface RecurringBillRow {
   splitType: SplitType;
   dayOfMonth: number;
   isActive: boolean;
-  // "YYYY-MM" of the last month a transaction was actually generated for
-  // this bill (or attempted -- see generateDueRecurringBills), or null if
-  // it has never fired yet. The cron's dedupe key: never generate twice for
-  // the same calendar month even if it runs more than once a day.
+  // "YYYY-MM" do último mês em que um lançamento foi gerado de fato pra esta
+  // conta (ou tentado -- ver generateDueRecurringBills), ou null se nunca
+  // rodou. É a trava do cron contra duplicado: nunca gera duas vezes no mesmo
+  // mês, mesmo que rode mais de uma vez por dia.
   lastGeneratedMonth: string | null;
   // Contas sem valor certo: primeiro mês que conta ("YYYY-MM"). Antes dele
   // não há o que pagar (a conta foi criada depois do vencimento do mês).
@@ -147,17 +152,16 @@ export async function findRecurringBillById(id: string): Promise<RecurringBillRo
   return doc.exists ? toRow(doc) : null;
 }
 
-// Group-scoped, for the user-facing list -- service layer applies the
-// personal/joint visibility split on top (same split every other
-// group-scoped list in the app uses).
+// Por grupo, pra lista que a pessoa vê -- o service aplica por cima a
+// separação pessoal/conjunta (a mesma de toda outra lista por grupo do app).
 export async function findRecurringBillsByGroupId(groupId: string): Promise<RecurringBillRow[]> {
   const snapshot = await recurringBillsCol.where("groupId", "==", groupId).get();
   return snapshot.docs.map(toRow);
 }
 
-// Cron-only: every active bill across every group in one query (single
-// equality filter, no composite index needed) -- there's no "requesting
-// user" here to scope by group first, same shape as
+// Só do cron: toda conta ativa de todos os grupos numa consulta só (um
+// filtro de igualdade, sem índice composto) -- aqui não existe "usuário que
+// pediu" pra filtrar por grupo antes, mesmo formato do
 // reminders.repository.findAllGroupIds.
 export async function findAllActiveRecurringBills(): Promise<RecurringBillRow[]> {
   const snapshot = await recurringBillsCol.where("isActive", "==", true).get();

@@ -53,8 +53,8 @@ describe("cards: limite e parcelamento", () => {
     const [cardAfterPurchase] = await listCards(userAId);
     expect(cardAfterPurchase.limitUsed).toBe("300.00");
 
-    // Paying off the first month's statement only frees that installment's
-    // share -- the other two, due in future months, keep locking the limit.
+    // Pagar a fatura do primeiro mês libera só a parcela daquele mês -- as
+    // outras duas, de meses futuros, continuam prendendo o limite.
     const firstMonth = installments[0].statementMonth;
     await setStatementPaidForUser(userAId, card.id, firstMonth, true);
 
@@ -227,7 +227,8 @@ describe("cards: limite garantido", () => {
     });
     expect(await balance()).toBe(-100);
 
-    // Not spending: out of the reports, but the hero knows it left the account.
+    // Não é gasto: fica fora dos relatórios, mas o número principal sabe que
+    // saiu da conta.
     expect((await getMonthlySummaryForUser(userAId, undefined, "visible")).total).toBe("0.00");
     const trend = await getMonthlyTrendForUser(userAId);
     expect(trend[trend.length - 1]).toMatchObject({ expense: 0, savedInCards: 100, net: -100 });
@@ -265,7 +266,7 @@ describe("cards: limite garantido", () => {
     const [row] = await listCards(userAId);
     expect(row.limit).toBe("300.00");
 
-    // Fixing it after the fact goes both ways.
+    // Corrigir depois funciona nos dois sentidos.
     await setSecuredSourceForUser(userAId, card.id, true);
     expect(await balance()).toBe(-300);
     const fixed = await setSecuredSourceForUser(userAId, card.id, false);

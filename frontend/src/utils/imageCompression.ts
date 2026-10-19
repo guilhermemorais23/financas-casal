@@ -1,7 +1,7 @@
-// Resizes/crops to a small square and re-encodes as JPEG so the resulting
-// data URL comfortably clears the backend's size cap regardless of how big
-// the original photo was -- no server-side image processing needed. Shared
-// by the profile avatar and goal cover photo pickers.
+// Reduz e corta num quadrado pequeno e codifica de novo como JPEG, pra data
+// URL resultante caber com folga no limite de tamanho do backend, não importa
+// o tamanho da foto original -- sem precisar processar imagem no servidor.
+// Usado na foto de perfil e na foto de capa da meta.
 export function compressToSquareDataUrl(file: File, size: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

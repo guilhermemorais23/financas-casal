@@ -1,20 +1,21 @@
-// Stale-while-revalidate cache for page data: pages hydrate instantly from the
-// last-seen value (survives closing the app, via localStorage) while a fresh
-// fetch runs in the background and overwrites it. Keys are caller-scoped
-// (include the user id) so switching accounts never shows another user's data,
-// and prefixed here with the open group, so switching groups never shows the
-// other group's numbers either.
+// Cache "mostra o velho enquanto busca o novo" pros dados das telas: a tela
+// abre na hora com o último valor visto (que sobrevive a fechar o app, via
+// localStorage) enquanto uma busca nova roda em segundo plano e substitui. As
+// chaves são definidas por quem chama (incluem o id do usuário), então trocar
+// de conta nunca mostra dado de outra pessoa, e aqui ganham o grupo aberto
+// na frente, então trocar de grupo também nunca mostra os números do outro
+// grupo.
 import { getActiveGroupId } from "../api/activeGroup";
 
 const memoryCache = new Map<string, unknown>();
 
-// Cached responses are whatever shape the API had when they were written --
-// a deploy that adds/renames a field left every already-cached month in
-// someone's browser missing it, and pages read the cache first (see
-// DashboardPage.load), so switching to a stale cached month crashed the page
-// ("Algo deu errado... Recarregar"). Tying the cache to the app version
-// throws all of it away on the first load after any release, so a cached
-// entry is only ever read by the same bundle that wrote it.
+// As respostas guardadas têm o formato que a API tinha quando foram gravadas
+// -- um deploy que acrescenta ou renomeia um campo deixava todo mês já
+// guardado no navegador sem ele, e as telas leem o cache primeiro (ver
+// DashboardPage.load), então trocar pra um mês guardado velho quebrava a
+// tela ("Algo deu errado... Recarregar"). Amarrar o cache à versão do app
+// joga tudo fora no primeiro carregamento depois de qualquer release, então
+// um item do cache só é lido pelo mesmo pacote que o gravou.
 const CACHE_VERSION_KEY = "par-cache-version";
 export function clearCache(): void {
   memoryCache.clear();
@@ -23,7 +24,7 @@ export function clearCache(): void {
       if (key.startsWith("par-cache:")) localStorage.removeItem(key);
     }
   } catch {
-    // Storage unavailable -- nothing persisted to clear.
+    // Armazenamento indisponível -- não há nada guardado pra limpar.
   }
 }
 try {
@@ -32,7 +33,7 @@ try {
     localStorage.setItem(CACHE_VERSION_KEY, __APP_VERSION__);
   }
 } catch {
-  // Storage unavailable: cache is best-effort anyway.
+  // Armazenamento indisponível: o cache é melhor esforço de qualquer jeito.
 }
 
 function scopedKey(key: string): string {
@@ -63,6 +64,7 @@ export function writeCache<T>(rawKey: string, value: T): void {
   try {
     localStorage.setItem(storageKey(key), JSON.stringify(value));
   } catch {
-    // Storage full or unavailable -- cache is a nice-to-have, not required.
+    // Armazenamento cheio ou indisponível -- o cache é um extra, não é
+    // obrigatório.
   }
 }

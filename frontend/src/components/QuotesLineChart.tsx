@@ -14,9 +14,9 @@ export interface QuoteSeries {
   points: QuoteHistoryPoint[];
 }
 
-// Fixed categorical order (CVD-validated in this app's palette already) --
-// assigned by array position, never reassigned dynamically, so a ticker's
-// line always reads the same color.
+// Ordem fixa de cores (já validada pra daltonismo na paleta do app) --
+// definida pela posição na lista, nunca trocada dinamicamente, então a linha
+// de um papel tem sempre a mesma cor.
 const SERIES_COLORS = [
   "var(--series-1)",
   "var(--series-2)",
@@ -57,9 +57,9 @@ export function QuotesLineChart({ series }: { series: QuoteSeries[] }) {
     const plotWidth = WIDTH - PAD_LEFT - PAD_RIGHT;
     const plotHeight = HEIGHT - PAD_TOP - PAD_BOTTOM;
 
-    // Index every series to "% change since the first point in range" so
-    // wildly different scales (Ibovespa's ~130k vs a stock's ~R$30) sit on
-    // one shared axis instead of needing a second one.
+    // Coloca toda série em "% de variação desde o primeiro ponto da faixa", pra
+    // escalas muito diferentes (Ibovespa ~130 mil e uma ação ~R$30) dividirem um
+    // eixo só, em vez de precisar de um segundo.
     const normalizedSeries = series.map((s) => {
       const base = s.points[0]?.close ?? 1;
       return {

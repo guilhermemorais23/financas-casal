@@ -18,8 +18,8 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
   });
 }
 
-// Telegram voice notes are opus-encoded .oga files -- Gemini accepts
-// "audio/ogg" directly, so no local transcoding/transcription step needed.
+// Áudio do Telegram vem em .oga (opus) -- o Gemini aceita "audio/ogg" direto,
+// então não precisa converter nem transcrever aqui.
 export async function downloadTelegramVoice(fileId: string): Promise<AudioPayload> {
   const token = botToken();
   const infoRes = await fetch(`${TELEGRAM_API}/bot${token}/getFile?file_id=${fileId}`);

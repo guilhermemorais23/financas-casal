@@ -1,3 +1,18 @@
+// ============================================================================
+// MÓDULO admin -- endereços /api/admin
+// ============================================================================
+// O que faz: Painel do dono do app: visão geral, usuários (bloquear, redefinir
+//            senha, excluir a pedido), diagnóstico das configurações, números
+//            de uso da IA e das importações, modo manutenção.
+// Quem chama: Tela Admin (pages/AdminPage.tsx e AdminSections.tsx). Só quem
+//             está em ADMIN_EMAILS entra -- o adminGuard confere em toda rota.
+//
+// Caminho de um pedido dentro do módulo:
+//   *.routes.ts      endereço -> função (este arquivo)
+//   *.controller.ts  lê e valida o pedido (req.body, req.params), responde
+//   *.service.ts     regra de negócio (quem pode, o que calcula)
+//   *.repository.ts  lê e grava no Firestore
+// ============================================================================
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";

@@ -59,8 +59,8 @@ export function AdminPage() {
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  // Only one section is ever on screen at a time -- driven by ?section=...
-  // (the sidebar's "Admin" sub-links on desktop, the tabs below on mobile).
+  // Só uma seção aparece por vez -- definida pelo ?section=... (os sublinks
+  // "Admin" do menu lateral no PC, as abas abaixo no celular).
   const requested = searchParams.get("section");
   const section =
     requested === "logs" || requested === "feedback" || requested === "diagnostics" || requested === "announcements" || requested === "billing" || requested === "users"

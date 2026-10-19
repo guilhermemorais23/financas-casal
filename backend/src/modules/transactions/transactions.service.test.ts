@@ -209,11 +209,11 @@ describe("paymentMethod", () => {
     const toPix = await updateTransactionForUser(userAId, tx.id, { paymentMethod: "pix" });
     expect(toPix.paymentMethod).toBe("pix");
 
-    // Editing something else must leave it alone...
+    // Editar outra coisa não pode mexer nisto...
     const renamed = await updateTransactionForUser(userAId, tx.id, { description: "tênis novo" });
     expect(renamed.paymentMethod).toBe("pix");
 
-    // ...and null explicitly clears it.
+    // ...e null explícito apaga.
     const cleared = await updateTransactionForUser(userAId, tx.id, { paymentMethod: null });
     expect(cleared.paymentMethod).toBeNull();
   });
@@ -243,7 +243,7 @@ describe("cached reads stay correct after writes", () => {
       ((await getAccountBalances(groupId)).find((row) => row.accountId === personalAccountId)?.balanceCents ?? 0) / 100;
     const spentOf = async () => Number((await getMonthlySummaryForUser(userAId, month, "visible")).total);
 
-    // Warm both caches while the group is still empty.
+    // Aquece os dois caches enquanto o grupo ainda está vazio.
     expect(await balanceOf()).toBe(0);
     expect(await spentOf()).toBe(0);
 

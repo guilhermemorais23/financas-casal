@@ -1,3 +1,22 @@
+// ============================================================================
+// QUEM ESTÁ LOGADO -- disponível pra qualquer tela com useAuth()
+// ============================================================================
+// Um "Context" do React guarda uma informação num lugar só e deixa qualquer
+// componente por dentro do <AuthProvider> (ver App.tsx) ler, sem passar de
+// mão em mão. Aqui ficam:
+//   - user: o perfil (nome, e-mail, grupo...) que veio do backend (/api/me);
+//   - token: o "crachá" do Firebase que vai em todo pedido ao backend;
+//   - login, loginWithProvider (Google/Apple), register, logout...
+//
+// Como o login funciona, passo a passo:
+//   1. a tela de login chama login(email, senha);
+//   2. o Firebase confere a senha e devolve um token (firebase.ts);
+//   3. com o token, o app chama GET /api/me/bootstrap e /api/me no backend,
+//      que garante que o perfil existe e devolve os dados da pessoa;
+//   4. user e token ficam aqui, e as telas leem com useAuth().
+// O Firebase renova o token sozinho (~1 vez por hora); o ouvinte
+// onIdTokenChanged abaixo pega o token novo.
+// ============================================================================
 import {
   GoogleAuthProvider,
   OAuthProvider,
@@ -28,9 +47,9 @@ export interface AuthUser {
   groupIds?: string[];
   photoDataUrl: string | null;
   phone: string | null;
-  // Backend-decided (ADMIN_EMAILS) -- drives whether the Admin nav item
-  // shows up at all. The route itself re-checks independently, so this
-  // never needs to be trusted as the actual security boundary.
+  // Decidido pelo backend (ADMIN_EMAILS) -- define se o item Admin aparece no
+  // menu. A rota confere de novo por conta própria, então isto nunca precisa
+  // ser confiado como a barreira de segurança de verdade.
   isAdmin: boolean;
   // Chaves do app (Admin): a tela Plano só aparece com a cobrança ligada;
   // maintenance é a mensagem do modo manutenção (null = desligado).
@@ -45,8 +64,8 @@ interface AuthContextValue {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  // Resolves true once signed in, false when the popup couldn't open and the
-  // page is being redirected to the provider instead (it comes back signed in).
+  // Resolve true quando entrou, false quando o popup não abriu e a página está
+  // sendo levada ao provedor (ela volta já logada).
   loginWithProvider: (provider: SocialProvider) => Promise<boolean>;
   deleteAccount: () => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
@@ -75,14 +94,15 @@ function providerFor(kind: SocialProvider) {
   return new GoogleAuthProvider();
 }
 
-// Apple only sends the name on the very first sign-in (and never if the
-// person hides it), so there's always a fallback -- bootstrap requires one.
+// A Apple só manda o nome no primeiríssimo login (e nunca, se a pessoa
+// esconder), então sempre tem um nome reserva -- o bootstrap exige um.
 function displayNameFor(firebaseUser: User): string {
   return firebaseUser.displayName?.trim() || firebaseUser.email?.split("@")[0] || "Você";
 }
 
-// Popups don't open everywhere -- notably the app added to an iPhone's home
-// screen. Those errors fall back to a full-page redirect.
+// Popup não abre em todo lugar -- principalmente no app adicionado à tela
+// inicial do iPhone. Nesses erros, cai pro redirecionamento de página
+// inteira.
 const POPUP_UNAVAILABLE = new Set([
   "auth/popup-blocked",
   "auth/operation-not-supported-in-this-environment",
@@ -105,9 +125,9 @@ async function fetchProfile(idToken: string): Promise<AuthUser> {
   return apiRequest<AuthUser>("/me", { token: idToken });
 }
 
-// login() and the onIdTokenChanged listener both ask for /me with the very
-// same token at the very same moment on every sign-in -- share the one
-// request instead of making a (possibly just-woken) backend answer twice.
+// O login() e o ouvinte onIdTokenChanged pedem o /me com o mesmíssimo token
+// no mesmíssimo momento em todo login -- dividem o pedido em vez de fazer o
+// backend (talvez recém-acordado) responder duas vezes.
 const inflightProfiles = new Map<string, Promise<AuthUser>>();
 function fetchProfileShared(idToken: string): Promise<AuthUser> {
   let request = inflightProfiles.get(idToken);
@@ -118,10 +138,10 @@ function fetchProfileShared(idToken: string): Promise<AuthUser> {
   return request;
 }
 
-// Last known profile per account, so opening the app (or signing back in on
-// the same phone) shows the app right away instead of a "Carregando..."
-// that waits on the backend -- which on Render's free plan can take 30s+
-// to wake up. The real /me still runs right after and replaces it.
+// Último perfil conhecido de cada conta, pra abrir o app (ou entrar de novo
+// no mesmo celular) mostrar o app na hora, em vez de um "Carregando..." que
+// espera o backend -- que no plano grátis do Render pode levar mais de 30 s
+// pra acordar. O /me de verdade roda logo depois e substitui.
 const PROFILE_CACHE_PREFIX = "par:profile:";
 
 function readCachedProfile(userId: string): AuthUser | null {
@@ -138,7 +158,7 @@ function writeCachedProfile(profile: AuthUser): void {
   try {
     localStorage.setItem(PROFILE_CACHE_PREFIX + profile.id, JSON.stringify(profile));
   } catch {
-    // ignore -- it's only a speed-up
+    // ignora -- é só pra ficar mais rápido
   }
 }
 
@@ -148,15 +168,15 @@ function clearCachedProfiles(): void {
       if (key.startsWith(PROFILE_CACHE_PREFIX)) localStorage.removeItem(key);
     }
   } catch {
-    // ignore
+    // ignora
   }
 }
 
-// Best-effort, fire-and-forget -- purely feeds the Admin > Logs "who's
-// coming in" view, must never hold up or fail an actual sign-in. Called
-// explicitly from login/loginWithProvider/register only, not from the silent
-// token-refresh listener below (that fires roughly hourly and isn't a
-// "someone logged in" event).
+// Melhor esforço, dispara e esquece -- só alimenta a tela Admin > Logs "quem
+// está entrando", e nunca pode segurar nem fazer falhar um login de verdade.
+// Chamado de propósito só no login/loginWithProvider/register, e não pelo
+// ouvinte silencioso de renovação de token abaixo (que dispara mais ou menos
+// a cada hora e não é um evento de "alguém entrou").
 function logLoginEvent(idToken: string, event: "login" | "register"): void {
   apiRequest("/me/login-event", { method: "POST", token: idToken, body: { event } }).catch(() => {});
 }
@@ -169,8 +189,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     warmUpApi();
 
-    // Fires on sign-in, sign-out, and automatic ID-token refresh -- token in
-    // context stays fresh without every page having to call getIdToken().
+    // Dispara ao entrar, ao sair e na renovação automática do token -- o token
+    // guardado no contexto fica sempre novo, sem cada tela precisar chamar
+    // getIdToken().
     const unsubscribe = onIdTokenChanged(firebaseAuth, async (firebaseUser) => {
       if (!firebaseUser) {
         clearCachedProfiles();
@@ -188,7 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(idToken);
       const cached = readCachedProfile(firebaseUser.uid);
       if (cached) {
-        // Known account on this device: show the app now, refresh below.
+        // Conta já conhecida neste aparelho: mostra o app agora e atualiza abaixo.
         setUser((current) => current ?? cached);
         setIsLoading(false);
       }
@@ -205,8 +226,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setUser(profile);
       } catch (err) {
-        // Offline / backend still waking: keep the cached profile if there
-        // is one; without it there's nothing to show, so it surfaces as before.
+        // Sem internet / backend ainda acordando: mantém o perfil guardado, se
+        // houver; sem ele não há o que mostrar, então o erro aparece como antes.
         if (!cached) throw err;
       } finally {
         setIsLoading(false);
@@ -219,10 +240,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) writeCachedProfile(user);
   }, [user]);
 
-  // Gives api/client.ts a way to force a fresh ID token (used to retry a
-  // request that came back 401 because the cached token had gone stale --
-  // see apiRequest). Registered once; setToken is a stable setState
-  // reference, so this never needs to re-run.
+  // Dá ao api/client.ts um jeito de pedir um token novo (usado pra repetir um
+  // pedido que voltou 401 porque o token guardado ficou velho -- ver
+  // apiRequest). Registrado uma vez só; o setToken é uma referência estável do
+  // setState, então isto nunca precisa rodar de novo.
   useEffect(() => {
     setTokenRefresher(async () => {
       const current = firebaseAuth.currentUser;
@@ -234,11 +255,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setTokenRefresher(null);
   }, []);
 
-  // Firebase's own background refresh runs on a timer that browsers throttle
-  // (or pause outright) while the tab is hidden -- come back to a tab left
-  // open for a while and the cached token can already be past its ~1h
-  // expiry. Force a refresh right when the tab regains focus, instead of
-  // waiting for the first API call to hit a 401 and retry reactively.
+  // A renovação automática do próprio Firebase roda num timer que o navegador
+  // desacelera (ou pausa) enquanto a aba está escondida -- ao voltar pra uma
+  // aba aberta há tempo, o token guardado pode já ter passado da validade de
+  // ~1h. Força uma renovação assim que a aba volta ao foco, em vez de esperar
+  // o primeiro pedido à API levar um 401 e tentar de novo.
   useEffect(() => {
     function onVisible() {
       if (document.visibilityState === "visible") {
@@ -279,17 +300,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchGroup = useCallback((groupId: string) => setActiveGroupId(groupId), []);
 
-  // login/loginWithProvider/register set user+token themselves, synchronously
-  // within their own promise, rather than relying solely on onIdTokenChanged
-  // (a separate, independently-fired listener). Without this, a caller that
-  // awaits register() and immediately navigates can land on a route guarded
-  // by `user` before the listener has gotten around to populating it --
-  // ProtectedRoute then sees no user and bounces back to /login.
+  // login/loginWithProvider/register preenchem user e token eles mesmos, dentro
+  // da própria promise, em vez de depender só do onIdTokenChanged (um ouvinte
+  // separado, que dispara por conta própria). Sem isto, quem espera o
+  // register() e já navega pode cair numa rota protegida por `user` antes de o
+  // ouvinte preencher -- e o ProtectedRoute, sem usuário, joga de volta pro
+  // /login.
   const login = useCallback(async (email: string, password: string) => {
     const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
     const idToken = await credential.user.getIdToken();
-    // Signed in on this phone before: go straight in with the saved profile
-    // (the listener above fetches the fresh one in the background).
+    // Já entrou neste celular antes: vai direto com o perfil guardado (o ouvinte
+    // acima busca o atualizado em segundo plano).
     const profile = readCachedProfile(credential.user.uid) ?? (await fetchProfileShared(idToken));
     setToken(idToken);
     setUser(profile);
@@ -335,19 +356,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendPasswordResetEmail(firebaseAuth, email);
   }, []);
 
-  // Invalidates every refresh token Firebase has issued for this account
-  // (backend: auth.revokeRefreshTokens) -- every other signed-in device
-  // loses its session the next time it's checked. Signs this device out
-  // locally too, right away, instead of waiting for its own token to be
-  // rejected on the next request.
+  // Invalida todo refresh token que o Firebase emitiu pra esta conta (backend:
+  // auth.revokeRefreshTokens) -- todo outro aparelho logado perde a sessão na
+  // próxima conferência. Também desloga este aparelho na hora, em vez de
+  // esperar o próprio token ser recusado no próximo pedido.
   const revokeAllSessions = useCallback(async () => {
     if (!token) return;
     await apiRequest("/me/revoke-sessions", { method: "POST", token });
     await signOut(firebaseAuth);
   }, [token]);
 
-  // "Excluir conta": the backend erases the data and the Firebase login
-  // itself; signing out locally just drops the now-dead session.
+  // "Excluir conta": o backend apaga os dados e o próprio login do Firebase;
+  // sair aqui só descarta a sessão, que já morreu.
   const deleteAccount = useCallback(async () => {
     if (!token) return;
     await apiRequest("/me", { method: "DELETE", token });

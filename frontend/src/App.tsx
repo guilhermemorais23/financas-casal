@@ -1,3 +1,28 @@
+// ============================================================================
+// APP: AS ROTAS E AS "CAMADAS" QUE ENVOLVEM TODAS AS TELAS
+// ============================================================================
+// Este arquivo responde "qual tela abre em cada endereço". Cada
+// <Route path="/a-pagar" element={...} /> lá embaixo liga um endereço a uma
+// página de pages/. Quer saber qual arquivo desenha uma tela? Procure o
+// endereço aqui.
+//
+// As camadas em volta das rotas (de fora pra dentro, no return do App):
+//   ToastProvider   -> os avisos que aparecem no topo ("Conta salva")
+//   ConfirmProvider -> a janela "Tem certeza?" (useConfirm)
+//   AuthProvider    -> quem está logado e o token (auth/AuthContext.tsx)
+//   ErrorBoundary   -> se uma tela quebrar, mostra "Algo deu errado" em vez
+//                      de deixar a página em branco
+//   Suspense        -> o esqueleto (PageSkeleton) enquanto o código de uma
+//                      página ainda está baixando
+//   GroupScoped     -> trocar de grupo recarrega todas as telas
+//
+// Uma camada ("Provider") por fora deixa qualquer tela por dentro usar o que
+// ela oferece (ex.: useAuth(), useToast()) sem passar de mão em mão.
+//
+// <ProtectedRoute> em volta de uma página = só entra quem está logado (senão
+// vai pro /login). Com requireGroup, também precisa ter grupo (senão vai pro
+// /group-setup). Ver routes/ProtectedRoute.tsx.
+// ============================================================================
 import { Fragment, lazy, Suspense, useEffect, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
@@ -13,11 +38,12 @@ import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 
-// Wraps the `lazy(() => import(...).then((m) => ({ default: m.X })))`
-// boilerplate a named export needs (React.lazy only accepts a default
-// export) -- each call site below still has its own literal `import("./
-// pages/X")`, which is what lets Vite give every page its own chunk; this
-// just removes the repeated `.then((m) => ({ default: m.Name }))` typo risk.
+// Embrulha o `lazy(() => import(...).then((m) => ({ default: m.X })))` que
+// um export com nome exige (o React.lazy só aceita export default) -- cada
+// uso abaixo continua com o seu próprio `import("./pages/X")` escrito por
+// extenso, que é o que deixa o Vite dar um pedaço (chunk) próprio pra cada
+// página; isto só tira o risco de errar o `.then((m) => ({ default: m.Name }))`
+// repetido.
 // importWithRecovery: um chunk que sumiu depois de um deploy recarrega na
 // versão nova (o skeleton continua na tela) em vez de cair na tela de erro.
 // Cada página também entra em PAGE_LOADERS, pra ser baixada em segundo plano
@@ -43,15 +69,15 @@ function preloadPages() {
   else setTimeout(run, 2000);
 }
 
-// Lazy-loaded: everything past the login screen used to ship in the same
-// single ~460KB bundle regardless of which page someone actually opens, so
-// every visit paid to download/parse/execute all 13+ pages up front (Admin,
-// Investments, Relatórios's chart code, etc. included) even for someone who
-// only ever uses the Painel. Splitting per route means a page only costs
-// what it weighs the first time it's actually visited; React Router caches
-// the chunk after that, same as any other lazy import. LoginPage stays
-// eager -- it's the one screen nearly everyone hits on the coldest possible
-// load, so there's nothing to gain deferring it.
+// Carregadas sob demanda (lazy): tudo depois da tela de login ia no mesmo
+// pacote de ~460KB, qualquer que fosse a página aberta, então toda visita
+// pagava pra baixar, ler e rodar as 13+ páginas logo de cara (Admin,
+// Investimentos, os gráficos de Relatórios etc.), mesmo pra quem só usa o
+// Painel. Separar por rota faz cada página custar o que pesa só na primeira
+// vez que é aberta; o React Router guarda o pedaço depois disso, como
+// qualquer import lazy. A LoginPage continua carregada de cara -- é a tela
+// que quase todo mundo abre no carregamento mais frio, então não há o que
+// ganhar adiando.
 const SharedReportPage = lazy(() => importWithRecovery(() => import("./pages/SharedReportPage")));
 const RegisterPage = namedLazy(() => import("./pages/RegisterPage"), "RegisterPage");
 const PrivacyPage = namedLazy(() => import("./pages/PrivacyPage"), "PrivacyPage");

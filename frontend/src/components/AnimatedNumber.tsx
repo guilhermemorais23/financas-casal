@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { formatCurrency } from "../utils/format";
 
-// Counts up (or down) from whatever it last showed to the new value, so a
-// month switch or a fresh load reads as motion instead of a value just
-// appearing. Kept short (250ms): it answers a tap, and a long count-up read
-// as the app being slow to react -- matches prefers-reduced-motion by skipping straight to the
-// final value.
+// Conta subindo (ou descendo) do último valor mostrado até o novo, pra uma
+// troca de mês ou um carregamento parecer movimento, e não um número que
+// simplesmente aparece. Curto (250ms): é resposta a um toque, e uma contagem
+// longa parecia o app demorando pra reagir -- com prefers-reduced-motion,
+// pula direto pro valor final.
 export function AnimatedNumber({ value }: { value: number }) {
   const [display, setDisplay] = useState(value);
   const fromRef = useRef(value);

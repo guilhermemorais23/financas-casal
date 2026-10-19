@@ -46,8 +46,8 @@ const SLIDES: Slide[] = [
   },
 ];
 
-// Routes where the tour would get in the way: the sign-in screens (including
-// the "Conta criada!" moment on /register) and public pages.
+// Rotas onde a apresentação atrapalharia: as telas de login (inclusive o
+// momento "Conta criada!" em /register) e as páginas públicas.
 const HIDDEN_ON = ["/login", "/register", "/privacidade", "/termos", "/r/", "/invite/"];
 
 // Aparece uma vez só, pra conta recém-criada (ver utils/welcomeTour.ts): pra
@@ -100,7 +100,7 @@ export function WelcomeTour() {
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-    // close only reads `user`, which `open` already depends on.
+    // O close só lê o `user`, de que o `open` já depende.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

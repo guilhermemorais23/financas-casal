@@ -25,10 +25,11 @@ export interface GoalHighlight {
   targetAmount: string;
 }
 
-// Closest to done among goals not yet achieved -- the one contributing to it
-// next actually moves the needle, unlike showing the newest or a random one.
-// photoDataUrl is deliberately dropped: it's a base64 image, and the
-// dashboard payload already bundles 10+ other things in one response.
+// A meta mais perto de terminar entre as que ainda não foram atingidas --
+// é onde guardar dinheiro agora faz diferença, em vez de mostrar a mais nova
+// ou uma qualquer.
+// photoDataUrl fica de fora de propósito: é uma imagem em base64, e a
+// resposta do Painel já junta mais de 10 coisas numa resposta só.
 function pickGoalHighlight(goals: Awaited<ReturnType<typeof listGoals>>): GoalHighlight | null {
   const open = goals.filter((goal) => !goal.achievedAt);
   if (open.length === 0) return null;
@@ -86,13 +87,12 @@ export function pickNextInvoice(cards: Awaited<ReturnType<typeof listCards>>): N
 
 export { InvalidMonthError } from "../../utils/month";
 
-// Everything DashboardPage needs, in one call. The frontend used to fire 7
-// separate requests for this (one per card/widget) -- each paid its own
-// round trip AND its own Firebase ID token verification, which is real cost
-// even though the underlying Firestore reads were already running in
-// parallel on the client side. Bundling them server-side turns "N round
-// trips to the same place" into 1, while the actual reads below still run
-// concurrently via Promise.all, same as before.
+// Tudo que a DashboardPage precisa, numa chamada só. O frontend fazia 7
+// pedidos separados (um por card/widget) -- cada um pagava a sua ida e volta
+// E a sua conferência de token do Firebase, o que custa de verdade, mesmo
+// com as leituras do Firestore já rodando em paralelo no navegador. Juntar
+// no servidor transforma "N idas ao mesmo lugar" em 1, e as leituras abaixo
+// continuam rodando ao mesmo tempo via Promise.all, como antes.
 // Saldo do mês dia a dia, com a mesma conta do número grande do Painel
 // (conta pessoal: entrou - saiu - guardado - emprestado). Um ponto por dia do
 // mês, acumulado.
@@ -121,16 +121,16 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   const groupResult = await getGroupForUser(userId);
   if (!groupResult) return null;
 
-  // parseMonthRange both validates monthParam and supplies the default
-  // (today's month) exactly like every other endpoint that takes ?month= --
-  // periodMonth is "YYYY-MM-01", trimmed here to the "YYYY-MM" every
-  // sibling service function (and addMonths) actually expects.
+  // O parseMonthRange valida o monthParam e dá o padrão (o mês de hoje),
+  // igualzinho a toda rota que recebe ?month= -- o periodMonth vem como
+  // "YYYY-MM-01" e é cortado aqui pro "YYYY-MM" que as outras funções do
+  // service (e o addMonths) esperam.
   const { periodMonth } = parseMonthRange(monthParam);
   const month = periodMonth.slice(0, 7);
-  // Alerts (budget pace, category spikes, upcoming due dates) are always
-  // about *today*, not whatever month the Painel happens to be showing --
-  // computing them while browsing March makes no sense, so they're only
-  // fetched at all when `month` is the real current month.
+  // Os alertas (ritmo do orçamento, picos por categoria, vencimentos chegando)
+  // são sempre sobre *hoje*, não sobre o mês que o Painel está mostrando --
+  // calcular isso olhando março não faz sentido, então só são buscados quando
+  // `month` é o mês atual de verdade.
   const isCurrentMonth = month === currentMonthParam();
 
   const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts, loans, upcoming] =
@@ -138,41 +138,40 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
       listTransactions(userId, 8, month),
       listDebts(userId),
       getMonthlySummaryForUser(userId, month, "visible"),
-      // "joint": only what left "Nossa Conta" this month, by who paid --
-      // powers the compact "Par" card on the Painel (the visible-scope
-      // `summary` above mixes in the requester's own personal spending too,
-      // which isn't what "quanto cada um pôs na conta conjunta" means).
+      // "joint": só o que saiu da "Nossa Conta" neste mês, por quem pagou --
+      // alimenta o card compacto "Par" do Painel (o `summary` acima, que usa o
+      // escopo "visible", mistura também os gastos pessoais de quem pediu, e isso
+      // não é "quanto cada um pôs na conta conjunta").
       getMonthlySummaryForUser(userId, month, "joint"),
-      // Lifetime running "quem deve quem" from every equal-split expense
-      // ever made (not scoped to this month -- there's no settle-up action
-      // yet, so it accumulates like a running tab until someone pays back
-      // outside the app and it's manually reconciled). Existed in the
-      // backend for a while with no UI surfacing it at all.
+      // "Quem deve quem" acumulado de todos os gastos divididos igualmente desde
+      // sempre (não só deste mês -- ainda não existe ação de "acertar as contas",
+      // então vai somando como uma conta corrente até alguém pagar fora do app e
+      // ajustar à mão). Existia no backend fazia tempo sem nenhuma tela mostrando.
       getBalance(userId),
       getCurrentBudget(userId, month),
       getCategoryBudgets(userId, month),
       getDailySeriesForUser(userId, month, "visible"),
       listGoals(userId),
       listCards(userId),
-      // 6 months ending at `month` -- also this month's and last month's
-      // personal income/expense totals (see getMonthlyTrendForUser), so the
-      // hero card below no longer needs its own two 100-row fetches just to
-      // sum two numbers each.
+      // 6 meses terminando em `month` -- também traz o total de entrada e saída
+      // pessoal deste mês e do anterior (ver getMonthlyTrendForUser), então o card
+      // principal abaixo não precisa mais de duas buscas de 100 linhas só pra
+      // somar dois números cada.
       getMonthlyTrendForUser(userId, month),
       isCurrentMonth ? getAlertsForUser(userId, { includeDue: false }) : Promise.resolve<AlertItem[]>([]),
       listLoans(userId),
       getUpcomingForUser(userId),
     ]);
 
-  // trend6m's window always includes both of these (monthsBack defaults to
-  // 6, never called with fewer than 2 here) -- last entry is `month` itself,
-  // the one before it is the previous month.
+  // A janela do trend6m sempre inclui os dois (monthsBack é 6 por padrão,
+  // nunca é chamado aqui com menos de 2) -- o último item é o próprio `month`,
+  // e o anterior a ele é o mês passado.
   const currentMonthTotals = trend6m[trend6m.length - 1];
   const prevMonthTotals = trend6m[trend6m.length - 2];
 
-  // Money parked in cartões com limite garantido -- left the accounts
-  // (guardar is a transfer) but is still the person's, so "Seu dinheiro"
-  // on the Painel adds it back.
+  // Dinheiro guardado em cartões com limite garantido -- saiu das contas
+  // (guardar é transferência), mas continua sendo da pessoa, então o "Seu
+  // dinheiro" do Painel soma de volta.
   const savedInSecuredCards = savedInSecuredCardsCents(cards);
 
   return {

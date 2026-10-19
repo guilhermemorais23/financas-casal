@@ -10,10 +10,10 @@ export interface RowAction {
   danger?: boolean;
 }
 
-// A single "⋮" button that reveals the less-common row actions (cancel
-// recurring, delete, ...) in a dropdown, instead of 3-5 icon buttons sitting
-// side by side on every row -- the one action people actually reach for
-// most (edit) stays outside this menu, always one tap away.
+// Um botão "⋮" só, que mostra num menu as ações menos usadas da linha
+// (cancelar recorrência, apagar...), em vez de 3 a 5 botões de ícone lado a
+// lado em cada linha -- a ação mais usada de fato (editar) fica fora deste
+// menu, sempre a um toque.
 export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);

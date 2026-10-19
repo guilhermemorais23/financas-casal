@@ -12,9 +12,9 @@ export interface AccessLogEntry {
   createdAt: number;
 }
 
-// Just enough to answer "quem entrou e quando" for oversight -- no token, no
-// password, no IP/user-agent. Fire-and-forget, same as logError: this must
-// never delay or fail the login it's recording.
+// Só o suficiente pra responder "quem entrou e quando" -- sem token, sem
+// senha, sem IP nem navegador. Dispara e esquece, igual o logError: nunca
+// pode atrasar nem fazer falhar o login que está registrando.
 export function logAccess(event: AccessEvent, user: { userId: string; email: string }): void {
   const entry = {
     event,

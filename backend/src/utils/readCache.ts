@@ -1,23 +1,26 @@
-// In-memory memo for the expensive, history-sized Firestore reads (account
-// balances, the "quem deve quem" ledger, month/range scans of transactions).
+// Memória rápida (em RAM) pras leituras caras do Firestore, do tamanho do
+// histórico (saldos das contas, o "quem deve quem", varreduras de
+// lançamentos por mês ou por faixa).
 //
-// Why it exists: the free Firestore plan allows 50k document reads/day, and a
-// single Painel load was costing ~1.6k of them -- most of it re-scanning the
-// same transactions on every page (sidebar, month switch, alerts...). Reads
-// are billed per document returned, so re-reading unchanged data is pure waste.
+// Por que existe: o plano grátis do Firestore dá 50 mil leituras de
+// documento por dia, e abrir o Painel uma vez custava ~1,6 mil -- a maior
+// parte relendo os mesmos lançamentos em toda tela (menu lateral, troca de
+// mês, alertas...). A cobrança é por documento devolvido, então reler dado
+// que não mudou é desperdício puro.
 //
-// Correctness rule: every write to a transaction or split goes through
-// transactions.repository.ts, which calls invalidateTransactionReads() AFTER
-// the write commits -- that bumps a version and every cached entry from an
-// older version is ignored. (After, not before: bumping first would let a read
-// that lands mid-write cache pre-write data under the new version.) Entries
-// also expire on their own so a change made outside the app (e.g. someone
-// editing in the Firebase console) still shows up eventually.
+// Regra de correção: toda gravação de lançamento ou divisão passa pelo
+// transactions.repository.ts, que chama invalidateTransactionReads() DEPOIS
+// que a gravação confirma -- isso sobe uma versão, e todo item guardado de
+// uma versão mais velha é ignorado. (Depois, e não antes: subir antes
+// deixaria uma leitura que caísse no meio da gravação guardar o dado antigo
+// com a versão nova.) Os itens também vencem sozinhos, então uma mudança
+// feita fora do app (ex.: alguém editando no console do Firebase) aparece
+// uma hora.
 //
-// Assumes ONE backend process (Render's free tier runs a single instance). If
-// this ever scales to several instances, replace it with a shared cache --
-// an in-process one would serve stale data from the instances that didn't
-// perform the write.
+// Supõe UM processo de backend só (o plano grátis do Render roda uma
+// instância). Se um dia escalar pra várias, troque por um cache
+// compartilhado -- um cache dentro do processo serviria dado velho nas
+// instâncias que não fizeram a gravação.
 import { AsyncLocalStorage } from "node:async_hooks";
 
 const MAX_AGE_MS = 30 * 60 * 1000;
@@ -46,9 +49,9 @@ export function invalidateTransactionReads(groupId?: string | null): void {
   else version++;
 }
 
-// Caches the promise itself, so concurrent identical calls (e.g. the Painel
-// and its alerts both asking for the same month at the same time) share one
-// read instead of both hitting Firestore.
+// Guarda a própria promise, então chamadas iguais ao mesmo tempo (ex.: o
+// Painel e os alertas dele pedindo o mesmo mês juntos) dividem uma leitura só,
+// em vez de as duas irem ao Firestore.
 export function memoizeReads<T>(key: string, load: () => Promise<T>, groupId: string | null = null): Promise<T> {
   const now = Date.now();
   const groupVersion = groupId ? groupVersions.get(groupId) ?? 0 : 0;
@@ -64,14 +67,14 @@ export function memoizeReads<T>(key: string, load: () => Promise<T>, groupId: st
     const oldest = entries.keys().next().value;
     if (oldest !== undefined) entries.delete(oldest);
   }
-  // A failed read must never be served again.
+  // Uma leitura que falhou nunca pode ser servida de novo.
   promise.catch(() => {
     if (entries.get(key) === entry) entries.delete(key);
   });
   return promise;
 }
 
-// Test hook.
+// Gancho pros testes.
 export function clearReadCache(): void {
   entries.clear();
   groupVersions.clear();

@@ -58,8 +58,8 @@ describe("getAlertsForUser", () => {
       isPrivate: false,
       splitType: "none",
     });
-    // Only ever spent in the current month -- no 3-month baseline to compare
-    // against, so this must never "spike" no matter how large the amount.
+    // Só teve gasto no mês atual -- não há média de 3 meses pra comparar, então
+    // isso nunca pode virar "pico", por maior que seja o valor.
     await createTransaction(userAId, {
       accountId: personalAccountId,
       categoryId: newCategory.id,

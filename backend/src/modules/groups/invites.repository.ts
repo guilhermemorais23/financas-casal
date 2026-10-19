@@ -12,8 +12,8 @@ export interface InviteRow {
   expiresAt: Date;
 }
 
-// Doc ID = the token itself: a second create() with the same token throws
-// instead of silently overwriting, which is what SQL's UNIQUE gave us.
+// ID do documento = o próprio token: um segundo create() com o mesmo token dá
+// erro em vez de sobrescrever calado, que é o que o UNIQUE do SQL garantia.
 const invitesCol = db.collection("invites");
 
 function toInviteRow(token: string, data: FirebaseFirestore.DocumentData): InviteRow {

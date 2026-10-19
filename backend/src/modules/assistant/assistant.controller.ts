@@ -63,10 +63,10 @@ interface TelegramUpdate {
   };
 }
 
-// No requireAuth here -- Telegram calls this directly, with no Firebase
-// user. Authenticity comes from the secret token below, not from our own
-// auth middleware. Always answers 200 so Telegram doesn't keep retrying;
-// real failures are logged, not surfaced to the caller.
+// Sem requireAuth aqui -- o Telegram chama direto, sem usuário do Firebase.
+// Quem garante que é o Telegram mesmo é o token secreto abaixo, não o nosso
+// middleware de login. Sempre responde 200 pro Telegram não ficar tentando
+// de novo; as falhas de verdade vão pro log, não pra quem chamou.
 export async function telegramWebhookHandler(req: Request, res: Response) {
   // Sem o segredo configurado, recusa tudo: senão qualquer um que achasse a
   // URL mandaria mensagens "do Telegram" em nome de quem já vinculou.
@@ -103,11 +103,11 @@ export async function telegramWebhookHandler(req: Request, res: Response) {
   res.status(200).end();
 }
 
-// One-time handshake Meta does when you register/change the webhook URL in
-// the app dashboard: it GETs this with a challenge string and expects it
-// echoed back verbatim, but ONLY if hub.verify_token matches what you typed
-// into that same dashboard field -- proves the URL is actually yours before
-// Meta starts POSTing real messages to it.
+// Aperto de mão único que a Meta faz quando você cadastra ou troca a URL do
+// webhook no painel do app: ela faz um GET com um texto-desafio e espera
+// recebê-lo de volta igualzinho, mas SÓ se o hub.verify_token bater com o que
+// você digitou nesse mesmo campo do painel -- prova que a URL é sua antes de
+// a Meta começar a mandar mensagens de verdade pra ela.
 export function whatsappWebhookVerifyHandler(req: Request, res: Response) {
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
   const mode = req.query["hub.mode"];
@@ -137,10 +137,10 @@ interface WhatsappWebhookPayload {
   }>;
 }
 
-// No requireAuth here, same reasoning as the Telegram webhook -- Meta calls
-// this directly with no Firebase user; authenticity is the verify handshake
-// above plus knowledge of this exact URL. Always answers 200 so Meta
-// doesn't keep retrying; real failures are logged, not surfaced to Meta.
+// Sem requireAuth aqui, pelo mesmo motivo do webhook do Telegram -- a Meta
+// chama direto, sem usuário do Firebase; quem garante a origem é o aperto de
+// mão acima mais saber esta URL exata. Sempre responde 200 pra Meta não ficar
+// tentando de novo; as falhas de verdade vão pro log, não pra Meta.
 export async function whatsappWebhookHandler(req: Request, res: Response) {
   // A Meta assina cada POST com o App Secret (X-Hub-Signature-256). Sem
   // conferir isso, quem achasse a URL lançaria gastos na conta de qualquer

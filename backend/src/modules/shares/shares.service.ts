@@ -17,12 +17,13 @@ import {
 export class ShareNotFoundError extends Error {}
 
 export const SHARE_TTL_DAYS = 7;
-// Same order of magnitude as the CSV export cap: far above one month.
+// Mesma ordem de grandeza do limite da exportação em CSV: muito acima de um
+// mês.
 const MAX_SHARE_ROWS = 2000;
 
-// What a link is allowed to show: the joint account plus the requester's
-// own personal account. Never anything flagged private, and never a
-// groupmate's personal spending, even when that is not private in the app.
+// O que um link pode mostrar: a conta conjunta mais a conta pessoal de quem
+// criou. Nunca nada marcado como privado, e nunca os gastos pessoais de um
+// colega de grupo, mesmo quando não são privados dentro do app.
 export function isShareable(row: TransactionListRow, userId: string): boolean {
   if (row.isPrivate) return false;
   return row.accountType === "joint" || row.accountOwnerId === userId;
@@ -96,7 +97,8 @@ function isActive(share: ShareRow): boolean {
   return share.revokedAt === null && new Date(share.expiresAt).getTime() > Date.now();
 }
 
-// Missing, expired and revoked all look the same from outside on purpose.
+// Não existe, venceu e foi revogado ficam iguais vistos de fora, de
+// propósito.
 export async function getPublicShare(token: string) {
   const share = await findShareByToken(token);
   if (!share || !isActive(share)) throw new ShareNotFoundError();

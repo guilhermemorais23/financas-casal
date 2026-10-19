@@ -30,14 +30,14 @@ export class DuplicateImportError extends Error {}
 
 export const MAX_STATEMENT_CHARS = 900_000;
 export const MAX_IMPORT_ITEMS = 500;
-// How far back existing transactions are compared for duplicates and
-// category hints. A statement covers weeks, not years.
+// Até quanto tempo pra trás os lançamentos existentes são comparados, pra
+// achar duplicados e sugerir categoria. Um extrato cobre semanas, não anos.
 const COMPARE_LIMIT = 1500;
 
 export interface PreviewRow {
   date: string;
   description: string;
-  amount: string; // positive decimal
+  amount: string; // decimal positivo
   transactionType: "expense" | "income";
   suggestedCategoryId: string | null;
   isDuplicate: boolean;
@@ -135,11 +135,10 @@ async function readInput(input: StatementInput, ai?: PdfAiOptions): Promise<{ fo
   return { format, rows, pdf: null };
 }
 
-// Turns what the file says into what the person will review: sign becomes
-// a type, rows that already exist are flagged (same day, same amount, same
-// direction), rows with the same name are grouped into one question, and
-// names answered before (rules) or descriptions used before come with their
-// category.
+// Transforma o que o arquivo diz no que a pessoa vai revisar: o sinal vira
+// tipo, linhas que já existem são marcadas (mesmo dia, mesmo valor, mesmo
+// sentido), linhas com o mesmo nome viram uma pergunta só, e nomes já
+// respondidos antes (regras) ou descrições já usadas vêm com a categoria.
 // IA na importação (ler PDF de banco sem leitor próprio e sugerir as
 // categorias): conta uma vez só na cota do mês, na primeira vez que for
 // usada nesta importação. As rotas já exigem Premium.
@@ -207,9 +206,9 @@ async function previewRows(
   const allowAi = ai.allow;
   const onTokens = ai.onTokens;
 
-  // Some banks export purchases as positive numbers. With no negative row
-  // at all there is no way to tell, so treat everything as an expense and
-  // let the screen offer to flip it.
+  // Alguns bancos exportam compras como número positivo. Sem nenhuma linha
+  // negativa não tem como saber, então trata tudo como gasto e deixa a tela
+  // oferecer a inversão.
   const hasNegative = rows.some((row) => row.amountCents < 0);
   const assumedAllExpenses = !read.signsKnown && !hasNegative;
 
@@ -217,8 +216,8 @@ async function previewRows(
   const existingKeys = new Set(
     existing.map((tx) => duplicateKey(tx.occurredAt.slice(0, 10), Math.round(Number(tx.amount) * 100), tx.transactionType))
   );
-  // findTransactionsVisibleTo returns newest first, so the first hit per
-  // description is the most recent category used for it.
+  // O findTransactionsVisibleTo devolve do mais novo pro mais antigo, então o
+  // primeiro achado por descrição é a categoria usada mais recentemente.
   const categoryHints = new Map<string, string>();
   for (const tx of existing) {
     if (!tx.categoryId) continue;

@@ -1,3 +1,22 @@
+// ============================================================================
+// requireAuth: CONFERE QUEM ESTÁ PEDINDO -- roda antes das rotas protegidas
+// ============================================================================
+// Um "middleware" é uma função que roda ANTES da rota. Os módulos usam assim:
+//   debtsRouter.use(requireAuth);   // toda rota de dívidas exige login
+//
+// O que ele faz, em ordem:
+//   1. pega o token do cabeçalho "Authorization: Bearer <token>" (quem põe
+//      esse cabeçalho é o apiRequest, em frontend/src/api/client.ts);
+//   2. pergunta ao Firebase se o token é válido, de quem é e se não foi
+//      revogado. Não é? Responde 401 e o pedido para aqui;
+//   3. guarda quem é em req.user ({ id, email }) -- daí em diante o
+//      controller e o service sabem quem pediu;
+//   4. em modo manutenção, só deixa ler (GET), a não ser pra admin;
+//   5. lê o grupo aberto (cabeçalho X-Group-Id) e chama next(), que passa
+//      o pedido pra próxima etapa (a rota).
+// Rotas SEM requireAuth são de propósito: /api/health, webhooks (Telegram,
+// WhatsApp, Asaas, Pluggy -- conferidos por segredo) e o link público.
+// ============================================================================
 import type { NextFunction, Request, Response } from "express";
 import { auth, db } from "../db/firestore";
 import { isAdminEmail } from "../modules/admin/admin.service";
@@ -16,11 +35,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    // checkRevoked (2nd arg) costs one extra Firebase Auth lookup per
-    // request, but without it a token stays "valid" (signature/expiry
-    // check alone) up to its natural ~1h expiry even after
-    // auth.revokeRefreshTokens() -- which defeats the point of a
-    // self-service "sign out everywhere" (see revokeSessionsHandler).
+    // O checkRevoked (2º argumento) custa uma consulta a mais no Firebase Auth
+    // por pedido, mas sem ele o token continua "válido" (só assinatura e
+    // validade) até expirar sozinho (~1h), mesmo depois de
+    // auth.revokeRefreshTokens() -- o que anularia o "sair de todos os
+    // dispositivos" (ver revokeSessionsHandler).
     const decoded = await auth.verifyIdToken(idToken, true);
     const user: AuthenticatedUser = {
       id: decoded.uid,

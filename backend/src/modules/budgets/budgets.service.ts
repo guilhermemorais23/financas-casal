@@ -56,9 +56,9 @@ export async function getCategoryBudgets(userId: string, monthParam?: string): P
 
   const [budgetsByCategory, summary] = await Promise.all([
     findCategoryBudgets(groupId, periodMonth, categoryIds),
-    // "visible" matches what the Painel's "Maiores gastos" card itself
-    // requests -- the spent figure shown next to a category's cap here must
-    // never disagree with the one already on screen there.
+    // "visible" é o mesmo filtro que o card "Maiores gastos" do Painel usa -- o
+    // valor gasto mostrado aqui ao lado do teto de uma categoria nunca pode
+    // discordar do que já está na tela lá.
     getMonthlySummary(groupId, userId, monthStart, monthEnd, "visible"),
   ]);
   const spentByCategoryId = new Map(summary.byCategory.map((row) => [row.categoryId, Number(row.total)]));
@@ -72,9 +72,9 @@ export async function getCategoryBudgets(userId: string, monthParam?: string): P
   }));
 }
 
-// capAmount: null clears the category's cap (deletes the budget doc) instead
-// of setting one -- lets the Conta page's "apagar valor e salvar" gesture map
-// directly onto "stop tracking this category" without a separate control.
+// capAmount: null tira o teto da categoria (apaga o documento do orçamento)
+// em vez de definir um -- assim o gesto "apagar valor e salvar" da tela Conta
+// vira direto "parar de acompanhar esta categoria", sem botão separado.
 export async function setCategoryBudget(
   userId: string,
   categoryId: string,

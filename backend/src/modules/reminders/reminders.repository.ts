@@ -16,14 +16,14 @@ export interface GroupIdRow {
 }
 
 export async function findAllGroupIds(): Promise<GroupIdRow[]> {
-  // Only the id is needed to drive the per-group loop below -- select()
-  // avoids pulling every group's full profile doc for nothing.
+  // Só o id é necessário pra fazer o laço por grupo abaixo -- o select() evita
+  // trazer o documento inteiro de cada grupo à toa.
   const snapshot = await groupsCol.select().get();
   return snapshot.docs.map((doc) => ({ id: doc.id }));
 }
 
-// Unlike groups.repository's findMembersByGroupId, the reminders job needs
-// an address to actually send to.
+// Diferente do findMembersByGroupId do groups.repository, o job de lembretes
+// precisa de um endereço pra mandar de verdade.
 export async function findMembersWithEmailByGroupId(groupId: string): Promise<MemberWithEmail[]> {
   const docs = await findUserDocsInGroup(groupId);
   return docs.map((doc) => {
@@ -32,9 +32,10 @@ export async function findMembersWithEmailByGroupId(groupId: string): Promise<Me
   });
 }
 
-// Has this exact reminder (one card's statement, one group's monthly budget
-// overrun...) already gone out? Keyed deterministically by the caller so the
-// same event never emails twice even if the cron fires more than once.
+// Este lembrete exato (a fatura de um cartão, o estouro do orçamento do mês
+// de um grupo...) já foi enviado? Quem chama monta a chave sempre do mesmo
+// jeito, então o mesmo evento nunca vira dois e-mails, mesmo que o cron rode
+// mais de uma vez.
 export async function wasReminderSent(key: string): Promise<boolean> {
   const doc = await reminderLogsCol.doc(key).get();
   return doc.exists;

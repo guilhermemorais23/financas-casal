@@ -14,15 +14,15 @@ export interface AlertItem {
   message: string;
 }
 
-// A card/debt due date counts as "coming up" the same number of days out as
-// the email reminder job already uses (reminders.service.ts) -- one signal,
-// surfaced in two places, not two independently-tuned thresholds.
+// Vencimento de cartão/dívida conta como "chegando" com a mesma antecedência
+// que o job de lembrete por e-mail já usa (reminders.service.ts) -- um sinal
+// só, mostrado em dois lugares, e não dois limites ajustados separadamente.
 const DUE_WINDOW_DAYS = 3;
 
-// A category needs to beat its own 3-month average by more than this to
-// count as a "spike" worth mentioning, AND clear this absolute floor -- a
-// category that went from R$4 to R$6 is technically +50% but not worth an
-// alert; one that went from R$200 to R$500 in Lazer is.
+// Uma categoria precisa passar a própria média de 3 meses por mais que isto
+// pra contar como "pico" que vale avisar, E passar este piso em reais -- uma
+// categoria que foi de R$4 pra R$6 subiu 50%, mas não vale alerta; uma que
+// foi de R$200 pra R$500 em Lazer vale.
 const CATEGORY_SPIKE_RATIO = 0.3;
 const CATEGORY_SPIKE_MIN_REAIS = 50;
 
@@ -37,10 +37,10 @@ function dueLabel(daysUntil: number): string {
   return `venceu há ${-daysUntil} dia${-daysUntil === 1 ? "" : "s"}`;
 }
 
-// Linear pace projection: at the rate the group has spent so far this
-// month, will it clear the budget cap before the month is over -- and if
-// so, in roughly how many days from today. Only makes sense for the
-// CURRENT month (there's nothing to "project" about a month already over).
+// Projeção em linha reta: no ritmo que o grupo gastou até agora no mês, vai
+// passar do teto do orçamento antes do mês acabar -- e, se sim, em quantos
+// dias, mais ou menos. Só faz sentido no mês ATUAL (não há o que "projetar"
+// num mês que já acabou).
 function budgetPaceAlert(capAmount: number, spent: number, month: string, today: Date): AlertItem | null {
   const dayOfMonth = today.getUTCDate();
   if (capAmount <= 0 || dayOfMonth <= 0) return null;
@@ -70,10 +70,10 @@ function budgetPaceAlert(capAmount: number, spent: number, month: string, today:
   };
 }
 
-// Compares this month's spend in each category against the average of the
-// same category over the previous 3 months -- needs at least 2 of those 3
-// months to actually have data, so a category that simply didn't exist
-// before never "spikes" on its first real month.
+// Compara o gasto deste mês em cada categoria com a média da mesma categoria
+// nos 3 meses anteriores -- precisa de dados em pelo menos 2 desses 3 meses,
+// pra que uma categoria que simplesmente não existia antes não vire "pico"
+// no primeiro mês de uso.
 function categorySpikeAlerts(
   currentByCategory: { categoryId: string | null; categoryName: string | null; categoryEmoji: string | null; total: string }[],
   previousByCategory: { categoryId: string | null; categoryName: string | null; total: string }[][]
@@ -113,10 +113,10 @@ function categorySpikeAlerts(
 // "Vence logo" (upcoming.service.ts) -- não precisa dizer duas vezes.
 export async function getAlertsForUser(userId: string, options: { includeDue?: boolean } = {}): Promise<AlertItem[]> {
   const includeDue = options.includeDue ?? true;
-  // Not otherwise used here directly -- getCurrentBudget/listCards/listDebts/
-  // getMonthlySummaryForUser each call requireGroupId themselves anyway, but
-  // this one throws NoGroupError up front instead of waiting for whichever
-  // of those five parallel calls happens to resolve first.
+  // Não é usado direto aqui -- getCurrentBudget/listCards/listDebts/
+  // getMonthlySummaryForUser já chamam requireGroupId por conta própria, mas
+  // este dispara o NoGroupError logo de cara, em vez de esperar qual das cinco
+  // chamadas em paralelo terminar primeiro.
   await requireGroupId(userId);
 
   const today = new Date();

@@ -47,11 +47,10 @@ export class InsufficientAvailableLimitError extends Error {}
 
 export type CardScope = "personal" | "joint";
 
-// Whatever the purchase form offers -- 1x through 12x, but only a curated
-// set of "round" counts (matches how a card statement itself would phrase
-// it), not every integer in between. Enforced here too, not just as a
-// frontend <select> affordance, so the API contract actually says what's
-// allowed.
+// O que o formulário de compra oferece -- de 1x a 12x, mas só os números
+// "redondos" (do jeito que a própria fatura escreveria), não todo inteiro no
+// meio. Conferido aqui também, não só no <select> do frontend, pra que a API
+// diga de verdade o que é permitido.
 export const ALLOWED_INSTALLMENT_COUNTS = [1, 2, 3, 4, 6, 12];
 
 export interface CreateCardInput {
@@ -61,9 +60,9 @@ export interface CreateCardInput {
   scope: CardScope;
   limit: number | null;
   limitType: LimitType;
-  // Cartão garantido: true = the money leaves the account today (booked as
-  // a transfer); false = it was already set aside outside the app, so the
-  // limit is extra room and the account isn't touched. Defaults to true.
+  // Cartão garantido: true = o dinheiro sai da conta hoje (lançado como
+  // transferência); false = já estava guardado fora do app, então o limite é
+  // espaço extra e a conta não é tocada. O padrão é true.
   securedFromAccount?: boolean;
 }
 
@@ -78,13 +77,13 @@ export interface CardStatementSummary {
 export interface CardWithSummary extends CardRow {
   scope: CardScope;
   currentStatement: CardStatementSummary;
-  // Only computed when the card actually has a limit -- a card without one
-  // does the extra findAllPurchasesByCardId + per-month statement reads for
-  // nothing, and the frontend has nothing to draw a bar against anyway.
+  // Só calculado quando o cartão tem limite -- num cartão sem limite, o
+  // findAllPurchasesByCardId e as leituras de fatura por mês seriam à toa, e o
+  // frontend nem tem barra pra desenhar.
   limitUsed: string | null;
-  // One entry per unpaid statement (oldest first): how much of the limit
-  // comes back once that fatura is paid, and how much will be free right
-  // after -- the "quando o limite volta" timeline. Empty without a limit.
+  // Uma linha por fatura não paga (da mais antiga): quanto do limite volta
+  // quando aquela fatura for paga e quanto fica livre logo depois -- a linha do
+  // tempo "quando o limite volta". Vazio sem limite.
   limitReleases: LimitRelease[];
 }
 
@@ -95,11 +94,11 @@ export interface LimitRelease {
   availableAfter: string;
 }
 
-// Every installment (any statement month, including ones months in the
-// future) whose statement hasn't been marked paid yet, summed per statement
-// month -- a parcelado purchase locks its FULL amount against the limit the
-// moment it's made, same as a real card, and only frees each installment's
-// share back up as that specific month's fatura gets paid off.
+// Toda parcela (de qualquer mês de fatura, inclusive meses no futuro) cuja
+// fatura ainda não foi marcada como paga, somada por mês de fatura -- uma
+// compra parcelada prende o valor INTEIRO no limite assim que é feita, igual
+// um cartão de verdade, e só libera cada parcela quando a fatura daquele mês
+// é paga.
 async function computeUnpaidByMonth(cardId: string): Promise<Map<string, number>> {
   const purchases = await findAllPurchasesByCardId(cardId);
   const byMonth = new Map<string, number>();
@@ -142,34 +141,33 @@ function limitReleasesFor(card: CardRow, byMonth: Map<string, number>): LimitRel
     });
 }
 
-// Purchases on days 1..closingDay belong to the statement labeled with that
-// same month; purchases after closingDay roll into next month's statement --
-// mirrors how a real card's cycle works, regardless of which day someone
-// actually adds the purchase.
+// Compras do dia 1 até o closingDay entram na fatura daquele mesmo mês;
+// compras depois do closingDay vão pra fatura do mês seguinte -- igual o
+// ciclo de um cartão de verdade, não importa em que dia a pessoa cadastra a
+// compra.
 function statementMonthFor(purchaseDate: string, closingDay: number): string {
   const [year, month, day] = purchaseDate.split("-").map(Number);
   const monthParam = `${year}-${String(month).padStart(2, "0")}`;
   return day <= closingDay ? monthParam : addMonths(monthParam, 1);
 }
 
-// Exported for the same reason as dueDateFor below.
+// Exportado pelo mesmo motivo do dueDateFor logo abaixo.
 export function currentStatementMonth(closingDay: number): string {
   return statementMonthFor(todayInBrazil(), closingDay);
 }
 
-// dueDay is normally earlier in the calendar than closingDay (closes the
-// 28th, due the 5th of the following month) but a same-month cycle is
-// possible too (closes the 5th, due the 12th) -- compare the two days to
-// know which month the due date actually falls in.
-// Exported: the reminders job (outside any per-user request) needs this
-// same due-date math to know when a card's current statement is coming due.
-// dueDay is clamped to the target month's real last day -- a card set to
-// due on the 31st (allowed at creation: any 1-31) would otherwise produce a
-// calendar-invalid string like "2026-04-31" every April/June/September/
-// November/February, which broke the Painel's new "vence em X dias" label
-// silently (JS's Date rolls an invalid day into the next month instead of
-// throwing, so the countdown/urgency styling was computed against the
-// wrong date). Same clamp rule dateForDayInMonth already uses for debts.
+// O dueDay normalmente vem antes do closingDay no calendário (fecha dia 28,
+// vence dia 5 do mês seguinte), mas também pode ser no mesmo mês (fecha dia
+// 5, vence dia 12) -- comparar os dois dias diz em que mês o vencimento cai.
+// Exportado: o job de lembretes (fora do pedido de qualquer usuário) precisa
+// da mesma conta pra saber quando a fatura atual de um cartão vai vencer.
+// O dueDay é limitado ao último dia real do mês -- um cartão que vence dia 31
+// (permitido no cadastro: qualquer dia de 1 a 31) geraria uma data
+// impossível como "2026-04-31" em abril/junho/setembro/novembro/fevereiro, o
+// que quebrava sem aviso o "vence em X dias" do Painel (o Date do JS joga um
+// dia inválido pro mês seguinte em vez de dar erro, então a contagem e a cor
+// de urgência eram calculadas contra a data errada). Mesma regra que o
+// dateForDayInMonth já usa nas dívidas.
 export function dueDateFor(statementMonth: string, closingDay: number, dueDay: number): string {
   const targetMonth = dueDay > closingDay ? statementMonth : addMonths(statementMonth, 1);
   return dateForDayInMonth(targetMonth, dueDay);
@@ -206,8 +204,8 @@ export async function createCard(userId: string, input: CreateCardInput) {
   if (input.limit !== null && input.limit <= 0) {
     throw new InvalidLimitError();
   }
-  // A secured card's limit is the money put into it, so it starts with the
-  // first deposit -- there's nothing to track without one.
+  // O limite de um cartão garantido é o dinheiro colocado nele, então ele
+  // começa com o primeiro depósito -- sem isso não há o que acompanhar.
   if (input.limitType === "secured" && input.limit === null) {
     throw new InvalidLimitError();
   }
@@ -229,9 +227,9 @@ export async function createCard(userId: string, input: CreateCardInput) {
   return card;
 }
 
-// The account a card's money moves through -- the owner's personal account
-// for a personal card, "Nossa Conta" for a joint one. Same rule the fatura
-// payment uses.
+// A conta por onde passa o dinheiro do cartão -- a conta pessoal do dono num
+// cartão pessoal, a "Nossa Conta" num conjunto. Mesma regra do pagamento da
+// fatura.
 async function accountForCard(groupId: string, card: CardRow) {
   const account = await findAccountForOwner(groupId, card.ownerUserId);
   if (!account) {
@@ -240,10 +238,10 @@ async function accountForCard(groupId: string, card: CardRow) {
   return account;
 }
 
-// Guardar no cartão = the money leaves the account (and shows up in the
-// extrato on the day it happened); resgatar = it comes back. Booked as a
-// transfer (securedCardId), so it moves the balance without counting as a
-// gasto/receita anywhere.
+// Guardar no cartão = o dinheiro sai da conta (e aparece no extrato no dia em
+// que aconteceu); resgatar = ele volta. Lançado como transferência
+// (securedCardId), então mexe no saldo sem contar como gasto ou receita em
+// lugar nenhum.
 async function securedTransferInput(
   userId: string,
   groupId: string,
@@ -340,9 +338,9 @@ export interface AddPurchaseInput {
   categoryId: string | null;
   buyerId: string;
   purchaseDate: string;
-  // 1 = à vista (the default, and the only option before parcelamento
-  // existed) -- anything else generates that many installments, one per
-  // consecutive statement month starting from this purchase's own.
+  // 1 = à vista (o padrão, e a única opção antes do parcelamento existir) --
+  // qualquer outro número gera essa quantidade de parcelas, uma por mês de
+  // fatura seguido, a partir do mês da própria compra.
   installments: number;
 }
 
@@ -425,10 +423,10 @@ export async function getStatement(userId: string, cardId: string, month?: strin
   };
 }
 
-// Same idea as debt installments: paying a fatura logs one real expense
-// against the card's account, split per person by what they actually
-// bought (not divided evenly) -- whoever marks it paid is the payer, and
-// the splits are what feeds "who owes whom" for everyone else's share.
+// Mesma ideia das parcelas de dívida: pagar a fatura lança um gasto de
+// verdade na conta do cartão, dividido por pessoa pelo que cada uma comprou
+// de fato (não dividido igual) -- quem marca como paga é quem pagou, e as
+// partes alimentam o "quem deve quem" do resto do grupo.
 export async function setStatementPaidForUser(
   userId: string,
   cardId: string,
@@ -509,18 +507,18 @@ export async function updateCardForUser(
   if (input.limit !== undefined && input.limit !== null && input.limit <= 0) {
     throw new InvalidLimitError();
   }
-  // A secured card's limit only moves through deposits/withdrawals, so its
-  // history always matches the money actually parked in it.
+  // O limite de um cartão garantido só muda por depósito/retirada, então o
+  // histórico sempre bate com o dinheiro que está guardado nele.
   if (card.limitType === "secured" && input.limit !== undefined) {
     throw new NotSecuredCardError();
   }
   return updateCard(cardId, input);
 }
 
-// Cartão com limite garantido: "Guardar mais" raises the limit by exactly
-// the money deposited; "Resgatar" lowers it, but only up to what purchases
-// aren't holding -- the rest stays locked until those faturas are paid,
-// same as the bank would do.
+// Cartão com limite garantido: "Guardar mais" aumenta o limite exatamente no
+// valor depositado; "Resgatar" diminui, mas só até o que as compras não estão
+// segurando -- o resto fica preso até essas faturas serem pagas, igual o
+// banco faria.
 export async function adjustSecuredLimit(
   userId: string,
   cardId: string,
@@ -559,10 +557,10 @@ export async function adjustSecuredLimit(
   return (await findCardById(cardId))!;
 }
 
-// "Esse dinheiro saiu da minha conta?" -- fixable after the fact. Turning it
-// off drops every guardar/resgatar entry from the extrato (the account goes
-// back to what it was, the limit stays); turning it on books the money
-// currently parked in the card as one guardar today.
+// "Esse dinheiro saiu da minha conta?" -- dá pra corrigir depois. Desligar
+// tira do extrato todos os lançamentos de guardar/resgatar (a conta volta a
+// ser o que era, o limite continua); ligar lança o dinheiro guardado hoje no
+// cartão como um guardar só, com data de hoje.
 export async function setSecuredSourceForUser(userId: string, cardId: string, fromAccount: boolean) {
   const { groupId, card } = await requireManageableCard(userId, cardId);
   if (card.limitType !== "secured") {
@@ -583,8 +581,8 @@ export async function setSecuredSourceForUser(userId: string, cardId: string, fr
 
 export async function removeCard(userId: string, cardId: string) {
   await requireManageableCard(userId, cardId);
-  // Whatever was still guardado in the card goes back to the account: its
-  // guardar/resgatar entries disappear along with the card.
+  // O que ainda estava guardado no cartão volta pra conta: os lançamentos de
+  // guardar/resgatar somem junto com o cartão.
   const transferIds = await findSecuredCardTransferIds(cardId);
   const linkedTransactionIds = await deleteCard(cardId);
   await deleteTransactionsBatch([...linkedTransactionIds, ...transferIds]);

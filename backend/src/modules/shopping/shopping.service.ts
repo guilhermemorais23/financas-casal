@@ -38,11 +38,11 @@ export interface CheckItemInput {
   amount: number;
 }
 
-// Checking an item off the list is what turns it into a real expense -- a
-// shopping-list entry has no price until someone actually buys it, so this
-// takes the same account/category/amount a manual transaction would.
-// Unchecking removes that expense again (same linked-transaction pattern as
-// debt installments and card statements elsewhere in this app).
+// Marcar um item da lista é o que vira gasto de verdade -- um item da lista
+// não tem preço até alguém comprar, então isto recebe a mesma conta,
+// categoria e valor de um lançamento manual. Desmarcar apaga esse gasto de
+// novo (o mesmo padrão de lançamento ligado das parcelas de dívida e das
+// faturas de cartão no resto do app).
 export async function checkItem(userId: string, itemId: string, input: CheckItemInput) {
   const { groupId, item } = await requireItemInGroup(userId, itemId);
   if (item.isChecked) return item;

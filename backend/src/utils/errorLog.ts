@@ -39,9 +39,9 @@ export function listMemoryErrors(limit: number): ErrorLogEntry[] {
   return memoryErrors.slice(-limit).reverse();
 }
 
-// Fire-and-forget by design -- logging must never delay the response for
-// the error that's already being handled, and a Firestore hiccup here
-// shouldn't compound the original failure.
+// Dispara e esquece, de propósito -- o log nunca pode atrasar a resposta do
+// erro que já está sendo tratado, e um soluço do Firestore aqui não deve
+// piorar a falha original.
 export function logError(
   source: string,
   err: unknown,

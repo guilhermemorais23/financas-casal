@@ -2,8 +2,8 @@ import type { AudioPayload } from "./assistant.types";
 
 export class WhatsappNotConfiguredError extends Error {}
 
-// Meta deprecates old Graph API versions over time -- bump this by hand if
-// Meta emails about a deprecation deadline for whatever version is pinned.
+// A Meta desativa versões antigas da Graph API com o tempo -- suba este
+// número à mão se a Meta mandar e-mail avisando o prazo da versão fixada aqui.
 const GRAPH_API_VERSION = "v21.0";
 const GRAPH_API = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
@@ -27,12 +27,11 @@ export async function sendWhatsappMessage(to: string, text: string): Promise<voi
   });
 }
 
-// WhatsApp voice notes arrive as opus-encoded .ogg, same family Gemini
-// already accepts for Telegram voice notes -- no transcoding needed. Unlike
-// Telegram's getFile (one call, returns a path you fetch unauthenticated),
-// the Graph API's media endpoint needs two calls: look up the (short-lived,
-// signed) download url by media id, then fetch that url with the same
-// bearer token.
+// Áudio do WhatsApp chega em .ogg (opus), da mesma família que o Gemini já
+// aceita no Telegram -- não precisa converter. Diferente do getFile do
+// Telegram (uma chamada, devolve um caminho que se baixa sem login), a mídia
+// da Graph API precisa de duas: buscar a url de download (assinada e de
+// vida curta) pelo id da mídia, e depois baixar essa url com o mesmo token.
 export async function downloadWhatsappAudio(mediaId: string): Promise<AudioPayload> {
   const token = accessToken();
   const metaRes = await fetch(`${GRAPH_API}/${mediaId}`, { headers: { Authorization: `Bearer ${token}` } });

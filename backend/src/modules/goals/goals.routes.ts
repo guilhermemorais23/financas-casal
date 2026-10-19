@@ -1,3 +1,17 @@
+// ============================================================================
+// MÓDULO goals -- endereços /api/goals
+// ============================================================================
+// O que faz: Metas: criar, guardar e retirar dinheiro (tirando da conta ou
+//            não), histórico, submetas, apagar.
+// Quem chama: Tela Metas (pages/GoalsPage.tsx), widget de meta no Painel e
+//             importar extrato (guardar numa meta).
+//
+// Caminho de um pedido dentro do módulo:
+//   *.routes.ts      endereço -> função (este arquivo)
+//   *.controller.ts  lê e valida o pedido (req.body, req.params), responde
+//   *.service.ts     regra de negócio (quem pode, o que calcula)
+//   *.repository.ts  lê e grava no Firestore
+// ============================================================================
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";

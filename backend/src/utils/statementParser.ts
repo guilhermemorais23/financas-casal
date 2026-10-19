@@ -1,13 +1,14 @@
 import type { PaymentMethod } from "../modules/transactions/transactions.repository";
-// Reads a bank statement export (OFX or CSV) into plain rows. Pure functions,
-// no I/O: the caller decides what to do with the rows (preview, dedupe,
-// save). Amounts keep the file's own sign here (negative = money out); the
-// caller can flip them if the bank exports expenses as positive numbers.
+// Lê o arquivo de extrato do banco (OFX ou CSV) e devolve linhas simples.
+// Funções puras, sem I/O: quem chama decide o que fazer com as linhas
+// (prévia, duplicados, salvar). Os valores mantêm o sinal do próprio arquivo
+// aqui (negativo = dinheiro saindo); quem chama pode inverter se o banco
+// exporta gastos como número positivo.
 export interface ParsedStatementRow {
   date: string; // YYYY-MM-DD
   description: string;
-  amountCents: number; // signed: negative = expense
-  externalId: string | null; // OFX FITID, when the file has one
+  amountCents: number; // com sinal: negativo = gasto
+  externalId: string | null; // FITID do OFX, quando o arquivo tem
   // O tipo que o banco escreve ("Pix enviado", "Compra cartão"), quando o
   // extrato separa isso do nome. A descrição fica só com o nome.
   kind?: string | null;
@@ -36,9 +37,9 @@ export function parseStatement(text: string): { format: StatementFormat; rows: P
   return { format, rows };
 }
 
-// ---- amounts & dates ---------------------------------------------------
+// ---- valores e datas ---------------------------------------------------
 
-// "1.234,56", "-1234.56", "R$ 12,50", "(12,50)", "12,50-" -> cents (signed).
+// "1.234,56", "-1234.56", "R$ 12,50", "(12,50)", "12,50-" -> centavos (com sinal).
 export function parseAmountToCents(raw: string): number | null {
   let value = raw.trim();
   if (!value) return null;
@@ -62,7 +63,7 @@ export function parseAmountToCents(raw: string): number | null {
   const lastDot = value.lastIndexOf(".");
   let normalized: string;
   if (lastComma > -1 && lastDot > -1) {
-    // Both present: whichever comes last is the decimal separator.
+    // Os dois presentes: o que vier por último é o separador decimal.
     normalized =
       lastComma > lastDot ? value.replace(/\./g, "").replace(",", ".") : value.replace(/,/g, "");
   } else if (lastComma > -1) {
@@ -99,8 +100,8 @@ export function parseDate(raw: string): string | null {
 
 // ---- OFX ---------------------------------------------------------------
 
-// OFX 1.x is SGML (tags are often never closed), OFX 2.x is XML. Reading
-// "<TAG>value up to the next tag or line break" handles both.
+// OFX 1.x é SGML (as tags quase nunca fecham), OFX 2.x é XML. Ler
+// "<TAG>valor até a próxima tag ou quebra de linha" funciona nos dois.
 function ofxTag(block: string, tag: string): string | null {
   const match = block.match(new RegExp(`<${tag}>\\s*([^<\\r\\n]*)`, "i"));
   return match ? match[1].trim() : null;
@@ -144,7 +145,7 @@ function detectDelimiter(headerLine: string): string {
   return counts[0][1] > 0 ? counts[0][0] : ",";
 }
 
-// RFC 4180-ish: quoted fields may contain the delimiter, quotes ("" = ").
+// No estilo RFC 4180: campo entre aspas pode ter o separador e aspas ("" = ").
 export function splitCsvLine(line: string, delimiter: string): string[] {
   const fields: string[] = [];
   let current = "";
@@ -231,8 +232,8 @@ export function parseCsv(text: string): ParsedStatementRow[] {
   const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
   if (lines.length < 2) return [];
 
-  // Some banks prepend a few lines of account info before the real header:
-  // use the first line that actually looks like one.
+  // Alguns bancos põem umas linhas com dados da conta antes do cabeçalho de
+  // verdade: usa a primeira linha que parece mesmo um cabeçalho.
   let headerIndex = -1;
   let delimiter = ",";
   let columns: CsvColumns | null = null;

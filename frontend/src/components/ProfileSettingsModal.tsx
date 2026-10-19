@@ -24,8 +24,8 @@ export function ProfileSettingsModal({ onClose }: { onClose: () => void }) {
   const [info, setInfo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Only shown when Firebase demands a fresh login before letting the email
-  // change go through -- not part of the form otherwise.
+  // Só aparece quando o Firebase exige um login recente antes de deixar trocar
+  // o e-mail -- fora isso, não faz parte do formulário.
   const [needsCurrentPassword, setNeedsCurrentPassword] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
 
@@ -97,8 +97,8 @@ export function ProfileSettingsModal({ onClose }: { onClose: () => void }) {
       });
       await refreshUser();
 
-      // Email verification is still pending -- keep the modal open so the
-      // user actually sees that message instead of it flashing and closing.
+      // A verificação do e-mail ainda está pendente -- mantém a janela aberta pra
+      // pessoa ver a mensagem, em vez de ela piscar e fechar.
       if (email.trim() !== user?.email) {
         showToast("Perfil salvo", { description: "Confirme o novo email pela mensagem que enviamos" });
         setIsSubmitting(false);

@@ -48,8 +48,8 @@ function asLinkCode(text: string | undefined): string | null {
   return CODE_PATTERN.test(code) ? code : null;
 }
 
-// Codes expire quickly -- they only need to survive the few seconds between
-// tapping "gerar código" in the app and pasting it into the bot.
+// Os códigos vencem rápido -- só precisam durar os poucos segundos entre
+// tocar em "gerar código" no app e colar no bot.
 const LINK_CODE_TTL_MS = 10 * 60 * 1000;
 
 export async function createTelegramLinkCode(userId: string, groupId: string): Promise<string> {
@@ -75,10 +75,10 @@ interface FinanceContext {
   snapshot: MonthSnapshot;
 }
 
-// Grounds every reply in the couple's real numbers -- without this, the
-// model has nothing but category *names* (for expense-logging) and answers
-// financial questions purely from guesswork, which reads as confident but
-// can invent things (a "subscription" that doesn't exist).
+// Faz toda resposta se basear nos números reais do casal -- sem isto, o
+// modelo só teria os *nomes* das categorias (pra lançar gasto) e responderia
+// perguntas de dinheiro no chute, com cara de certeza mas podendo inventar
+// coisas (uma "assinatura" que não existe).
 async function buildFinanceContext(userId: string, groupId: string): Promise<FinanceContext> {
   const month = currentMonthParam();
   const { monthStart, monthEnd } = parseMonthRange(month);
@@ -145,9 +145,9 @@ function parseAssistantReply(raw: string): AssistantReply | null {
   }
 }
 
-// Shared by every channel (Telegram, WhatsApp, the in-app chat widget) --
-// same grounding, same intent schema, same behavior. Only how the reply
-// gets delivered differs per caller.
+// Usado por todos os canais (Telegram, WhatsApp, o chat dentro do app) --
+// mesma base de números, mesmo formato de intenção, mesmo comportamento. Só
+// muda como a resposta é entregue em cada um.
 async function processAssistantMessage(
   userId: string,
   groupId: string,
@@ -306,10 +306,10 @@ export async function handleTelegramMessage(
   }
 }
 
-// Same idea as handleTelegramLinking/handleTelegramMessage above, just
-// talking to the WhatsApp Cloud API instead -- consumeLinkCode is shared,
-// so the same "Gerar código" button in Conta works to link either channel,
-// whichever one the code actually gets sent to.
+// Mesma ideia do handleTelegramLinking/handleTelegramMessage acima, só que
+// falando com a WhatsApp Cloud API -- o consumeLinkCode é compartilhado, então
+// o mesmo botão "Gerar código" em Conta serve pra vincular qualquer um dos
+// dois canais, o que receber o código.
 async function handleWhatsappLinking(waId: string, text: string | undefined): Promise<void> {
   const code = asLinkCode(text);
   const redeemed = code ? await consumeLinkCode(code) : null;
@@ -388,16 +388,16 @@ async function basicAnswer(
   return answerFromSnapshot(snapshot, text);
 }
 
-// Same assistant, reached from the in-app chat widget instead of Telegram --
-// the caller is already an authenticated PAR. user, so no link/code step.
+// O mesmo assistente, chamado pelo chat dentro do app em vez do Telegram --
+// quem chama já é um usuário logado no PAR., então não tem passo de código.
 export async function answerAssistantMessage(userId: string, message: string): Promise<string> {
   const groupId = await requireGroupId(userId);
   return processAssistantMessage(userId, groupId, message, undefined);
 }
 
-// Opens the in-app chat widget with something to say instead of a blank
-// box -- one specific, grounded observation plus an invitation to go
-// deeper, so the assistant reads as paying attention rather than waiting.
+// Abre o chat do app já com algo pra dizer em vez de uma caixa vazia -- uma
+// observação concreta, baseada nos números, mais um convite pra aprofundar,
+// pra o assistente parecer atento em vez de só esperando.
 export async function generateGreeting(userId: string): Promise<string> {
   const groupId = await requireGroupId(userId);
   const financeContext = await buildFinanceContext(userId, groupId);

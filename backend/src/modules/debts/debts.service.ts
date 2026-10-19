@@ -72,9 +72,9 @@ export async function createDebt(userId: string, input: CreateDebtInput) {
     dueDay: input.dueDay,
   });
 
-  // Installment N books against startMonth + (N-1) by default -- e.g. a
-  // debt starting 2026-08 has parcela 1 in August, parcela 2 in September,
-  // regardless of which real-world day each one actually gets marked paid.
+  // A parcela N entra, por padrão, em startMonth + (N-1) -- ex.: uma dívida que
+  // começa em 2026-08 tem a parcela 1 em agosto e a 2 em setembro, não importa
+  // o dia real em que cada uma é marcada como paga.
   const shares = splitEvenly(input.totalAmount, input.installmentsCount);
   const installments = shares.map((amountCents, index) => ({
     amountCents,
@@ -140,10 +140,10 @@ async function requireManageableDebt(userId: string, groupId: string, debtId: st
   return debt;
 }
 
-// Keeps a debt's progress bar backed by the actual money ledger instead of a
-// disconnected checkbox: paying an installment logs a real expense (so it
-// shows up in the extrato/relatórios and hits the account balance), and
-// unmarking it removes that same expense again.
+// Faz a barra de progresso da dívida refletir o dinheiro de verdade, e não
+// uma caixinha solta: pagar uma parcela lança um gasto real (aparece no
+// extrato e nos relatórios e mexe no saldo da conta), e desmarcar apaga esse
+// mesmo gasto.
 export async function setInstallmentPaidForUser(
   userId: string,
   debtId: string,
@@ -209,11 +209,10 @@ export async function setInstallmentPaidForUser(
   return installment;
 }
 
-// Lets a user re-book a specific installment into a different month --
-// e.g. they caught up and paid parcela 1 and 2 in the same real month, so
-// parcela 2 should count against that same month instead of the default
-// startMonth+1. If it's already paid, the linked transaction's date moves
-// along with it so the extrato stays consistent.
+// Deixa a pessoa mudar uma parcela de mês -- ex.: ela pôs o atraso em dia e
+// pagou as parcelas 1 e 2 no mesmo mês, então a 2 deve contar nesse mês, e
+// não no padrão startMonth+1. Se já estiver paga, a data do lançamento
+// ligado a ela vai junto, pro extrato continuar batendo.
 export async function updateInstallmentMonth(
   userId: string,
   debtId: string,

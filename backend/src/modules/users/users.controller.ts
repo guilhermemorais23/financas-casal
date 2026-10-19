@@ -1,3 +1,15 @@
+// ============================================================================
+// MÓDULO users -- endereços /api/me
+// ============================================================================
+// O que faz: o perfil de quem está logado -- criar no primeiro login
+//            (bootstrap), ler (/me), editar nome/foto/e-mail, registrar login
+//            pro Admin, "já vi as boas-vindas", sair de todos os
+//            dispositivos e excluir a conta.
+// Quem chama: auth/AuthContext.tsx (login e perfil), a janela de perfil e a
+//             tela Conta.
+// Este módulo não tem users.routes.ts: as rotas /api/me são registradas
+// direto no app.ts (procure "/api/me" lá).
+// ============================================================================
 import type { Request, Response } from "express";
 import { isAdminEmail } from "../admin/admin.service";
 import { getAppSettings, isBillingEnabled } from "../settings/appSettings";
@@ -8,11 +20,10 @@ import { deleteAccountForUser } from "./deleteAccount.service";
 import { findUserById, markWelcomeSeen, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
 import { isNonEmptyString } from "../../utils/validation";
 
-// isAdmin here is what the frontend uses to decide whether to even show the
-// Admin nav item -- the backend route itself still re-checks ADMIN_EMAILS
-// independently (admin.controller.ts), so this is purely a UX gate (nobody
-// who isn't allowed in ever sees "Admin" in the sidebar), not the security
-// boundary.
+// O isAdmin aqui é o que o frontend usa pra decidir se mostra o item Admin no
+// menu -- a rota do backend confere o ADMIN_EMAILS de novo, por conta
+// própria (admin.controller.ts), então isto é só uma trava de tela (quem não
+// pode entrar nunca vê "Admin" no menu), e não a barreira de segurança.
 async function toPublicUser(user: UserRow) {
   // Chaves do app que mudam o que a tela mostra: a tela Plano só aparece com
   // a cobrança ligada; o aviso de manutenção aparece pra todo mundo.
@@ -37,14 +48,14 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-// A compressed small avatar (client resizes before encoding) comfortably
-// fits well under this -- generous headroom for the base64 blow-up, still
-// nowhere near Firestore's 1MB document cap.
+// Uma foto pequena e comprimida (o navegador reduz antes de codificar) cabe
+// com folga -- sobra espaço pro aumento do base64 e ainda fica bem longe do
+// limite de 1MB por documento do Firestore.
 const MAX_PHOTO_DATA_URL_LENGTH = 300_000;
 
-// Firebase Auth owns credentials; this just makes sure a Firestore profile
-// doc exists for the signed-in user. Idempotent -- safe to call on every
-// sign-in, not just the first one ever.
+// O Firebase Auth cuida das credenciais; isto só garante que existe um
+// documento de perfil no Firestore pra quem entrou. Pode chamar várias vezes
+// -- é seguro em todo login, não só no primeiro.
 export async function bootstrapHandler(req: Request, res: Response) {
   const { displayName } = req.body ?? {};
   if (!isNonEmptyString(displayName)) {
@@ -63,17 +74,17 @@ export async function bootstrapHandler(req: Request, res: Response) {
     void sendNewSignupEmail(user);
   }
 
-  // isNew lets the frontend show the welcome tour only to brand-new
-  // accounts (including a first Google/Apple sign-in, which never goes
-  // through the "Criar conta" form).
+  // O isNew deixa o frontend mostrar a apresentação de boas-vindas só pra
+  // conta nova de verdade (inclusive no primeiro login com Google/Apple, que
+  // nunca passa pelo formulário "Criar conta").
   res.status(200).json({ ...(await toPublicUser(user)), isNew });
 }
 
-// Called explicitly by the frontend right after a real sign-in (login,
-// Google sign-in, or register) -- NOT from the silent token-refresh path
-// (onIdTokenChanged fires roughly hourly and would otherwise flood this as
-// "logins"). Purely for the Admin > Logs "who's coming in" view; carries no
-// password or token, just who and when.
+// Chamado de propósito pelo frontend logo depois de um login de verdade
+// (e-mail, Google ou cadastro) -- NÃO pela renovação silenciosa do token (o
+// onIdTokenChanged dispara mais ou menos a cada hora e encheria isto de
+// "logins" falsos). Serve só pra tela Admin > Logs "quem está entrando"; não
+// leva senha nem token, só quem e quando.
 export async function logLoginEventHandler(req: Request, res: Response) {
   const { event } = req.body ?? {};
   const validEvent: AccessEvent = event === "register" ? "register" : "login";
@@ -120,10 +131,10 @@ export async function updateProfileHandler(req: Request, res: Response) {
     updates.phone = phone === null || phone.trim() === "" ? null : phone.trim();
   }
 
-  // Firebase Auth owns the credential itself -- this only keeps our own
-  // Firestore copy in sync after the client has already changed it there
-  // (verifyBeforeUpdateEmail sends a confirmation link; we mirror the
-  // intended address immediately rather than tracking that async flow).
+  // O Firebase Auth é dono da credencial -- isto só mantém a nossa cópia no
+  // Firestore igual depois que o navegador já mudou lá (o
+  // verifyBeforeUpdateEmail manda um link de confirmação; a gente já espelha o
+  // endereço novo na hora, em vez de acompanhar esse fluxo assíncrono).
   if (email !== undefined) {
     if (!isNonEmptyString(email) || !isValidEmail(email)) {
       res.status(400).json({ error: "email must be a valid email address" });
@@ -153,20 +164,20 @@ export async function updateProfileHandler(req: Request, res: Response) {
   res.status(200).json(await toPublicUser(user));
 }
 
-// Self-service "sair de todos os dispositivos": invalidates every refresh
-// token Firebase has issued for this user, so every other signed-in device
-// (and the current one, once its ID token naturally expires or is checked
-// with checkRevoked -- see middleware/auth.ts) gets logged out. Firebase
-// itself has no "list active sessions" API to show first; this is the same
-// all-or-nothing revocation every major provider offers here.
+// "Sair de todos os dispositivos": invalida todo refresh token que o
+// Firebase emitiu pra este usuário, então todo outro aparelho logado (e este
+// também, quando o token dele vencer ou for conferido com checkRevoked -- ver
+// middleware/auth.ts) é deslogado. O Firebase não tem uma API de "listar
+// sessões ativas" pra mostrar antes; é a mesma revogação tudo-ou-nada que os
+// grandes provedores oferecem.
 export async function revokeSessionsHandler(req: Request, res: Response) {
   await auth.revokeRefreshTokens(req.user!.id);
   res.status(204).send();
 }
 
-// "Excluir conta" -- erases the person's data and their login for good (see
-// deleteAccount.service.ts for exactly what goes and what stays with the
-// rest of the group).
+// "Excluir conta" -- apaga de vez os dados da pessoa e o login dela (ver
+// deleteAccount.service.ts pra saber exatamente o que vai e o que fica com o
+// resto do grupo).
 export async function deleteAccountHandler(req: Request, res: Response) {
   await deleteAccountForUser(req.user!.id);
   res.status(204).send();

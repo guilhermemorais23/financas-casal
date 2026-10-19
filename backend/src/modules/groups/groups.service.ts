@@ -142,8 +142,8 @@ export async function createNewInvite(userId: string): Promise<string> {
   return invite.token;
 }
 
-// "Desvincular conta": no data reconciliation, just detach -- the group's
-// data is untouched and stays fully accessible to whoever remains in it.
+// "Desvincular conta": não reconcilia dados, só desliga -- os dados do grupo
+// ficam intactos e continuam acessíveis pra quem ficou nele.
 // Só sai do grupo aberto; os outros grupos da pessoa continuam como estão.
 export async function leaveGroup(userId: string): Promise<void> {
   const user = await findUserById(userId);
@@ -152,11 +152,10 @@ export async function leaveGroup(userId: string): Promise<void> {
   await removeUserFromGroup(user, groupId);
 }
 
-// Any member can remove any other -- same mutual-trust model already used
-// for managing joint accounts/transactions, there's no owner/admin role on
-// a group. Removing yourself is what leaveGroup is for instead, so it's
-// rejected here rather than silently doing the same thing under a
-// different name.
+// Qualquer membro pode remover qualquer outro -- o mesmo modelo de confiança
+// mútua das contas e lançamentos conjuntos; um grupo não tem dono nem admin.
+// Remover a si mesmo é função do leaveGroup, então aqui é recusado, em vez
+// de fazer a mesma coisa com outro nome sem avisar.
 export async function removeMemberForUser(userId: string, targetUserId: string): Promise<void> {
   const groupId = await requireGroupId(userId);
   if (targetUserId === userId) {
@@ -192,9 +191,9 @@ export async function getGroupForUser(userId: string): Promise<{
     pendingInvite && pendingInvite.inviterId === userId ? pendingInvite.token : null;
 
   const balanceByAccountId = new Map(balanceRows.map((row) => [row.accountId, row.balanceCents]));
-  // Personal accounts are independent money: only the joint account and the
-  // requester's own personal account come back, so a groupmate's personal
-  // balance/name never reaches anyone else.
+  // Contas pessoais são dinheiro independente: só voltam a conta conjunta e a
+  // conta pessoal de quem pediu, então o saldo e o nome da conta pessoal de um
+  // colega de grupo nunca chegam a mais ninguém.
   const visibleAccounts = accounts
     .filter((account) => account.type === "joint" || account.ownerUserId === userId)
     .map((account) => ({

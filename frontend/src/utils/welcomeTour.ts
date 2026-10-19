@@ -22,7 +22,7 @@ export function markWelcomeTourShown(userId: string): void {
   try {
     localStorage.setItem(shownKey(userId), "1");
   } catch {
-    // ignore
+    // ignora
   }
 }
 

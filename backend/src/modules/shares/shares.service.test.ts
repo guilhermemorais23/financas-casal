@@ -36,7 +36,8 @@ describe("shares", () => {
     expect(shared.ownerName).toBe("A");
     expect(shared).not.toHaveProperty("ownerId");
 
-    // A groupmate's own personal account never shows up in someone else's link.
+    // A conta pessoal de um colega de grupo nunca aparece no link de outra
+    // pessoa.
     const other = await createShare(userBId, month);
     const otherShared = await getPublicShare(other.id);
     expect(otherShared.transactions.map((t) => t.description)).toEqual(["mercado conjunto"]);

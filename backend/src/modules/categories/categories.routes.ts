@@ -1,3 +1,17 @@
+// ============================================================================
+// MÓDULO categories -- endereços /api/categories
+// ============================================================================
+// O que faz: Categorias de gasto e de receita: as padrão (de todos os grupos)
+//            e as criadas pelo grupo (renomear, trocar emoji, excluir).
+// Quem chama: Conta, Nova despesa, edição de lançamento, importar extrato,
+//             organizar gastos sem categoria.
+//
+// Caminho de um pedido dentro do módulo:
+//   *.routes.ts      endereço -> função (este arquivo)
+//   *.controller.ts  lê e valida o pedido (req.body, req.params), responde
+//   *.service.ts     regra de negócio (quem pode, o que calcula)
+//   *.repository.ts  lê e grava no Firestore
+// ============================================================================
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
@@ -15,10 +29,10 @@ import { isNonEmptyString } from "../../utils/validation";
 export class CategoryNotFoundError extends Error {}
 export class DefaultCategoryError extends Error {}
 
-// Shared by PATCH/DELETE below -- only a category that belongs to this
-// group can be touched. A default (groupId: null) category is shared by
-// every group in the app, so it's never editable/deletable by anyone; a
-// category belonging to a *different* group must 404, not reveal it exists.
+// Usado pelo PATCH e pelo DELETE abaixo -- só dá pra mexer em categoria deste
+// grupo. Uma categoria padrão (groupId: null) é de todos os grupos do app,
+// então ninguém edita nem apaga; uma categoria de *outro* grupo tem que dar
+// 404, sem revelar que existe.
 async function requireOwnCategory(userId: string, categoryId: string) {
   const groupId = await requireGroupId(userId);
   const category = await findCategoryById(categoryId);

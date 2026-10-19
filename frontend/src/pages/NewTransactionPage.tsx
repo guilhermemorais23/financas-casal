@@ -133,8 +133,9 @@ export function NewTransactionPage() {
   ]
     .filter(Boolean)
     .join(" · ");
-  // Live preview only -- the real split (with exact-cent remainder handling)
-  // is computed server-side in splitEvenly() when the transaction is saved.
+  // Só a prévia na tela -- a divisão de verdade (com o tratamento exato dos
+  // centavos que sobram) é calculada no servidor pelo splitEvenly() quando o
+  // lançamento é salvo.
   const parsedAmountPreview = Number(amount.replace(",", "."));
   const perPersonAmount =
     splitType === "equal" && members.length > 0 && parsedAmountPreview > 0
@@ -299,9 +300,9 @@ export function NewTransactionPage() {
       return;
     }
 
-    // Optimistic save: leave the form and show the result right away, the
-    // POST finishes in the background (and offers "Tentar de novo" if the
-    // server rejects it) -- see utils/optimisticTransactions.ts.
+    // Gravação otimista: sai do formulário e mostra o resultado na hora, o POST
+    // termina em segundo plano (e oferece "Tentar de novo" se o servidor
+    // recusar) -- ver utils/optimisticTransactions.ts.
     const account = accounts.find((a) => a.id === accountId);
     const category = categories.find((c) => c.id === categoryId);
     rememberEntry(user?.id ?? "", {

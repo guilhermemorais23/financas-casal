@@ -13,6 +13,6 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 
-# Cloud Run sets $PORT itself (defaults to 8080); the app already reads it
-# from env (see src/config/env.ts), so no hardcoded value needed here.
+# O Cloud Run define a $PORT sozinho (padrão 8080); o app já lê ela do
+# ambiente (ver src/config/env.ts), então não precisa fixar um valor aqui.
 CMD ["node", "dist/index.js"]

@@ -18,8 +18,8 @@ import {
 import { InvalidAccountError } from "../transactions/transactions.service";
 import { isNonEmptyString, isValidAmount } from "../../utils/validation";
 
-// Same cap as the profile avatar -- a compressed, client-resized photo
-// comfortably clears this regardless of what the original file was.
+// O mesmo limite da foto de perfil -- uma foto comprimida e redimensionada no
+// navegador cabe com folga, seja qual for o arquivo original.
 const MAX_PHOTO_DATA_URL_LENGTH = 300_000;
 
 // Os erros das metas viram a mesma resposta em toda rota.
