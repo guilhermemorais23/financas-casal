@@ -1,6 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
+import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { findAccountForOwner } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
+import { InvalidCategoryError } from "../transactions/transactions.service";
 import {
   prepareTransactionDelete,
   runLedgerTransaction,
@@ -37,6 +39,8 @@ export interface CreateDebtInput {
   scope: DebtScope;
   startMonth: string;
   dueDay: number | null;
+  // Opcional: categoria do gasto que entra no extrato ao pagar.
+  categoryId?: string | null;
 }
 
 export interface DebtWithInstallments {
@@ -48,6 +52,7 @@ export interface DebtWithInstallments {
   installmentsCount: number;
   startMonth: string;
   dueDay: number | null;
+  categoryId: string | null;
   createdBy: string;
   installments: (DebtInstallmentRow & { dueDate: string | null })[];
   paidAmount: number;
@@ -59,6 +64,9 @@ export interface DebtWithInstallments {
 export async function createDebt(userId: string, input: CreateDebtInput) {
   const groupId = await requireGroupId(userId);
   const ownerUserId = input.scope === "joint" ? null : userId;
+  if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {
+    throw new InvalidCategoryError();
+  }
 
   const debt = await insertDebt({
     groupId,
@@ -70,6 +78,7 @@ export async function createDebt(userId: string, input: CreateDebtInput) {
     installmentsCount: input.installmentsCount,
     startMonth: input.startMonth,
     dueDay: input.dueDay,
+    categoryId: input.categoryId ?? null,
   });
 
   // A parcela N entra, por padrão, em startMonth + (N-1) -- ex.: uma dívida que
@@ -119,6 +128,7 @@ export async function listDebts(userId: string): Promise<DebtWithInstallments[]>
       installmentsCount: debt.installmentsCount,
       startMonth: debt.startMonth,
       dueDay: debt.dueDay,
+      categoryId: debt.categoryId,
       createdBy: debt.createdBy,
       installments: installmentsWithDueDate,
       paidAmount,
@@ -178,7 +188,7 @@ export async function setInstallmentPaidForUser(
         accountId: account.id,
         accountType: account.type,
         accountOwnerId: account.ownerUserId,
-        categoryId: null,
+        categoryId: debt.categoryId,
         payerId: userId,
         createdBy: userId,
         description: single ? debt.name : `${debt.name} — parcela ${installment.installmentNumber}/${debt.installmentsCount}`,

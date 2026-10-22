@@ -21,6 +21,9 @@ export interface DebtRow {
   // closingDay/dueDay movem toda a conta do ciclo da fatura), a parcela de uma
   // dívida já entra num mês de verdade pelo referenceMonth, com ou sem dueDay.
   dueDay: number | null;
+  // Categoria do gasto que entra no extrato quando a parcela é paga. Usada
+  // pela conta "só esta vez" (1 parcela); dívidas antigas não têm (null).
+  categoryId: string | null;
 }
 
 export interface DebtInstallmentRow {
@@ -53,6 +56,7 @@ function toDebtRow(doc: FirebaseFirestore.DocumentSnapshot): DebtRow {
     installmentsCount: data.installmentsCount,
     startMonth: data.startMonth ?? currentMonthParam(),
     dueDay: data.dueDay ?? null,
+    categoryId: data.categoryId ?? null,
   };
 }
 
@@ -81,6 +85,7 @@ export async function insertDebt(input: {
   installmentsCount: number;
   startMonth: string;
   dueDay: number | null;
+  categoryId: string | null;
 }): Promise<DebtRow> {
   const ref = await debtsCol.add({
     groupId: input.groupId,
@@ -92,6 +97,7 @@ export async function insertDebt(input: {
     installmentsCount: input.installmentsCount,
     startMonth: input.startMonth,
     dueDay: input.dueDay,
+    categoryId: input.categoryId,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });

@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { isValidMonthParam } from "../../utils/month";
 import { NoGroupError } from "../groups/groups.service";
+import { InvalidCategoryError } from "../transactions/transactions.service";
 import {
   DebtNotFoundError,
   ForbiddenError,
@@ -20,7 +21,7 @@ function isValidDueDay(value: unknown): value is number {
 }
 
 export async function createDebtHandler(req: Request, res: Response) {
-  const { name, description, totalAmount, installmentsCount, scope, startMonth, dueDay } = req.body ?? {};
+  const { name, description, totalAmount, installmentsCount, scope, startMonth, dueDay, categoryId } = req.body ?? {};
 
   if (
     !isNonEmptyString(name) ||
@@ -29,7 +30,8 @@ export async function createDebtHandler(req: Request, res: Response) {
       (typeof installmentsCount !== "number" || !Number.isInteger(installmentsCount) || installmentsCount < 1)) ||
     (scope !== undefined && scope !== "personal" && scope !== "joint") ||
     !isValidMonthParam(startMonth) ||
-    (dueDay !== undefined && dueDay !== null && !isValidDueDay(dueDay))
+    (dueDay !== undefined && dueDay !== null && !isValidDueDay(dueDay)) ||
+    (categoryId !== undefined && categoryId !== null && !isNonEmptyString(categoryId))
   ) {
     res.status(400).json({
       error:
@@ -38,15 +40,25 @@ export async function createDebtHandler(req: Request, res: Response) {
     return;
   }
 
-  const debt = await createDebt(req.user!.id, {
-    name: name.trim(),
-    description: isNonEmptyString(description) ? description.trim() : null,
-    totalAmount,
-    installmentsCount: installmentsCount ?? 1,
-    scope: (scope as DebtScope) ?? "personal",
-    startMonth,
-    dueDay: dueDay ?? null,
-  });
+  let debt;
+  try {
+    debt = await createDebt(req.user!.id, {
+      name: name.trim(),
+      description: isNonEmptyString(description) ? description.trim() : null,
+      totalAmount,
+      installmentsCount: installmentsCount ?? 1,
+      scope: (scope as DebtScope) ?? "personal",
+      startMonth,
+      dueDay: dueDay ?? null,
+      categoryId: categoryId ?? null,
+    });
+  } catch (err) {
+    if (err instanceof InvalidCategoryError) {
+      res.status(400).json({ error: "Categoria inválida." });
+      return;
+    }
+    throw err;
+  }
   res.status(201).json(debt);
 }
 

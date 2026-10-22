@@ -109,6 +109,17 @@ export function isHeavyRequest(method: string, path: string): boolean {
   return method === "GET" && path.startsWith("/public/shares/");
 }
 
+// Resposta do /api/health: além do "ok", qual commit está no ar. O Render
+// preenche RENDER_GIT_COMMIT em todo deploy (inclusive com Docker), então dá
+// pra conferir depois de um merge se o código novo já subiu -- é só comparar
+// com o git log do GitHub. No seu PC a variável não existe e vem null.
+// (O número da versão não serve aqui: o semantic-release só sobe a versão
+// depois do deploy, então o código no ar mostraria sempre a anterior.)
+export function healthBody(env: NodeJS.ProcessEnv = process.env): { status: "ok"; commit: string | null } {
+  const commit = env.RENDER_GIT_COMMIT?.trim();
+  return { status: "ok", commit: commit ? commit.slice(0, 7) : null };
+}
+
 export function createApp() {
   const app = express();
   app.set("trust proxy", TRUST_PROXY);
@@ -153,7 +164,7 @@ export function createApp() {
   app.get("/api/health", (_req, res) => {
     void maybeRunDailyJobs();
     void maybeRunOpsChecks();
-    res.status(200).json({ status: "ok" });
+    res.status(200).json(healthBody());
   });
 
   app.get("/api/me", requireAuth, asyncHandler(meHandler));
