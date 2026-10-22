@@ -3,6 +3,8 @@ import { createTestGroup } from "../../test-helpers";
 import { createDebt, listDebts, setInstallmentPaidForUser } from "./debts.service";
 import { findTransactionById } from "../transactions/transactions.repository";
 import { addMonths, todayInBrazil } from "../../utils/month";
+import { insertCategory } from "../categories/categories.repository";
+import { InvalidCategoryError } from "../transactions/transactions.service";
 
 function currentMonthParam(): string {
   const now = new Date();
@@ -107,5 +109,43 @@ describe("setInstallmentPaidForUser", () => {
     const tx = await findTransactionById(paid.transactionId!);
     expect(tx?.occurredAt).toBe(`${start}-01`);
     expect(tx?.description).toBe("Geladeira — parcela 1/2");
+  });
+
+  it("conta só esta vez com categoria: o gasto pago sai com essa categoria", async () => {
+    const { groupId, userAId } = await createTestGroup();
+    const category = await insertCategory({ groupId, name: "Academia", emoji: null });
+    const debt = await createDebt(userAId, {
+      name: "Mensalidade atrasada",
+      description: null,
+      totalAmount: 129.9,
+      installmentsCount: 1,
+      scope: "personal",
+      startMonth: currentMonthParam(),
+      dueDay: 10,
+      categoryId: category.id,
+    });
+    const [found] = (await listDebts(userAId)).filter((d) => d.id === debt.id);
+    expect(found.categoryId).toBe(category.id);
+
+    const paid = await setInstallmentPaidForUser(userAId, debt.id, found.installments[0].id, true);
+    expect((await findTransactionById(paid.transactionId!))?.categoryId).toBe(category.id);
+  });
+
+  it("recusa categoria de outro grupo", async () => {
+    const outro = await createTestGroup();
+    const alheia = await insertCategory({ groupId: outro.groupId, name: "De outro grupo", emoji: null });
+    const { userAId } = await createTestGroup();
+    await expect(
+      createDebt(userAId, {
+        name: "Teste",
+        description: null,
+        totalAmount: 10,
+        installmentsCount: 1,
+        scope: "personal",
+        startMonth: currentMonthParam(),
+        dueDay: 10,
+        categoryId: alheia.id,
+      })
+    ).rejects.toBeInstanceOf(InvalidCategoryError);
   });
 });

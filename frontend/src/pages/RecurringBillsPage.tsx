@@ -244,6 +244,8 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
           scope,
           startMonth: dueDate.slice(0, 7),
           dueDay: Number(dueDate.slice(8, 10)),
+          // Entra no extrato com esta categoria quando for paga.
+          categoryId: categoryId || null,
         },
       });
       const when = parseLocalDate(dueDate).toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
@@ -253,6 +255,7 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
       setDescription("");
       setAmount("");
       setDueDate("");
+      setCategoryId("");
       setShowForm(false);
       await load();
     } catch (err) {
@@ -676,6 +679,17 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
                       ? "Já venceu. Ela entra como atrasada, e quando você pagar o gasto fica com a data do pagamento."
                       : "Pode ser uma data que já passou."}
                   </p>
+                </div>
+                <div className="field">
+                  <label htmlFor="bill-category">Categoria (opcional)</label>
+                  <select id="bill-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                    <option value="">Sem categoria</option>
+                    {categoriesFor(categories, "expense").map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </>
             ) : (
