@@ -144,7 +144,7 @@ A maioria dos módulos tem as mesmas 4 camadas: `*.routes.ts` (endereço → fun
 - **Painel**: saldo do mês, quanto dá pra gastar por dia, o que vence em 7 dias, alertas inteligentes, avisos de conta a pagar, widgets (meta, cartão com limite), fechamento do mês e cache instantâneo entre meses já visitados. Botão de lançar com opções.
 - **Contas** (lista única pelo que vence primeiro):
   - **Contas fixas**: lançam sozinhas todo mês (`/api/recurring-bills`). Pra contas que mudam de valor (celular, água, luz), dá pra marcar "Mais ou menos" (estimativa) ou "Não sei ainda": o PAR. avisa antes de vencer, com "Já paguei" e "Me lembre mais tarde".
-  - **Conta só esta vez**: conta avulsa (boleto, multa, mensalidade atrasada). É uma dívida de 1 parcela; ao pagar, entra no extrato com a data do pagamento.
+  - **Conta só esta vez**: conta avulsa (boleto, multa, mensalidade atrasada), com categoria opcional. É uma dívida de 1 parcela; ao pagar, entra no extrato com a data do pagamento e a categoria escolhida.
   - **Parceladas**: compras em N parcelas, com dia de vencimento opcional.
 - **Cartões**: compras, fatura atual, limite disponível, **limite em porcentagem com aviso aos 80%**, quanto volta a cada fatura paga. **Limite garantido** (o dinheiro guardado vira o limite): guardar e resgatar como transferência, fora de Entrada/Saída e relatórios.
 - **Metas**: com prazo e mínimo por mês, **submetas**, guardar tirando da conta, retirar, histórico e "Não é gasto".
@@ -163,5 +163,4 @@ A maioria dos módulos tem as mesmas 4 camadas: `*.routes.ts` (endereço → fun
 
 ## O que falta (próximas etapas)
 
-- **Categoria na conta "só esta vez"**: o gasto entra no extrato sem categoria, porque a dívida (que é como a conta avulsa é guardada) não tem campo de categoria. Precisa de um campo novo em `debts`.
-- **Versão no `/api/health`**: a rota só responde `{"status":"ok"}`, então não dá pra confirmar de fora qual versão o backend está rodando depois de um deploy.
+Nada em aberto no momento. Pra conferir qual commit está no ar depois de um deploy: `https://financas-casal-m496.onrender.com/api/health` responde `{"status":"ok","commit":"abc1234"}`, e é só comparar com o `git log` do `master`.
