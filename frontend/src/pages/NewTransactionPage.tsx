@@ -471,7 +471,10 @@ export function NewTransactionPage() {
                   type="button"
                   className={`filter-chip${paymentMethod === option.value ? " active" : ""}`}
                   aria-pressed={paymentMethod === option.value}
-                  onClick={() => setPaymentMethod((current) => (current === option.value ? "" : option.value))}
+                  // Só marca: a tela já abre com a última forma usada marcada, e
+                  // tocar nela de novo desmarcava -- o Crédito sumia e a compra
+                  // era salva sem ir pro cartão. Pra trocar, toca em outra.
+                  onClick={() => setPaymentMethod(option.value)}
                 >
                   {option.label}
                 </button>
