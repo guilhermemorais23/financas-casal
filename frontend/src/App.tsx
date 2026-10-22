@@ -90,6 +90,7 @@ const NewTransactionPage = namedLazy(() => import("./pages/NewTransactionPage"),
 const PayablesPage = namedLazy(() => import("./pages/PayablesPage"), "PayablesPage");
 const BillsPage = namedLazy(() => import("./pages/BillsPage"), "BillsPage");
 const CardsPage = namedLazy(() => import("./pages/CardsPage"), "CardsPage");
+const CardStatementPage = namedLazy(() => import("./pages/CardStatementPage"), "CardStatementPage");
 const GoalsPage = namedLazy(() => import("./pages/GoalsPage"), "GoalsPage");
 const ReportsPage = namedLazy(() => import("./pages/ReportsPage"), "ReportsPage");
 const AccountPage = namedLazy(() => import("./pages/AccountPage"), "AccountPage");
@@ -179,6 +180,15 @@ function App() {
               element={
                 <ProtectedRoute requireGroup>
                   <CardsPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* Fatura do cartão, tela própria (?mes=AAAA-MM pra outra fatura). */}
+            <Route
+              path="/cards/:id/fatura"
+              element={
+                <ProtectedRoute requireGroup>
+                  <CardStatementPage />
                 </ProtectedRoute>
               }
             />

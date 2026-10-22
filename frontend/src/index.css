@@ -9271,3 +9271,305 @@ select {
 }
 @media (prefers-reduced-motion: reduce) { .global-fab-plus { transition: none; } }
 .app-bottom-nav-add { border: 0; font: inherit; cursor: pointer; }
+
+/* ==========================================================================
+   Marca verde (out/2026): verde #0e5e58, creme #f4f1ea, âmbar #f2b84b.
+   Só troca os valores dos tokens que o app inteiro já usa -- os nomes
+   continuam os antigos (coffee = cor principal, olive/peach = destaque), assim
+   todo lugar que usa var(--coffee-500) etc. muda junto. As cores de status e
+   as de gráfico por categoria (--series-*) não mudam.
+   ========================================================================== */
+:root {
+  --surface: #fffdf8;
+  --page-plane: #f4f1ea;
+  --ink-primary: #1c2b2a;
+  --ink-secondary: #566461;
+  --ink-muted: #7b8582;
+  --gridline: #e7e2d8;
+  --baseline: #cfc8ba;
+  --border: rgba(28, 43, 42, 0.09);
+  --coffee-100: #e3efec;
+  --coffee-300: #7fb3ac;
+  --coffee-500: #0e5e58;
+  --coffee-600: #0b4c47;
+  --coffee-700: #093e3a;
+  --coffee-900: #062b28;
+  --cream: #fffdf8;
+  --peach: #f2b84b;
+  --peach-dark: #d99a2b;
+  --olive-100: #fdf1d8;
+  --olive-500: #f2b84b;
+  --olive-600: #d99a2b;
+  --olive-700: #a87516;
+  --person-1: #0e5e58;
+  --person-2: #f2b84b;
+  --tan-card: #fffdf8;
+  --tan-input: #fffdf8;
+  --tan-track: #ebe6db;
+  --glyph-bg: #f4f1ea;
+  --focus-ring: #f2b84b;
+  /* Faixa verde do topo do Painel e lado verde do login. */
+  --band-bg: #0e5e58;
+  --band-ink: #fffdf8;
+  --band-muted: rgba(255, 253, 248, 0.72);
+  --band-line: rgba(255, 253, 248, 0.16);
+  --band-soft: #266d69;
+  --accent-ink: #1c2b2a;
+}
+
+:root[data-theme="dark"] {
+  --surface: #14201e;
+  --page-plane: #0d1615;
+  --ink-primary: #eef3f1;
+  --ink-secondary: #a9bab6;
+  --ink-muted: #7f918d;
+  --gridline: #24332f;
+  --baseline: #33463f;
+  --border: rgba(238, 243, 241, 0.1);
+  --coffee-100: rgba(63, 164, 151, 0.16);
+  --coffee-500: #3fa497;
+  --coffee-600: #2f8a7e;
+  --person-1: #5cc0b2;
+  --person-2: #f2b84b;
+  --tan-card: #14201e;
+  --tan-input: #0d1615;
+  --tan-track: #24332f;
+  --glyph-bg: #1b2a27;
+  --focus-ring: #f2b84b;
+  --band-bg: #0f3f3b;
+  --band-soft: #17524d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --surface: #14201e;
+    --page-plane: #0d1615;
+    --ink-primary: #eef3f1;
+    --ink-secondary: #a9bab6;
+    --ink-muted: #7f918d;
+    --gridline: #24332f;
+    --baseline: #33463f;
+    --border: rgba(238, 243, 241, 0.1);
+    --coffee-100: rgba(63, 164, 151, 0.16);
+    --coffee-500: #3fa497;
+    --coffee-600: #2f8a7e;
+    --person-1: #5cc0b2;
+    --person-2: #f2b84b;
+    --tan-card: #14201e;
+    --tan-input: #0d1615;
+    --tan-track: #24332f;
+    --glyph-bg: #1b2a27;
+    --focus-ring: #f2b84b;
+    --band-bg: #0f3f3b;
+    --band-soft: #17524d;
+  }
+}
+
+/* ---- Menu no topo (PC). No celular continuam a barra de cima e a de baixo. */
+.app-topnav { display: none; }
+@media (min-width: 721px) {
+  .app-shell-nav.has-topnav { flex-direction: column; }
+  .app-shell-nav.has-topnav .app-sidebar { display: none; }
+  .app-topnav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.65rem 1.5rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .app-topnav .brand-lockup { flex: none; }
+  .app-topnav .group-switcher { width: auto; flex: none; max-width: 12rem; }
+  .app-topnav-links { display: flex; gap: 0.15rem; flex-wrap: nowrap; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .app-topnav-link {
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .app-topnav-link:hover { color: var(--color-text); background: var(--glyph-bg); }
+  .app-topnav-link.active { background: var(--coffee-500); color: #fffdf8; }
+  .app-topnav-right { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; }
+  .app-topnav-launch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 1rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--olive-500);
+    color: var(--accent-ink);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .app-topnav-launch .icon { width: 16px; height: 16px; }
+  .app-shell-nav.has-topnav .global-fab { display: none; }
+  /* O menu do Lançar (Despesa, Receita...) abre embaixo do botão do topo,
+     e não mais no canto de baixo, em cima do + flutuante. */
+  .app-shell-nav.has-topnav .launch-menu { top: 3.75rem; bottom: auto; right: 1.5rem; }
+  /* O menu da conta abria pra cima (ficava no rodapé do menu lateral);
+     no topo, abre pra baixo. */
+  .app-topnav .user-menu { top: calc(100% + 0.5rem); bottom: auto; }
+  .app-topnav-avatar { position: relative; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%; }
+  /* Sem o menu lateral (que tinha os sublinks do Admin), as abas do Admin
+     aparecem também no PC. */
+  .admin-section-tabs { display: flex; }
+}
+@media (min-width: 721px) and (max-width: 1100px) {
+  .app-topnav .group-switcher-name { display: none; }
+  .app-topnav-link { padding-inline: 0.6rem; }
+}
+
+/* ---- Painel: faixa verde do resumo do mês ---- */
+.painel-band {
+  --series-1: #f2b84b;
+  --gridline: rgba(255, 253, 248, 0.14);
+  --color-text-muted: rgba(255, 253, 248, 0.66);
+  --color-card: var(--band-bg);
+  background: var(--band-bg);
+  color: var(--band-ink);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.75rem 1.25rem;
+  display: grid;
+  gap: 1rem;
+}
+.painel-band-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 1.5rem; align-items: center; }
+.painel-band-text { display: grid; gap: 0.15rem; justify-items: start; min-width: 0; }
+.painel-band-text .health-badge { margin-top: 0.6rem; }
+.painel-band-chart { min-width: 0; }
+@media (max-width: 900px) { .painel-band-top { grid-template-columns: minmax(0, 1fr); } }
+.painel-band-kicker { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-muted); }
+.painel-band-big {
+  margin: 0.2rem 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 6vw, 3.6rem);
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.painel-band-line { margin: 0; color: var(--band-muted); font-size: 0.95rem; }
+.painel-band-line strong { color: var(--band-ink); }
+.painel-band-debt { margin: 0.35rem 0 0; font-size: 0.9rem; color: var(--band-muted); }
+.painel-band-debt strong { color: #ffd2a1; }
+.painel-band .income-text { color: #9fe0b8; }
+.painel-band .health-badge { background: var(--band-soft); color: var(--band-ink); border-color: transparent; }
+.painel-band-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--band-line);
+  padding-top: 0.85rem;
+}
+.painel-band-kpi { display: flex; flex-direction: column; gap: 0.15rem; padding-inline: 1rem; border-left: 1px solid var(--band-line); min-width: 0; }
+.painel-band-kpi:first-child { padding-left: 0; border-left: 0; }
+.painel-band-kpi-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--band-muted); }
+.painel-band-kpi-value { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.painel-band-kpi-sub { font-size: 0.78rem; color: var(--band-muted); }
+.painel-band .stat-delta { color: var(--band-muted); }
+.painel-band .stat-delta.good { color: #9fe0b8; }
+.painel-band .stat-delta.bad { color: #ffb4a8; }
+@media (max-width: 560px) {
+  .painel-band { padding: 1.25rem 1.1rem 1rem; }
+  .painel-band-kpis { grid-template-columns: minmax(0, 1fr); gap: 0.7rem; }
+  .painel-band-kpi { padding-left: 0; border-left: 0; }
+}
+
+/* ---- Painel: duas colunas (dinheiro | atenção, cartões, orçamento) ---- */
+.painel-grid > .card, .painel-side > .card { max-width: none; margin: 0; min-width: 0; }
+.painel-split { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: start; }
+.painel-side { display: grid; gap: 1rem; min-width: 0; }
+@media (max-width: 1060px) { .painel-split { grid-template-columns: minmax(0, 1fr); } }
+
+/* Barra empilhada de "Onde está seu dinheiro": uma fatia por conta. */
+.money-bar { display: flex; height: 10px; border-radius: var(--radius-pill); overflow: hidden; background: var(--tan-track); margin: 0.35rem 0 0.75rem; }
+.money-bar span { display: block; height: 100%; }
+.money-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.55rem; vertical-align: middle; }
+
+/* Card do cartão no Painel: abre a fatura. */
+.painel-card-link { display: block; color: inherit; text-decoration: none; border-radius: var(--radius-sm); }
+.painel-card-link:hover .painel-card-name { text-decoration: underline; }
+
+/* ---- Fatura do cartão (tela própria) ---- */
+.fatura-page { display: grid; gap: 1rem; }
+.fatura-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.fatura-head h1 { margin: 0; }
+.fatura-months { display: inline-flex; align-items: center; gap: 0.25rem; background: var(--surface); border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 0.2rem; }
+.fatura-months button { border: 0; background: none; font: inherit; font-weight: 600; padding: 0.35rem 0.7rem; border-radius: var(--radius-pill); color: var(--color-text); cursor: pointer; }
+.fatura-months button:hover { background: var(--glyph-bg); }
+.fatura-months .fatura-month-label { min-width: 9.5rem; text-align: center; font-weight: 700; }
+.fatura-summary {
+  --series-1: #f2b84b;
+  background: var(--band-bg);
+  color: var(--band-ink);
+  border-radius: var(--radius);
+  padding: 1.35rem 1.5rem;
+  display: grid;
+  gap: 0.9rem;
+}
+.fatura-summary-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.fatura-kicker { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-muted); }
+.fatura-total { margin: 0.2rem 0 0; font-family: var(--font-display); font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 750; letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.fatura-due { margin: 0.3rem 0 0; color: var(--band-muted); }
+.fatura-due strong { color: var(--band-ink); }
+.fatura-status { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.75rem; border-radius: var(--radius-pill); font-size: 0.82rem; font-weight: 700; background: var(--band-soft); }
+.fatura-status.paid { background: #dff3e6; color: #0f5b2e; }
+.fatura-limit { display: grid; gap: 0.35rem; }
+.fatura-limit-track { height: 8px; border-radius: var(--radius-pill); background: var(--band-line); overflow: hidden; }
+.fatura-limit-fill { height: 100%; background: #f2b84b; border-radius: inherit; }
+.fatura-limit-text { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.85rem; color: var(--band-muted); flex-wrap: wrap; }
+.fatura-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.fatura-actions .btn { width: auto; flex: 0 0 auto; margin: 0; }
+.fatura-actions .btn-pay { background: var(--olive-500); color: var(--accent-ink); border: 0; }
+.fatura-actions .btn-ghost-band { background: transparent; color: var(--band-ink); border: 1px solid var(--band-line); }
+.fatura-list { background: var(--surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 0.4rem 1.25rem 0.75rem; }
+.fatura-day { display: flex; justify-content: space-between; align-items: baseline; padding: 0.9rem 0 0.35rem; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-muted); border-bottom: 1px solid var(--color-border); }
+.fatura-row { display: grid; grid-template-columns: 2.3rem minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; padding: 0.65rem 0; border-bottom: 1px solid var(--color-border); }
+.fatura-row:last-child { border-bottom: 0; }
+.fatura-row-icon { width: 2.3rem; height: 2.3rem; border-radius: 50%; display: grid; place-items: center; background: var(--glyph-bg); font-weight: 700; color: var(--coffee-500); }
+.fatura-row-desc { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; min-width: 0; }
+.fatura-row-desc .text-truncate { min-width: 0; }
+.fatura-row-meta { font-size: 0.8rem; color: var(--color-text-muted); }
+.fatura-row-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fatura-parcela { font-size: 0.72rem; font-weight: 700; padding: 0.1rem 0.45rem; border-radius: var(--radius-pill); background: var(--olive-100); color: var(--olive-700); flex: none; }
+.fatura-empty { padding: 1.25rem 0; color: var(--color-text-muted); text-align: center; }
+
+/* ---- Tela de login: lado verde com prévia de exemplo + formulário ---- */
+.login-split { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); background: var(--page-plane); }
+.login-side {
+  background: var(--band-bg);
+  color: var(--band-ink);
+  padding: 2.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.login-side .brand-lockup .brand { color: var(--band-ink); }
+.login-side .brand-dot { color: #f2b84b; }
+.login-side .brand-icon rect:first-child { fill: #f2b84b; }
+.login-side .brand-icon rect:last-child { stroke: #fffdf8; }
+.login-copy { margin-top: auto; display: grid; gap: 0.75rem; max-width: 30rem; }
+.login-copy h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.9rem, 3.4vw, 2.6rem); line-height: 1.08; letter-spacing: -0.025em; text-wrap: balance; }
+.login-copy p { margin: 0; color: var(--band-muted); max-width: 26rem; }
+.login-preview { margin-top: auto; max-width: 24rem; background: var(--band-soft); border-radius: var(--radius); padding: 1rem 1.15rem; display: grid; gap: 0.55rem; }
+.login-preview-title { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--band-muted); }
+.login-preview .money-bar { background: var(--band-line); margin: 0.1rem 0 0.2rem; }
+.login-preview-row { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.9rem; padding-top: 0.45rem; border-top: 1px solid var(--band-line); }
+.login-preview-row strong { font-variant-numeric: tabular-nums; }
+.login-preview-note { margin: 0; font-size: 0.72rem; color: var(--band-muted); }
+.login-main { display: grid; place-items: center; padding: 2rem 1.25rem; }
+.login-main-inner { width: 100%; max-width: 380px; display: grid; gap: 0.75rem; }
+.login-main .card { width: 100%; max-width: none; margin: 0; background: transparent; padding: 0; }
+.login-main .footnote { text-align: center; margin: 0; }
+@media (max-width: 860px) {
+  .login-split { grid-template-columns: minmax(0, 1fr); }
+  .login-side { padding: 1.5rem 1.25rem 1.75rem; }
+  .login-copy { margin-top: 0.5rem; }
+  .login-preview { display: none; }
+}
