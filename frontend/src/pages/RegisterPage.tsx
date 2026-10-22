@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
-import { Brand } from "../components/Brand";
+import { AuthShell } from "../components/AuthShell";
 import { SocialLoginButtons } from "../components/SocialLoginButtons";
 import { PasswordInput } from "../components/PasswordInput";
 import { SlowServerHint, Spinner } from "../components/Spinner";
@@ -62,8 +62,7 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="page-center">
-      <Brand animated />
+    <AuthShell>
       <div className="card">
         <h1>Criar conta</h1>
         <p className="card-subtitle">Grátis para começar. Sem cartão necessário.</p>
@@ -121,6 +120,6 @@ export function RegisterPage() {
         Ao criar a conta você concorda com os <Link to="/termos">termos de uso</Link> e a{" "}
         <Link to="/privacidade">política de privacidade</Link>.
       </p>
-    </div>
+    </AuthShell>
   );
 }

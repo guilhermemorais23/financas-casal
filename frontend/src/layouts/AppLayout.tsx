@@ -1,34 +1,26 @@
 // A MOLDURA DO APP: tudo que aparece em volta de uma tela logada.
-//   - no PC: o menu lateral (app-sidebar), com a marca, o seletor de grupo,
-//     os links e o rodapé com o nome e o menu da conta;
+//   - no PC: a barra do topo (app-topnav), com a marca, o seletor de grupo,
+//     os links, o botão "Lançar" e o menu da conta;
 //   - no celular: a barra do topo (app-mobile-topbar) e a barra de baixo
 //     (app-bottom-nav), com o botão "+" no meio.
 // Cada página usa assim: <AppLayout> ...miolo da tela... </AppLayout>. A
 // página desenha só o miolo; o que é igual em todas fica aqui. Qual barra
-// aparece (lateral ou de baixo) é decidido pelo CSS conforme a largura da
-// tela (index.css), não por código.
+// aparece (a do PC ou as do celular) é decidido pelo CSS conforme a largura
+// da tela (index.css), não por código.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Brand } from "../components/Brand";
-import { type DailyTrendPoint } from "../components/DailyTrendChart";
 import { GlobalAssistant } from "../components/GlobalAssistant";
 import { GroupSwitcher } from "../components/GroupSwitcher";
 import { Icon, type IconName } from "../components/Icon";
-import { IncomeExpenseBars } from "../components/IncomeExpenseBars";
 import { LaunchMenu } from "../components/LaunchMenu";
 import { ProfileSettingsModal } from "../components/ProfileSettingsModal";
 import { BILLS_TABS } from "../components/BillsTabs";
 import { FeedbackChat, useFeedbackUnread } from "../components/FeedbackChat";
 import { useSwipeDownToClose } from "../hooks/useSwipeDownToClose";
 import { useTheme } from "../hooks/useTheme";
-import { currentMonthParam, formatCurrency, monthLongName } from "../utils/format";
-
-interface BudgetSummary {
-  budget: { capAmount: string } | null;
-  spent: number;
-}
 
 interface NavItem {
   to: string;
@@ -36,9 +28,8 @@ interface NavItem {
   icon: IconName;
 }
 
-// Menu lateral do PC, agrupado pra 10 links virarem 4 listas curtas. "Nova
-// despesa" não está aqui -- o + flutuante já faz isso em toda tela.
-// Menu do computador: uma lista só, na ordem de uso (sem títulos de grupo).
+// Menu do PC (barra do topo): uma lista só, na ordem de uso. "Nova despesa"
+// não está aqui -- o botão "Lançar" já faz isso em toda tela.
 // Contas é uma entrada só -- Cartões, A pagar e Empréstimos ficam nas abas
 // dentro dela. couple = só aparece pra quem está com o par no grupo; solo =
 // só pra quem está sozinho.
@@ -50,18 +41,6 @@ const NAV_ITEMS: (NavItem & { couple?: boolean; solo?: boolean })[] = [
   { to: "/goals", label: "Metas", icon: "target" },
   { to: "/shopping", label: "Lista de compras", icon: "cart", couple: true },
   { to: "/account", label: "Conta e grupo", icon: "sliders" },
-];
-
-// Admin não é um link simples -- ele abre um submenu (tratado à parte no JSX
-// abaixo) em vez de ir direto pra uma página.
-const ADMIN_SUBLINKS = [
-  { section: "overview", label: "Visão geral" },
-  { section: "users", label: "Usuários" },
-  { section: "feedback", label: "Feedback" },
-  { section: "announcements", label: "Novidades" },
-  { section: "billing", label: "Assinaturas" },
-  { section: "diagnostics", label: "Diagnóstico" },
-  { section: "logs", label: "Logs" },
 ];
 
 // Celular: Painel · Par · [+] · Contas · Mais. Todo o resto fica na folha
@@ -94,10 +73,6 @@ function readCoupleFlag(userId: string | undefined): boolean | null {
   return null;
 }
 
-// Último valor dos widgets da barra lateral, por mês (vive enquanto o app
-// estiver aberto).
-const sidebarCache = new Map<string, unknown>();
-
 export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const { user, token, logout } = useAuth();
   const { theme, toggle } = useTheme();
@@ -108,45 +83,13 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isLaunchOpen, setIsLaunchOpen] = useState(false);
-  const [isAdminNavOpen, setIsAdminNavOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const moreSheetRef = useRef<HTMLDivElement>(null);
   useSwipeDownToClose(moreSheetRef, () => setIsMoreOpen(false), isMoreOpen);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const isOnNewTransaction = location.pathname === "/transactions/new";
-  // Painel e Relatórios guardam o mês escolhido na URL (?month=...) -- lê o
-  // mesmo valor aqui, pra estes widgets seguirem o mês que está sendo visto, e
-  // não sempre o mês atual de verdade.
   const [searchParams] = useSearchParams();
-  const sidebarMonth = searchParams.get("month") ?? currentMonthParam();
-  // Cada página monta o próprio AppLayout, então sem cache a barra lateral
-  // sumia e voltava a cada troca de tela. Começa com o último valor do mês e
-  // atualiza por trás.
-  const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(
-    () => (sidebarCache.get(`${user?.id}:budget:${sidebarMonth}`) as BudgetSummary | undefined) ?? null
-  );
-  const [dailyTrend, setDailyTrend] = useState<DailyTrendPoint[] | null>(
-    () => (sidebarCache.get(`${user?.id}:trend:${sidebarMonth}`) as DailyTrendPoint[] | undefined) ?? null
-  );
-
-  useEffect(() => {
-    if (!token) return;
-    // Widgets decorativos do menu lateral -- se a busca falhar, eles só somem,
-    // sem mensagem de erro.
-    apiRequest<BudgetSummary>(`/budgets/current?month=${sidebarMonth}`, { token })
-      .then((data) => {
-        sidebarCache.set(`${user?.id}:budget:${sidebarMonth}`, data);
-        setBudgetSummary(data);
-      })
-      .catch(() => setBudgetSummary(null));
-    apiRequest<DailyTrendPoint[]>(`/transactions/daily-series?month=${sidebarMonth}`, { token })
-      .then((data) => {
-        sidebarCache.set(`${user?.id}:trend:${sidebarMonth}`, data);
-        setDailyTrend(data);
-      })
-      .catch(() => setDailyTrend(null));
-  }, [token, sidebarMonth, user?.id]);
 
   // Enquanto não sabe (primeiro acesso), mostra tudo -- a maioria é casal.
   const [isCouple, setIsCouple] = useState<boolean | null>(() => readCoupleFlag(user?.id));
@@ -212,7 +155,8 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
     setIsMoreOpen(false);
   }, [location.pathname]);
 
-  const isOnBills = BILLS_PATHS.includes(location.pathname);
+  // A fatura (/cards/:id/fatura) também fica dentro de Contas.
+  const isOnBills = BILLS_PATHS.includes(location.pathname) || location.pathname.startsWith("/cards/");
   const isOnMore = MORE_PATHS.includes(location.pathname) && !(isSolo && location.pathname === "/reports");
 
   function fromSheet(action: () => void) {
@@ -221,7 +165,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   }
 
   return (
-    <div className="app-shell-nav">
+    <div className="app-shell-nav has-topnav">
       <header className="app-mobile-topbar">
         <Brand animated />
         <GroupSwitcher className="group-switcher-topbar" />
@@ -235,155 +179,119 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         </button>
       </header>
 
-      <aside className="app-sidebar">
-        <div className="app-sidebar-brand">
-          <Brand animated />
-          <GroupSwitcher className="group-switcher-sidebar" />
-        </div>
-        <div className="app-sidebar-scroll">
-        <nav className="app-nav">
+      <header className="app-topnav">
+        <Brand animated />
+        <GroupSwitcher className="group-switcher-topnav" />
+        <nav className="app-topnav-links" aria-label="Menu principal">
           {NAV_ITEMS.filter(showItem).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `app-nav-link${isActive || (item.to === "/contas" && isOnBills) ? " active" : ""}`
+                `app-topnav-link${isActive || (item.to === "/contas" && isOnBills) ? " active" : ""}`
               }
             >
-              <span className="app-nav-icon"><Icon name={item.icon} /></span>
               {item.label}
             </NavLink>
           ))}
           {isSolo && (
-            <Link to={INVITE_PATH} className="app-nav-link app-nav-invite">
-              <span className="app-nav-icon"><Icon name="user" /></span>
+            <Link to={INVITE_PATH} className="app-topnav-link">
               Convidar meu par
             </Link>
           )}
-
           {user?.isAdmin && (
-            <>
-              <button
-                type="button"
-                className={`app-nav-link app-nav-link-expandable${location.pathname === "/admin" ? " active" : ""}`}
-                onClick={() => setIsAdminNavOpen((open) => !open)}
-                aria-expanded={isAdminNavOpen}
-              >
-                <span className="app-nav-icon"><Icon name="wrench" /></span>
-                Admin
-                <span className={`app-nav-chevron${isAdminNavOpen ? " open" : ""}`}>▾</span>
-              </button>
-              {isAdminNavOpen && (
-                <div className="app-nav-submenu">
-                  {ADMIN_SUBLINKS.map((sublink) => (
-                    <Link
-                      key={sublink.section}
-                      to={`/admin?section=${sublink.section}`}
-                      className={`app-nav-sublink${
-                        location.pathname === "/admin" &&
-                        (searchParams.get("section") ?? "overview") === sublink.section
-                          ? " active"
-                          : ""
-                      }`}
-                    >
-                      {sublink.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </>
+            <NavLink to="/admin" className={({ isActive }) => `app-topnav-link${isActive ? " active" : ""}`}>
+              Admin
+            </NavLink>
           )}
         </nav>
-
-        {budgetSummary && <SidebarSpending summary={budgetSummary} month={sidebarMonth} />}
-        {dailyTrend && dailyTrend.length > 0 && (
-          <div className="daily-trend-chart">
-            <p className="app-sidebar-spending-label">Entrada x saída · todas as contas</p>
-            <IncomeExpenseBars
-              income={Number(dailyTrend[dailyTrend.length - 1].income)}
-              expense={Number(dailyTrend[dailyTrend.length - 1].expense)}
-            />
-          </div>
-        )}
-        </div>
-
-        <div className="app-sidebar-footer">
-          <div className="app-sidebar-footer-row">
-            <Avatar photoDataUrl={user?.photoDataUrl} name={user?.displayName} />
-            <span className="app-sidebar-user">{user?.displayName}</span>
-            <div className="user-menu-wrap" ref={userMenuRef}>
-              <button
-                type="button"
-                className="theme-toggle"
-                onClick={() => setIsUserMenuOpen((open) => !open)}
-                aria-haspopup="menu"
-                aria-expanded={isUserMenuOpen}
-                title="Mais opções"
-              >
-                <Icon name="more" />
-              </button>
-              {isUserMenuOpen && (
-                <div className="user-menu" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="user-menu-item"
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      setIsProfileOpen(true);
-                    }}
-                  >
-                    <Icon name="user" />
-                    Editar perfil
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="user-menu-item"
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      setIsAssistantOpen((open) => !open);
-                    }}
-                  >
-                    <Icon name="spark" />
-                    Assistente PAR.
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="user-menu-item"
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      setIsFeedbackOpen(true);
-                    }}
-                  >
-                    <Icon name="chat" />
-                    Fale com a gente
-                    {feedbackUnread > 0 && <span className="unread-badge">{feedbackUnread}</span>}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="user-menu-item"
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      toggle();
-                    }}
-                  >
-                    <Icon name={theme === "dark" ? "sun" : "moon"} />
-                    {theme === "dark" ? "Tema claro" : "Tema escuro"}
-                  </button>
-                  <div className="user-menu-sep" />
-                  <button type="button" role="menuitem" className="user-menu-item danger" onClick={logout}>
-                    <Icon name="logout" />
-                    Sair
-                  </button>
-                </div>
-              )}
-            </div>
+        <div className="app-topnav-right">
+          {/* O mesmo menu de hoje (Despesa, Receita, Importar extrato,
+              Guardar na meta); no PC ele abre embaixo deste botão. */}
+          <button
+            type="button"
+            data-launch-toggle
+            className="app-topnav-launch"
+            aria-expanded={isLaunchOpen}
+            onClick={() => setIsLaunchOpen((open) => !open)}
+          >
+            <Icon name="plus" />
+            Lançar
+          </button>
+          <div className="user-menu-wrap" ref={userMenuRef}>
+            <button
+              type="button"
+              className="app-topnav-avatar"
+              onClick={() => setIsUserMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={isUserMenuOpen}
+              aria-label="Menu da conta"
+              title={user?.displayName ?? "Menu da conta"}
+            >
+              <Avatar photoDataUrl={user?.photoDataUrl} name={user?.displayName} />
+              {feedbackUnread > 0 && <span className="nav-dot" aria-label="Nova resposta" />}
+            </button>
+            {isUserMenuOpen && (
+              <div className="user-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="user-menu-item"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    setIsProfileOpen(true);
+                  }}
+                >
+                  <Icon name="user" />
+                  Editar perfil
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="user-menu-item"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    setIsAssistantOpen((open) => !open);
+                  }}
+                >
+                  <Icon name="spark" />
+                  Assistente PAR.
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="user-menu-item"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    setIsFeedbackOpen(true);
+                  }}
+                >
+                  <Icon name="chat" />
+                  Fale com a gente
+                  {feedbackUnread > 0 && <span className="unread-badge">{feedbackUnread}</span>}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="user-menu-item"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    toggle();
+                  }}
+                >
+                  <Icon name={theme === "dark" ? "sun" : "moon"} />
+                  {theme === "dark" ? "Tema claro" : "Tema escuro"}
+                </button>
+                <div className="user-menu-sep" />
+                <button type="button" role="menuitem" className="user-menu-item danger" onClick={logout}>
+                  <Icon name="logout" />
+                  Sair
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      </aside>
+      </header>
 
       {isProfileOpen && <ProfileSettingsModal onClose={() => setIsProfileOpen(false)} />}
       <main className={`app-main${wide ? " app-main-wide" : ""}`}>
@@ -546,28 +454,3 @@ function Avatar({ photoDataUrl, name }: { photoDataUrl?: string | null; name?: s
   );
 }
 
-function SidebarSpending({ summary, month }: { summary: BudgetSummary; month: string }) {
-  const cap = summary.budget ? Number(summary.budget.capAmount) : null;
-  const rawPercent = cap ? (summary.spent / cap) * 100 : 0;
-  const percent = Math.min(100, rawPercent);
-  const severity = rawPercent >= 100 ? "over" : rawPercent >= 80 ? "warning" : "";
-
-  return (
-    <div className="app-sidebar-spending">
-      <p className="app-sidebar-spending-label">Nossa Conta em {monthLongName(month)}</p>
-      <p className="app-sidebar-spending-value">{formatCurrency(summary.spent)}</p>
-      {cap ? (
-        <>
-          <div className="progress-track thin">
-            <div className={`progress-fill${severity ? ` ${severity}` : ""}`} style={{ width: `${percent}%` }} />
-          </div>
-          <p className="app-sidebar-spending-cap">de {formatCurrency(cap)}</p>
-        </>
-      ) : (
-        <Link to="/account" className="app-sidebar-spending-cap link">
-          Definir orçamento
-        </Link>
-      )}
-    </div>
-  );
-}

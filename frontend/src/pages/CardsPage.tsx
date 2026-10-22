@@ -1,30 +1,21 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
-import { currentMonthParam, formatCurrency, monthYearLabel, parseLocalDate, todayISO } from "../utils/format";
+import { formatCurrency, monthYearLabel, parseLocalDate } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
-import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
-import { initialOf } from "../utils/initial";
 import { SplitSummary } from "../components/SplitSummary";
 import { personColor } from "../utils/categoryColor";
 import { readCreditCardPreference, saveCreditCardPreference } from "../utils/creditCardPreference";
-import { categoriesFor, type CategoryType } from "../utils/categories";
 
 interface MemberRow {
   id: string;
   displayName: string;
-}
-
-interface CategoryRow {
-  id: string;
-  name: string;
-  emoji: string | null;
-  type?: CategoryType;
 }
 
 interface PersonTotal {
@@ -61,23 +52,6 @@ interface LimitRelease {
   availableAfter: string;
 }
 
-interface PurchaseRow {
-  id: string;
-  description: string;
-  amount: string;
-  categoryId: string | null;
-  buyerId: string;
-  purchaseDate: string;
-  installmentNumber: number;
-  installmentsCount: number;
-}
-
-const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 6, 12];
-
-interface StatementDetail extends StatementSummary {
-  purchases: PurchaseRow[];
-}
-
 export function CardsPage() {
   const { user, token } = useAuth();
   const { showToast } = useToast();
@@ -86,7 +60,6 @@ export function CardsPage() {
 
   const [cards, setCards] = useState<CardRow[] | null>(() => readCache(cacheKey));
   const [members, setMembers] = useState<MemberRow[]>([]);
-  const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
@@ -103,19 +76,6 @@ export function CardsPage() {
   const [defaultCreditCardId, setDefaultCreditCardId] = useState(() => readCreditCardPreference(user?.id ?? ""));
   const [scope, setScope] = useState<"personal" | "joint">("joint");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
-  const [statementMonth, setStatementMonth] = useState(currentMonthParam());
-  const [statement, setStatement] = useState<StatementDetail | null>(null);
-  const [isLoadingStatement, setIsLoadingStatement] = useState(false);
-
-  const [purchaseDescription, setPurchaseDescription] = useState("");
-  const [purchaseAmount, setPurchaseAmount] = useState("");
-  const [purchaseCategoryId, setPurchaseCategoryId] = useState("");
-  const [purchaseBuyerId, setPurchaseBuyerId] = useState(user?.id ?? "");
-  const [purchaseDate, setPurchaseDate] = useState(() => todayISO());
-  const [purchaseInstallments, setPurchaseInstallments] = useState("1");
-  const [isAddingPurchase, setIsAddingPurchase] = useState(false);
 
   // "Guardar mais" / "Resgatar" num cartão com limite garantido -- um
   // formulário na linha por vez, ligado ao cartão que abriu.
@@ -139,7 +99,6 @@ export function CardsPage() {
   useEffect(() => {
     loadCards();
     apiRequest<{ members: MemberRow[] }>("/groups/me", { token }).then((res) => setMembers(res.members));
-    apiRequest<CategoryRow[]>("/categories", { token }).then(setCategories);
   }, [token]);
 
   async function handleCreate(event: FormEvent) {
@@ -205,117 +164,10 @@ export function CardsPage() {
     if (!confirmed) return;
     try {
       await apiRequest(`/cards/${cardId}`, { method: "DELETE", token });
-      if (expandedCardId === cardId) setExpandedCardId(null);
       showToast("Cartão excluído");
       await loadCards();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível remover o cartão");
-    }
-  }
-
-  async function loadStatement(cardId: string, month: string) {
-    setIsLoadingStatement(true);
-    try {
-      const result = await apiRequest<StatementDetail>(`/cards/${cardId}/statement?month=${month}`, { token });
-      setStatement(result);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível carregar a fatura");
-    } finally {
-      setIsLoadingStatement(false);
-    }
-  }
-
-  function toggleExpand(card: CardRow) {
-    if (expandedCardId === card.id) {
-      setExpandedCardId(null);
-      setStatement(null);
-      return;
-    }
-    setExpandedCardId(card.id);
-    setIsAddingPurchase(false);
-    const month = card.currentStatement.month;
-    setStatementMonth(month);
-    loadStatement(card.id, month);
-  }
-
-  function handleMonthChange(cardId: string, month: string) {
-    setStatementMonth(month);
-    loadStatement(cardId, month);
-  }
-
-  async function handleAddPurchase(event: FormEvent, cardId: string) {
-    event.preventDefault();
-    setError(null);
-    const parsedAmount = Number(purchaseAmount.replace(",", "."));
-    if (!purchaseDescription.trim() || !(parsedAmount > 0) || !purchaseBuyerId || !purchaseDate) {
-      setError("Informe descrição, valor, quem comprou e a data.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      await apiRequest(`/cards/${cardId}/purchases`, {
-        method: "POST",
-        token,
-        body: {
-          description: purchaseDescription.trim(),
-          amount: parsedAmount,
-          categoryId: purchaseCategoryId || null,
-          buyerId: purchaseBuyerId,
-          purchaseDate,
-          installments: Number(purchaseInstallments),
-        },
-      });
-      setPurchaseDescription("");
-      setPurchaseAmount("");
-      setPurchaseCategoryId("");
-      setPurchaseInstallments("1");
-      setIsAddingPurchase(false);
-      showToast("Compra lançada no cartão");
-      await loadStatement(cardId, statementMonth);
-      await loadCards();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível lançar a compra");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleDeletePurchase(cardId: string, purchaseId: string) {
-    try {
-      await apiRequest(`/cards/${cardId}/purchases/${purchaseId}`, { method: "DELETE", token });
-      showToast("Compra excluída");
-      await loadStatement(cardId, statementMonth);
-      await loadCards();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível remover a compra");
-    }
-  }
-
-  async function handleToggleStatementPaid(card: CardRow) {
-    const isPaid = statement?.isPaid ?? card.currentStatement.isPaid;
-    if (!isPaid) {
-      const confirmed = await confirm({
-        title: `Marcar a fatura de ${monthYearLabel(statementMonth)} como paga?`,
-        body: `Isso lança uma despesa de ${formatCurrency(
-          Number(statement?.total ?? card.currentStatement.total)
-        )} dividida entre quem comprou o quê.`,
-        confirmLabel: "Marcar como paga",
-        tone: "primary",
-      });
-      if (!confirmed) return;
-    }
-    try {
-      await apiRequest(`/cards/${card.id}/statements/${statementMonth}`, {
-        method: "PATCH",
-        token,
-        body: { isPaid: !isPaid },
-      });
-      showToast(isPaid ? "Fatura reaberta" : "Fatura paga", isPaid ? { variant: "info" } : undefined);
-      await loadStatement(card.id, statementMonth);
-      await loadCards();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível atualizar a fatura");
     }
   }
 
@@ -451,7 +303,6 @@ export function CardsPage() {
   }
 
   function renderCard(card: CardRow) {
-    const isExpanded = expandedCardId === card.id;
     const s = card.currentStatement;
     const limitCents = card.limit !== null ? Number(card.limit) : null;
     const limitUsedCents = card.limitUsed !== null ? Number(card.limitUsed) : null;
@@ -660,200 +511,11 @@ export function CardsPage() {
           />
         )}
 
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ marginTop: "0.9rem", width: "100%" }}
-          onClick={() => toggleExpand(card)}
-        >
-          {isExpanded ? "Fechar fatura" : "Ver fatura"}
-        </button>
-
-        {isExpanded && (
-          <div style={{ marginTop: "0.9rem" }}>
-            <div className="field" style={{ marginBottom: "0.75rem" }}>
-              <label htmlFor={`statement-month-${card.id}`}>Fatura de</label>
-              <input
-                id={`statement-month-${card.id}`}
-                type="month"
-                value={statementMonth}
-                onChange={(e) => handleMonthChange(card.id, e.target.value)}
-              />
-            </div>
-
-            {isLoadingStatement || !statement ? (
-              <p className="loading-page" style={{ padding: "1rem 0" }}>
-                Carregando...
-              </p>
-            ) : (
-              <>
-                <div className="section-header">
-                  <p className="card-subtitle" style={{ marginBottom: 0 }}>
-                    Total: <strong>{formatCurrency(Number(statement.total))}</strong> · vence{" "}
-                    {monthYearLabel(statement.month)}
-                  </p>
-                  {statement.purchases.length > 0 && (
-                    <button type="button" className="btn-icon" onClick={() => handleToggleStatementPaid(card)}>
-                      {statement.isPaid ? "Desmarcar paga" : "Marcar como paga"}
-                    </button>
-                  )}
-                </div>
-
-                <ul className="transaction-list">
-                  {statement.purchases.map((purchase) => {
-                    const category = categories.find((c) => c.id === purchase.categoryId);
-                    return (
-                      <li key={purchase.id} className="transaction-row">
-                        <span className="transaction-icon">{initialOf(category?.name ?? purchase.description)}</span>
-                        <div className="transaction-info">
-                          <span className="transaction-desc">
-                            <span className="text-truncate">{purchase.description}</span>
-                            {purchase.installmentsCount > 1 && (
-                              <span className="badge installment-badge">
-                                {purchase.installmentNumber}/{purchase.installmentsCount}
-                              </span>
-                            )}
-                          </span>
-                          <span className="transaction-meta">
-                            {memberName(purchase.buyerId)} · {category?.name ?? "Sem categoria"}
-                          </span>
-                        </div>
-                        <span className="transaction-amount expense">
-                          −{formatCurrency(Number(purchase.amount))}
-                        </span>
-                        {!statement.isPaid && (
-                          <div className="transaction-row-actions">
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              title="Remover compra"
-                              onClick={() => handleDeletePurchase(card.id, purchase.id)}
-                            >
-                              <Icon name="trash" />
-                            </button>
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                  {statement.purchases.length === 0 && (
-                    <p className="empty-state">Nenhuma compra lançada nessa fatura ainda.</p>
-                  )}
-                </ul>
-
-                {!statement.isPaid && (
-                  <>
-                    {isAddingPurchase ? (
-                      <form onSubmit={(e) => handleAddPurchase(e, card.id)} style={{ marginTop: "0.75rem" }}>
-                        <div className="field">
-                          <label htmlFor={`purchase-desc-${card.id}`}>O que foi</label>
-                          <input
-                            id={`purchase-desc-${card.id}`}
-                            value={purchaseDescription}
-                            onChange={(e) => setPurchaseDescription(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div className="field">
-                          <label htmlFor={`purchase-amount-${card.id}`}>Valor (R$)</label>
-                          <input
-                            id={`purchase-amount-${card.id}`}
-                            inputMode="decimal"
-                            placeholder="0,00"
-                            value={purchaseAmount}
-                            onChange={(e) => setPurchaseAmount(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div className="field">
-                          <label htmlFor={`purchase-buyer-${card.id}`}>Quem comprou</label>
-                          <select
-                            id={`purchase-buyer-${card.id}`}
-                            value={purchaseBuyerId}
-                            onChange={(e) => setPurchaseBuyerId(e.target.value)}
-                          >
-                            {(card.scope === "joint" ? members : members.filter((m) => m.id === user?.id)).map(
-                              (member) => (
-                                <option key={member.id} value={member.id}>
-                                  {member.id === user?.id ? "Você" : member.displayName}
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </div>
-                        <div className="field">
-                          <label htmlFor={`purchase-category-${card.id}`}>Categoria (opcional)</label>
-                          <select
-                            id={`purchase-category-${card.id}`}
-                            value={purchaseCategoryId}
-                            onChange={(e) => setPurchaseCategoryId(e.target.value)}
-                          >
-                            <option value="">Sem categoria</option>
-                            {categoriesFor(categories, "expense").map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.emoji ?? ""} {category.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="field">
-                          <label htmlFor={`purchase-date-${card.id}`}>Data</label>
-                          <input
-                            id={`purchase-date-${card.id}`}
-                            type="date"
-                            value={purchaseDate}
-                            onChange={(e) => setPurchaseDate(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div className="field">
-                          <label htmlFor={`purchase-installments-${card.id}`}>Parcelas</label>
-                          <select
-                            id={`purchase-installments-${card.id}`}
-                            value={purchaseInstallments}
-                            onChange={(e) => setPurchaseInstallments(e.target.value)}
-                          >
-                            {INSTALLMENT_OPTIONS.map((count) => (
-                              <option key={count} value={count}>
-                                {count === 1 ? "1x (à vista)" : `${count}x`}
-                              </option>
-                            ))}
-                          </select>
-                          {card.limit !== null && Number(purchaseInstallments) > 1 && (
-                            <p className="field-hint">
-                              O valor total trava no limite agora -- só libera conforme cada fatura mensal é paga.
-                            </p>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", gap: "0.5rem" }}>
-                          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                            {isSubmitting ? "Salvando..." : "Lançar compra"}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() => setIsAddingPurchase(false)}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ marginTop: "0.75rem", width: "100%" }}
-                        onClick={() => setIsAddingPurchase(true)}
-                      >
-                        + Lançar compra
-                      </button>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        )}
+        {/* A fatura agora tem tela própria (CardStatementPage): compras por
+            dia, vencimento, limite e as faturas anteriores e seguintes. */}
+        <Link to={`/cards/${card.id}/fatura`} className="btn btn-ghost" style={{ marginTop: "0.9rem", width: "100%" }}>
+          Ver fatura
+        </Link>
       </div>
     );
   }

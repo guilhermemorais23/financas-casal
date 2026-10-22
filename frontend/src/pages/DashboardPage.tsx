@@ -277,6 +277,8 @@ function dueLabel(days: number): string {
   return `vence em ${days} dias`;
 }
 
+const MONEY_COLORS = ["var(--coffee-500)", "var(--olive-500)", "var(--coffee-300)", "var(--baseline)"];
+
 const MONTH_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
 function upcomingWhen(item: UpcomingItem): string {
@@ -668,6 +670,21 @@ export function DashboardPage() {
   const accountsTotal = visibleAccounts.reduce((sum, account) => sum + account.balance, 0);
   // Guardado em metas também é seu (saiu da conta, ou já estava guardado).
   const moneyTotal = accountsTotal + savedInSecuredCards + painel.savedInGoals;
+  // Barra de "Onde está seu dinheiro": uma fatia por linha positiva, na
+  // ordem da lista, e a bolinha de cada linha usa a mesma cor. Linha
+  // negativa (conta no vermelho, o que você deve) fica fora da barra e ganha
+  // bolinha vermelha.
+  const moneySlices = [
+    ...visibleAccounts.map((account) => ({ key: `acc-${account.id}`, value: account.balance })),
+    { key: "goals", value: painel.savedInGoals },
+    { key: "cards", value: savedInSecuredCards },
+    { key: "loans", value: loansOutstanding },
+  ].filter((slice) => slice.value > 0);
+  const sliceTotal = moneySlices.reduce((sum, slice) => sum + slice.value, 0);
+  const sliceColor = (key: string) => {
+    const index = moneySlices.findIndex((slice) => slice.key === key);
+    return index < 0 ? "var(--status-critical)" : MONEY_COLORS[index % MONEY_COLORS.length];
+  };
 
 
   // "Dá pra gastar por dia": só pro mês que está sendo vivido -- olhando um mês
@@ -780,75 +797,194 @@ export function DashboardPage() {
           )}
           {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
 
-          {/* 1. O mês e o que precisa de atenção */}
-          <div className="painel-grid painel-hero-row">
-            <section className="card painel-hero" aria-label="Resumo do mês">
-              <div className="painel-hero-top">
-                <div>
-                  {/* O número grande é o saldo do mês (entrou - saiu), não o
-                      saldo acumulado das contas: quem lança só o salário todo
-                      mês e não lança todo gasto veria o saldo crescer mês a mês
-                      sem ter esse dinheiro de verdade. O saldo das contas fica
-                      em "Onde está seu dinheiro". */}
-                  <p className="painel-kicker">Saldo de {monthLongName(month)}</p>
-                  <p className={`painel-big${monthLeft < 0 ? " negative" : ""}`}>
-                    <AnimatedNumber value={monthLeft} />
+          {/* 1. O mês: faixa verde com o saldo, o gráfico e Entrou/Saiu/Guardado */}
+          <section className="painel-band" aria-label="Resumo do mês">
+            <div className="painel-band-top">
+              <div className="painel-band-text">
+                {/* O número grande é o saldo do mês (entrou - saiu), não o
+                    saldo acumulado das contas: quem lança só o salário todo
+                    mês e não lança todo gasto veria o saldo crescer mês a mês
+                    sem ter esse dinheiro de verdade. O saldo das contas fica
+                    em "Onde está seu dinheiro". */}
+                <p className="painel-band-kicker">Saldo de {monthLongName(month)}</p>
+                <p className="painel-band-big">
+                  <AnimatedNumber value={monthLeft} />
+                </p>
+                {dailyAllowance !== null && dailyAllowance > 0 && (
+                  <p className="painel-band-line">
+                    Dá <strong>{formatCurrency(dailyAllowance)} por dia</strong> até o dia {lastDayOfMonth}.
                   </p>
-                  {dailyAllowance !== null && dailyAllowance > 0 && (
-                    <p className="hero-line">
-                      Dá <strong>{formatCurrency(dailyAllowance)} por dia</strong> até o dia {lastDayOfMonth}.
-                    </p>
-                  )}
-                  {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
-                    <p className="hero-note">Você já gastou mais do que entrou este mês.</p>
-                  )}
-                </div>
+                )}
+                {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
+                  <p className="painel-band-line">Você já gastou mais do que entrou este mês.</p>
+                )}
+                {/* Com dívidas, o saldo do mês sozinho engana: mostra junto
+                    quanto sobra depois de pagar o que deve (a mesma conta do
+                    "Depois de pagar o que deve" de "Onde está seu dinheiro"). */}
+                {totalDebtRemaining + owedOnCards + owedToPeople > 0 && (
+                  <p className="painel-band-debt">
+                    Contando o que você deve:{" "}
+                    <strong>
+                      {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople)}
+                    </strong>
+                  </p>
+                )}
                 <FinancialHealthBadge monthlyIncome={income} monthlyExpense={expense} />
               </div>
               {painel.heroDaily.length > 0 && (
-                <BalanceLineChart
-                  points={painel.heroDaily}
-                  todayDay={month === currentMonthParam() ? new Date().getDate() : null}
-                />
+                <div className="painel-band-chart">
+                  <BalanceLineChart
+                    points={painel.heroDaily}
+                    todayDay={month === currentMonthParam() ? new Date().getDate() : null}
+                  />
+                </div>
               )}
-              <div className="painel-kpis">
-                <div className="painel-kpi">
-                  <span className="painel-kpi-label">Entrou</span>
-                  <span className="painel-kpi-value income-text">{formatCurrency(income)}</span>
-                  {incomeDelta !== null && (
-                    <span className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
-                      {incomeDelta >= 0 ? "+" : ""}
-                      {Math.round(incomeDelta)}% vs {prevMonthName}
-                    </span>
-                  )}
-                </div>
-                <div className="painel-kpi">
-                  <span className="painel-kpi-label">Saiu</span>
-                  <span className="painel-kpi-value">{formatCurrency(expense)}</span>
-                  {expenseDelta !== null && (
-                    <span className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
-                      {expenseDelta >= 0 ? "+" : ""}
-                      {Math.round(expenseDelta)}% vs {prevMonthName}
-                    </span>
-                  )}
-                </div>
-                <div className="painel-kpi">
-                  <span className="painel-kpi-label">Guardado</span>
-                  <span className="painel-kpi-value">{formatCurrency(savedInCards)}</span>
-                  <span className="painel-kpi-sub">metas e cartão garantido</span>
-                </div>
+            </div>
+            <div className="painel-band-kpis">
+              <div className="painel-band-kpi">
+                <span className="painel-band-kpi-label">Entrou</span>
+                <span className="painel-band-kpi-value income-text">{formatCurrency(income)}</span>
+                {incomeDelta !== null && (
+                  <span className={`stat-delta ${incomeDelta >= 0 ? "good" : "bad"}`}>
+                    {incomeDelta >= 0 ? "+" : ""}
+                    {Math.round(incomeDelta)}% vs {prevMonthName}
+                  </span>
+                )}
               </div>
-              {(loansOutstanding > 0 || lentOut !== 0) && (
-                <p className="hero-note">
-                  {lentOut > 0
-                    ? `${formatCurrency(lentOut)} emprestados este mês. Não é gasto, vai voltar pra você.`
-                    : lentOut < 0
-                    ? `${formatCurrency(-lentOut)} de empréstimos voltaram pra você este mês.`
-                    : `${formatCurrency(loansOutstanding)} emprestados ainda vão voltar pra você.`}
+              <div className="painel-band-kpi">
+                <span className="painel-band-kpi-label">Saiu</span>
+                <span className="painel-band-kpi-value">{formatCurrency(expense)}</span>
+                {expenseDelta !== null && (
+                  <span className={`stat-delta ${expenseDelta <= 0 ? "good" : "bad"}`}>
+                    {expenseDelta >= 0 ? "+" : ""}
+                    {Math.round(expenseDelta)}% vs {prevMonthName}
+                  </span>
+                )}
+              </div>
+              <div className="painel-band-kpi">
+                <span className="painel-band-kpi-label">Guardado</span>
+                <span className="painel-band-kpi-value">{formatCurrency(savedInCards)}</span>
+                <span className="painel-band-kpi-sub">metas e cartão garantido</span>
+              </div>
+            </div>
+            {(loansOutstanding > 0 || lentOut !== 0) && (
+              <p className="painel-band-line">
+                {lentOut > 0
+                  ? `${formatCurrency(lentOut)} emprestados este mês. Não é gasto, vai voltar pra você.`
+                  : lentOut < 0
+                  ? `${formatCurrency(-lentOut)} de empréstimos voltaram pra você este mês.`
+                  : `${formatCurrency(loansOutstanding)} emprestados ainda vão voltar pra você.`}
+              </p>
+            )}
+          </section>
+
+          {isUncatOpen && (
+            <UncategorizedModal
+              month={month}
+              onClose={() => setIsUncatOpen(false)}
+              onSaved={() => load(month, { skipCache: true, silent: true })}
+            />
+          )}
+          {isImportOpen && (
+            <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { skipCache: true, silent: true })} />
+          )}
+
+          {/* 2. Onde está o dinheiro | atenção, cartões e orçamento */}
+          <div className="painel-grid painel-split">
+            <section className="card money-card" aria-label="Onde está seu dinheiro">
+              <p className="card-title">Onde está seu dinheiro</p>
+              <p className="money-card-total">{formatCurrency(moneyTotal)}</p>
+              {sliceTotal > 0 && (
+                <div className="money-bar" role="img" aria-label="Como o dinheiro está dividido">
+                  {moneySlices.map((slice) => (
+                    <span key={slice.key} style={{ width: `${(slice.value / sliceTotal) * 100}%`, background: sliceColor(slice.key) }} />
+                  ))}
+                </div>
+              )}
+              <ul className="money-card-list">
+                {visibleAccounts.map((account) => (
+                  <li key={account.id}>
+                    <span>
+                      <span className="money-dot" style={{ background: sliceColor(`acc-${account.id}`) }} aria-hidden="true" />
+                      {account.name}
+                    </span>
+                    <strong className={account.balance < 0 ? "danger-text" : ""}>{formatCurrency(account.balance)}</strong>
+                  </li>
+                ))}
+                {painel.savedInGoals > 0 && (
+                  <li>
+                    <span>
+                      <span className="money-dot" style={{ background: sliceColor("goals") }} aria-hidden="true" />
+                      <Link to="/goals" className="link">
+                        Guardado em metas
+                      </Link>
+                    </span>
+                    <strong>{formatCurrency(painel.savedInGoals)}</strong>
+                  </li>
+                )}
+                {savedInSecuredCards > 0 && (
+                  <li>
+                    <span>
+                      <span className="money-dot" style={{ background: sliceColor("cards") }} aria-hidden="true" />
+                      <Link to="/cards" className="link">
+                        Guardado em cartões
+                      </Link>
+                    </span>
+                    <strong>{formatCurrency(savedInSecuredCards)}</strong>
+                  </li>
+                )}
+                {loansOutstanding > 0 && (
+                  <li>
+                    <span>
+                      <span className="money-dot" style={{ background: sliceColor("loans") }} aria-hidden="true" />
+                      <Link to="/loans" className="link">
+                        Vão te pagar
+                      </Link>
+                    </span>
+                    <strong>{formatCurrency(loansOutstanding)}</strong>
+                  </li>
+                )}
+                {owedToPeople > 0 && (
+                  <li>
+                    <span>
+                      <span className="money-dot" style={{ background: sliceColor("owe") }} aria-hidden="true" />
+                      <Link to="/loans?lado=devo" className="link">
+                        Você deve pra pessoas
+                      </Link>
+                    </span>
+                    <strong className="owe-text">−{formatCurrency(owedToPeople)}</strong>
+                  </li>
+                )}
+                {totalDebtRemaining > 0 && (
+                  <li>
+                    <span>
+                      <span className="money-dot" style={{ background: sliceColor("debts") }} aria-hidden="true" />
+                      <Link to="/a-pagar?aba=dividas" className="link">
+                        Dívidas em aberto
+                      </Link>
+                    </span>
+                    <strong className="owe-text">−{formatCurrency(totalDebtRemaining)}</strong>
+                  </li>
+                )}
+              </ul>
+              {/* O outro lado: tira dívidas e faturas/parcelas de cartão em
+                  aberto, pra o número não mostrar só o que vai entrar. */}
+              {totalDebtRemaining + owedOnCards + owedToPeople > 0 && (
+                <p className="money-card-future money-card-owed">
+                  Depois de pagar o que deve:{" "}
+                  <strong
+                    className={
+                      moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople < 0 ? "danger-text" : ""
+                    }
+                  >
+                    {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople)}
+                  </strong>
                 </p>
               )}
+              <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>
             </section>
 
+            <div className="painel-side">
             <section className="card painel-attention" aria-label="Precisa de atenção">
               <div className="section-header">
                 <p className="card-title">Precisa de atenção</p>
@@ -929,88 +1065,6 @@ export function DashboardPage() {
                 <p className="empty-state">Tudo em dia: nada vence nos próximos 7 dias.</p>
               )}
             </section>
-          </div>
-
-          {isUncatOpen && (
-            <UncategorizedModal
-              month={month}
-              onClose={() => setIsUncatOpen(false)}
-              onSaved={() => load(month, { skipCache: true, silent: true })}
-            />
-          )}
-          {isImportOpen && (
-            <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { skipCache: true, silent: true })} />
-          )}
-
-          {/* 2. Dinheiro, cartões e orçamento */}
-          <div className="painel-grid painel-3">
-            <section className="card money-card" aria-label="Onde está seu dinheiro">
-              <p className="card-title">Onde está seu dinheiro</p>
-              <p className="money-card-total">{formatCurrency(moneyTotal)}</p>
-              <ul className="money-card-list">
-                {visibleAccounts.map((account) => (
-                  <li key={account.id}>
-                    <span>{account.name}</span>
-                    <strong className={account.balance < 0 ? "danger-text" : ""}>{formatCurrency(account.balance)}</strong>
-                  </li>
-                ))}
-                {painel.savedInGoals > 0 && (
-                  <li>
-                    <Link to="/goals" className="link">
-                      Guardado em metas
-                    </Link>
-                    <strong>{formatCurrency(painel.savedInGoals)}</strong>
-                  </li>
-                )}
-                {savedInSecuredCards > 0 && (
-                  <li>
-                    <Link to="/cards" className="link">
-                      Guardado em cartões
-                    </Link>
-                    <strong>{formatCurrency(savedInSecuredCards)}</strong>
-                  </li>
-                )}
-                {loansOutstanding > 0 && (
-                  <li>
-                    <Link to="/loans" className="link">
-                      Vão te pagar
-                    </Link>
-                    <strong>{formatCurrency(loansOutstanding)}</strong>
-                  </li>
-                )}
-                {owedToPeople > 0 && (
-                  <li>
-                    <Link to="/loans?lado=devo" className="link">
-                      Você deve pra pessoas
-                    </Link>
-                    <strong className="owe-text">−{formatCurrency(owedToPeople)}</strong>
-                  </li>
-                )}
-                {totalDebtRemaining > 0 && (
-                  <li>
-                    <Link to="/a-pagar?aba=dividas" className="link">
-                      Dívidas em aberto
-                    </Link>
-                    <strong className="owe-text">−{formatCurrency(totalDebtRemaining)}</strong>
-                  </li>
-                )}
-              </ul>
-              {/* O outro lado: tira dívidas e faturas/parcelas de cartão em
-                  aberto, pra o número não mostrar só o que vai entrar. */}
-              {totalDebtRemaining + owedOnCards + owedToPeople > 0 && (
-                <p className="money-card-future money-card-owed">
-                  Depois de pagar o que deve:{" "}
-                  <strong
-                    className={
-                      moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople < 0 ? "danger-text" : ""
-                    }
-                  >
-                    {formatCurrency(moneyTotal + loansOutstanding - totalDebtRemaining - owedOnCards - owedToPeople)}
-                  </strong>
-                </p>
-              )}
-              <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>
-            </section>
 
             <section className="card painel-cards" aria-label="Cartões">
               <div className="section-header">
@@ -1036,7 +1090,10 @@ export function DashboardPage() {
                     return (
                       <li key={card.id}>
                         <div className="painel-card-top">
-                          <strong>{card.name}</strong>
+                          {/* Toca no nome e abre a fatura do cartão (CardStatementPage). */}
+                          <Link to={`/cards/${card.id}/fatura`} className="painel-card-link painel-card-name">
+                            <strong>{card.name}</strong>
+                          </Link>
                           {limit !== null && used !== null ? (
                             <span className={`painel-card-state ${tone}`}>{Math.round(percent)}% do limite</span>
                           ) : (
@@ -1116,6 +1173,7 @@ export function DashboardPage() {
                 <p className="empty-state">Defina um teto mensal na Conta pra acompanhar aqui.</p>
               )}
             </section>
+            </div>
           </div>
 
           {/* 3. Pra onde foi o dinheiro */}

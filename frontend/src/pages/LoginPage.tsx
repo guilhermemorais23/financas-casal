@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
-import { Brand } from "../components/Brand";
+import { AuthShell } from "../components/AuthShell";
 import { SocialLoginButtons } from "../components/SocialLoginButtons";
 import { PasswordInput } from "../components/PasswordInput";
 import { SlowServerHint, Spinner } from "../components/Spinner";
@@ -72,8 +72,7 @@ export function LoginPage() {
 
   if (isResetMode) {
     return (
-      <div className="page-center">
-        <Brand />
+      <AuthShell>
         <div className="card">
           <h1>Redefinir senha</h1>
           <p className="card-subtitle">Informe seu email e mandamos um link pra você trocar a senha.</p>
@@ -115,22 +114,12 @@ export function LoginPage() {
             Voltar pro login
           </button>
         </p>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="page-center auth-page">
-      <div className="auth-hero">
-        <span className="auth-wordmark">
-          PAR<span className="brand-dot">.</span>
-        </span>
-        <span className="auth-split" aria-hidden="true">
-          <span />
-          <span />
-        </span>
-        <p className="auth-tagline">Finanças em grupo, sem atrito.</p>
-      </div>
+    <AuthShell>
       <div className="card auth-card">
         <h1>Entrar</h1>
 
@@ -189,6 +178,6 @@ export function LoginPage() {
       <p className="footnote footnote-muted">
         <Link to="/termos">Termos de uso</Link> · <Link to="/privacidade">Política de privacidade</Link>
       </p>
-    </div>
+    </AuthShell>
   );
 }
