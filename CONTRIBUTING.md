@@ -1,5 +1,30 @@
 # Como contribuir
 
+## Rodando no seu PC
+
+Precisa de Node.js 20+ (o CI usa o 22) e Java 21+ (o emulador do Firestore roda em Java). Não precisa de nenhuma credencial real: tudo roda contra o **emulador do Firebase** (projeto fake `demo-par`).
+
+1. Copie as variáveis de ambiente de exemplo e instale as dependências:
+   ```
+   cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env
+   npm install
+   npm --prefix backend install
+   npm --prefix frontend install
+   ```
+2. Suba tudo junto (emulador, backend em `http://localhost:4000` e frontend em `http://localhost:5173`; a tela do emulador fica em `http://localhost:4001`):
+   ```
+   npm run dev
+   ```
+3. Na primeira vez, em outro terminal, crie as categorias padrão e um grupo de exemplo já preenchido:
+   ```
+   npm run seed
+   npm run seed:demo
+   ```
+   Entre em `http://localhost:5173/login` com **demo@par.local** / **demo1234** (a outra pessoa do grupo é **ana.demo@par.local**, mesma senha).
+
+Os dados do emulador ficam salvos em `emulator-data/` entre uma execução e outra.
+
 ## Branches
 
 - **`master`** — produção. É o que está rodando no Render (backend) e no Firebase Hosting (frontend). Ninguém commita direto aqui.
@@ -13,7 +38,7 @@ Fluxo de qualquer mudança, sempre nessa ordem:
    git pull
    git checkout -b feat/minha-tarefa
    ```
-2. **Testar localmente** — rodar `npm run dev` (emulador + backend + frontend), confirmar que o fluxo que você mexeu continua funcionando (veja o roteiro em [README.md](README.md#verificando-que-funciona)) e que `npm --prefix backend run build`, `npm --prefix frontend run build` e `npm run test:backend` passam.
+2. **Testar localmente** — rodar `npm run dev` (emulador + backend + frontend), confirmar que o fluxo que você mexeu continua funcionando e que `npm --prefix backend run build`, `npm --prefix frontend run build` e `npm run test:backend` passam.
 3. **Commitar e subir o branch**:
    ```
    git add <arquivos>

@@ -10,6 +10,8 @@ Deploy automático pelo CI: no push em `master`, o passo "Deploy do backend (Ren
 
 URL atual: `https://financas-casal-m496.onrender.com` (plano free — "dorme" depois de um tempo sem uso; a primeira requisição depois disso demora alguns segundos pra acordar).
 
+Pra conferir qual commit está no ar depois de um deploy: `https://financas-casal-m496.onrender.com/api/health` responde `{"status":"ok","commit":"abc1234"}`; é só comparar com o `git log` do `master`.
+
 Configuração do serviço (só precisa mexer se for recriar o serviço do zero):
 - **Root Directory**: `backend`
 - **Runtime**: Docker (usa `backend/Dockerfile`)
