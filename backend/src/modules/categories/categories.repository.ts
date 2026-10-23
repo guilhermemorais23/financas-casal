@@ -135,9 +135,37 @@ export async function updateCategory(
   return toCategoryRow(doc);
 }
 
-// Lançamentos e orçamentos que apontam pra esta categoria pelo id passam a
-// aparecer como "Sem categoria" (todo lugar que lê já trata categoria que
-// não existe mais) -- não precisa apagar em cascata.
-export async function deleteCategory(categoryId: string): Promise<void> {
+// Onde mais o id da categoria fica guardado. Ao excluir, tudo isso passa a
+// ficar SEM categoria (categoryId null), que é o que a tela de excluir promete.
+// Só esconder o nome não basta: Relatórios agrupa pelo id (viravam dois
+// "Sem categoria") e o aviso de classificar gastos só pega categoryId vazio.
+// O orçamento por categoria não entra: a tela só lista categorias que existem.
+const COLLECTIONS_WITH_CATEGORY = ["transactions", "recurringBills", "debts", "importRules"];
+
+// Grava em lotes de até 400 (o limite do Firestore é 500 por lote).
+async function clearCategoryIn(docs: FirebaseFirestore.QueryDocumentSnapshot[]): Promise<void> {
+  for (let start = 0; start < docs.length; start += 400) {
+    const batch = db.batch();
+    for (const doc of docs.slice(start, start + 400)) {
+      batch.update(doc.ref, { categoryId: null });
+    }
+    await batch.commit();
+  }
+}
+
+// O id de categoria de grupo começa pelo id do grupo (categoryDocId), então
+// buscar só por categoryId já fica dentro do grupo. As compras de cartão são
+// subcoleção de cada cartão: percorre os cartões do grupo em vez de usar
+// collectionGroup (o projeto evita, ver transactions.repository.ts).
+export async function deleteCategory(categoryId: string, groupId: string): Promise<void> {
+  for (const name of COLLECTIONS_WITH_CATEGORY) {
+    const snapshot = await db.collection(name).where("categoryId", "==", categoryId).get();
+    await clearCategoryIn(snapshot.docs);
+  }
+  const cards = await db.collection("cards").where("groupId", "==", groupId).get();
+  for (const card of cards.docs) {
+    const purchases = await card.ref.collection("purchases").where("categoryId", "==", categoryId).get();
+    await clearCategoryIn(purchases.docs);
+  }
   await categoriesCol.doc(categoryId).delete();
 }
