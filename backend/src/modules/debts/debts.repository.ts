@@ -200,7 +200,7 @@ export async function updateInstallmentReferenceMonth(
 
 export async function updateDebt(
   debtId: string,
-  input: { name: string; description: string | null; dueDay?: number | null }
+  input: { name: string; description: string | null; dueDay?: number | null; categoryId?: string | null }
 ): Promise<DebtRow> {
   const ref = debtsCol.doc(debtId);
   const update: Record<string, unknown> = {
@@ -209,6 +209,7 @@ export async function updateDebt(
     updatedAt: FieldValue.serverTimestamp(),
   };
   if (input.dueDay !== undefined) update.dueDay = input.dueDay;
+  if (input.categoryId !== undefined) update.categoryId = input.categoryId;
   await ref.update(update);
   const doc = await ref.get();
   return toDebtRow(doc);

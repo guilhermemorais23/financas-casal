@@ -94,10 +94,14 @@ export async function setInstallmentPaidHandler(req: Request, res: Response) {
 }
 
 export async function updateDebtHandler(req: Request, res: Response) {
-  const { name, description, dueDay } = req.body ?? {};
+  const { name, description, dueDay, categoryId } = req.body ?? {};
 
-  if (!isNonEmptyString(name) || (dueDay !== undefined && dueDay !== null && !isValidDueDay(dueDay))) {
-    res.status(400).json({ error: "name is required; dueDay (if set) must be 1-31" });
+  if (
+    !isNonEmptyString(name) ||
+    (dueDay !== undefined && dueDay !== null && !isValidDueDay(dueDay)) ||
+    (categoryId !== undefined && categoryId !== null && !isNonEmptyString(categoryId))
+  ) {
+    res.status(400).json({ error: "name is required; dueDay (if set) must be 1-31; categoryId (if set) must be a string or null" });
     return;
   }
 
@@ -106,9 +110,15 @@ export async function updateDebtHandler(req: Request, res: Response) {
       name: name.trim(),
       description: isNonEmptyString(description) ? description.trim() : null,
       dueDay: dueDay !== undefined ? dueDay : undefined,
+      // Sem o campo no pedido, a categoria fica como está.
+      categoryId: categoryId !== undefined ? categoryId : undefined,
     });
     res.status(200).json(debt);
   } catch (err) {
+    if (err instanceof InvalidCategoryError) {
+      res.status(400).json({ error: "Categoria inválida." });
+      return;
+    }
     if (err instanceof NoGroupError || err instanceof DebtNotFoundError) {
       res.status(404).json({ error: "debt not found" });
       return;

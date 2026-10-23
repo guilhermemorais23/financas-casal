@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTestGroup } from "../../test-helpers";
-import { createDebt, listDebts, setInstallmentPaidForUser } from "./debts.service";
+import { createDebt, listDebts, setInstallmentPaidForUser, updateDebtForUser } from "./debts.service";
 import { findTransactionById } from "../transactions/transactions.repository";
 import { addMonths, todayInBrazil } from "../../utils/month";
 import { insertCategory } from "../categories/categories.repository";
@@ -146,6 +146,54 @@ describe("setInstallmentPaidForUser", () => {
         dueDay: 10,
         categoryId: alheia.id,
       })
+    ).rejects.toBeInstanceOf(InvalidCategoryError);
+  });
+
+  it("trocar a categoria depois de criar: o gasto pago sai com a nova", async () => {
+    const { groupId, userAId } = await createTestGroup();
+    const antiga = await insertCategory({ groupId, name: "Lazer", emoji: null });
+    const nova = await insertCategory({ groupId, name: "Saúde", emoji: null });
+    const debt = await createDebt(userAId, {
+      name: "Academia",
+      description: null,
+      totalAmount: 129.9,
+      installmentsCount: 1,
+      scope: "personal",
+      startMonth: currentMonthParam(),
+      dueDay: 10,
+      categoryId: antiga.id,
+    });
+
+    await updateDebtForUser(userAId, debt.id, { name: "Academia", description: null, categoryId: nova.id });
+    const [found] = (await listDebts(userAId)).filter((d) => d.id === debt.id);
+    expect(found.categoryId).toBe(nova.id);
+
+    const paid = await setInstallmentPaidForUser(userAId, debt.id, found.installments[0].id, true);
+    expect((await findTransactionById(paid.transactionId!))?.categoryId).toBe(nova.id);
+  });
+
+  it("editar sem mandar categoria mantém a que estava; trocar por de outro grupo é recusado", async () => {
+    const outro = await createTestGroup();
+    const alheia = await insertCategory({ groupId: outro.groupId, name: "De outro grupo", emoji: null });
+    const { groupId, userAId } = await createTestGroup();
+    const minha = await insertCategory({ groupId, name: "Saúde", emoji: null });
+    const debt = await createDebt(userAId, {
+      name: "Exame",
+      description: null,
+      totalAmount: 80,
+      installmentsCount: 1,
+      scope: "personal",
+      startMonth: currentMonthParam(),
+      dueDay: 10,
+      categoryId: minha.id,
+    });
+
+    await updateDebtForUser(userAId, debt.id, { name: "Exame de sangue", description: null });
+    const [found] = (await listDebts(userAId)).filter((d) => d.id === debt.id);
+    expect(found.categoryId).toBe(minha.id);
+
+    await expect(
+      updateDebtForUser(userAId, debt.id, { name: "Exame", description: null, categoryId: alheia.id })
     ).rejects.toBeInstanceOf(InvalidCategoryError);
   });
 });

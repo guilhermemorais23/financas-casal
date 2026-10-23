@@ -57,8 +57,10 @@ interface SingleBillRow {
   id: string;
   scope: "personal" | "joint";
   name: string;
+  description: string | null;
   totalAmount: string;
   installmentsCount: number;
+  categoryId: string | null;
   installments: { id: string; isPaid: boolean; dueDate: string | null }[];
 }
 
@@ -134,6 +136,10 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
   const [editMode, setEditMode] = useState<AmountMode>("fixed");
   const [editDay, setEditDay] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Trocar a categoria de uma conta "só esta vez" ainda não paga, na própria linha.
+  const [editingSingleId, setEditingSingleId] = useState<string | null>(null);
+  const [editSingleCategory, setEditSingleCategory] = useState("");
 
   async function load() {
     try {
@@ -276,6 +282,30 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível marcar como paga");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startEditSingle(single: SingleBillRow) {
+    setEditingSingleId(single.id);
+    setEditSingleCategory(single.categoryId ?? "");
+  }
+
+  async function saveSingleCategory(single: SingleBillRow) {
+    setBusyId(single.id);
+    try {
+      // A rota de edição exige o nome; manda nome e descrição como estão pra não apagar nada.
+      await apiRequest(`/debts/${single.id}`, {
+        method: "PATCH",
+        token,
+        body: { name: single.name, description: single.description, categoryId: editSingleCategory || null },
+      });
+      setEditingSingleId(null);
+      showToast("Categoria alterada");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível trocar a categoria");
     } finally {
       setBusyId(null);
     }
@@ -504,6 +534,9 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
                 const installment = single.installments[0];
                 const isPaid = installment?.isPaid ?? false;
                 const due = singleDueText(installment?.dueDate ?? null);
+                // Sem categoria (inclusive as contas antigas) não mostra nada.
+                const category = categories.find((c) => c.id === single.categoryId);
+                const isEditingSingle = editingSingleId === single.id && !isPaid;
                 return (
                   <li key={single.id} className={`bill-row${isPaid ? " is-paid" : ""}`}>
                     <div className="bill-row-main">
@@ -512,10 +545,43 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
                       </span>
                       <span className="bill-row-text">
                         <span className="bill-row-title">{single.name}</span>
-                        <span className="bill-row-meta">
-                          <span className="bill-tag">Conta</span>
-                          Só esta vez{single.scope === "joint" ? ", do grupo" : ""}
-                        </span>
+                        {isEditingSingle ? (
+                          <span className="bill-row-edit">
+                            <label className="sr-only" htmlFor={`edit-single-category-${single.id}`}>
+                              Categoria
+                            </label>
+                            <select
+                              id={`edit-single-category-${single.id}`}
+                              value={editSingleCategory}
+                              onChange={(e) => setEditSingleCategory(e.target.value)}
+                            >
+                              <option value="">Sem categoria</option>
+                              {categoriesFor(categories, "expense").map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              title="Salvar"
+                              disabled={busyId === single.id}
+                              onClick={() => void saveSingleCategory(single)}
+                            >
+                              ✓
+                            </button>
+                            <button type="button" className="btn-icon" title="Cancelar" onClick={() => setEditingSingleId(null)}>
+                              ×
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="bill-row-meta">
+                            <span className="bill-tag">Conta</span>
+                            Só esta vez{single.scope === "joint" ? ", do grupo" : ""}
+                            {category && `, ${category.name}`}
+                          </span>
+                        )}
                         {!isPaid && <span className={`bill-row-due ${due.tone}`}>{due.text}</span>}
                       </span>
                     </div>
@@ -535,6 +601,17 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
                             aria-label={`Marcar ${single.name} como paga`}
                           >
                             Pagar
+                          </button>
+                        )}
+                        {!isPaid && !isEditingSingle && (
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            title="Trocar categoria"
+                            disabled={busyId === single.id}
+                            onClick={() => startEditSingle(single)}
+                          >
+                            <Icon name="pencil" />
                           </button>
                         )}
                         <button
