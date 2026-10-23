@@ -252,9 +252,13 @@ export async function removeDebt(userId: string, debtId: string) {
 export async function updateDebtForUser(
   userId: string,
   debtId: string,
-  input: { name: string; description: string | null; dueDay?: number | null }
+  input: { name: string; description: string | null; dueDay?: number | null; categoryId?: string | null }
 ) {
   const groupId = await requireGroupId(userId);
   await requireManageableDebt(userId, groupId, debtId);
+  // Mesma conferência da criação: só categoria padrão ou do próprio grupo.
+  if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {
+    throw new InvalidCategoryError();
+  }
   return updateDebt(debtId, input);
 }
