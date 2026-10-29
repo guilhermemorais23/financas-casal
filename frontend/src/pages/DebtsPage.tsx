@@ -11,6 +11,13 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
+import { categoriesFor, type CategoryType } from "../utils/categories";
+
+interface CategoryRow {
+  id: string;
+  name: string;
+  type?: CategoryType;
+}
 
 interface InstallmentRow {
   id: string;
@@ -30,6 +37,8 @@ interface DebtRow {
   installmentsCount: number;
   startMonth: string;
   dueDay: number | null;
+  // Categoria do gasto que entra no extrato a cada parcela paga.
+  categoryId: string | null;
   installments: InstallmentRow[];
   paidAmount: number;
   remainingAmount: number;
@@ -59,12 +68,19 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
   const [scope, setScope] = useState<"personal" | "joint">("personal");
   const [startMonth, setStartMonth] = useState(currentMonthParam());
   const [dueDay, setDueDay] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function load() {
     try {
-      const result = await apiRequest<DebtRow[]>("/debts", { token });
+      const [result, categoriesRes] = await Promise.all([
+        apiRequest<DebtRow[]>("/debts", { token }),
+        // Categorias são extra: se falharem, as dívidas aparecem igual (sem o nome da categoria).
+        apiRequest<CategoryRow[]>("/categories", { token }).catch(() => null),
+      ]);
       setDebts(result);
+      if (categoriesRes) setCategories(categoriesRes);
       writeCache(cacheKey, result);
     } catch (err) {
       // Deixa `debts` como estava (do cache ou null) -- as seções de "vazio" abaixo
@@ -106,9 +122,11 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
           scope,
           startMonth,
           dueDay: parsedDueDay,
+          categoryId: categoryId || null,
         },
       });
       setName("");
+      setCategoryId("");
       setDescription("");
       setTotalAmount("");
       setIsInstallment(false);
@@ -166,6 +184,9 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
 
   function renderDebtCard(debt: DebtRow) {
     const percent = Math.round((debt.paidAmount / Number(debt.totalAmount)) * 100);
+    const categoryName = categories.find((c) => c.id === debt.categoryId)?.name;
+    // "Moradia · Loja do centro": categoria antes da descrição, as duas opcionais.
+    const subtitle = [categoryName, debt.description].filter(Boolean).join(" · ");
     return (
       <div key={debt.id} className="card debt-card">
         <div className="section-header">
@@ -181,7 +202,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
             </button>
           </div>
         </div>
-        {debt.description && <p className="card-subtitle" style={{ marginBottom: "0.75rem" }}>{debt.description}</p>}
+        {subtitle && <p className="card-subtitle" style={{ marginBottom: "0.75rem" }}>{subtitle}</p>}
 
         <div className="progress-track">
           <div
@@ -327,6 +348,21 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
               </p>
             </div>
 
+            <div className="field">
+              <label htmlFor="debt-category">Categoria (opcional)</label>
+              <select id="debt-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="">Sem categoria</option>
+                {categoriesFor(categories, "expense").map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <p className="card-subtitle" style={{ marginBottom: 0 }}>
+                Cada parcela paga entra no extrato com essa categoria.
+              </p>
+            </div>
+
             <label className="checkbox-field">
               <input
                 type="checkbox"
@@ -409,7 +445,12 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
       )}
 
       {editingDebt && (
-        <EditDebtModal debt={editingDebt} onClose={() => setEditingDebt(null)} onSaved={load} />
+        <EditDebtModal
+          debt={editingDebt}
+          categories={categoriesFor(categories, "expense")}
+          onClose={() => setEditingDebt(null)}
+          onSaved={load}
+        />
       )}
 
       {editingInstallment && (
