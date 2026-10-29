@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { db } from "../db/firestore";
 import * as mailer from "../email/mailer";
 import { ERROR_BURST, alertOwnerOnce, checkTelegram, noteError } from "./opsAlerts";
 
@@ -16,6 +17,9 @@ describe("alertas pro dono", () => {
   });
 
   it("avisa quando os erros se acumulam, e não conta erro do próprio email", async () => {
+    // A marca do último aviso fica no banco (3 h de espera). Rodando de novo no
+    // mesmo emulador, a da rodada anterior seguraria este aviso: apaga antes.
+    await db.collection("opsAlerts").doc("error-burst").delete();
     const spy = vi.spyOn(mailer, "sendOwnerEmail").mockResolvedValue({ ok: true, provider: "brevo" });
     const base = Date.now() + 10 * 60 * 60 * 1000; // longe de qualquer aviso anterior
     const err = (i: number, source = "api") => ({

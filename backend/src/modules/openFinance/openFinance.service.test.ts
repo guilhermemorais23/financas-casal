@@ -23,6 +23,14 @@ import { findItem } from "./openFinance.repository";
 const ENV = ["PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET", "PLUGGY_ALLOWED_EMAILS", "ADMIN_EMAILS", "PLUGGY_WEBHOOK_SECRET", "API_PUBLIC_URL", "RENDER_EXTERNAL_URL"];
 const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
 
+// A conexão fica gravada no banco pelo id do Pluggy. Com id fixo, rodar os
+// testes de novo no mesmo emulador dava "essa conexão não é sua" (o id já
+// existia com o dono da rodada anterior). Sufixo novo a cada rodada.
+const RUN = Date.now().toString(36);
+const ITEM_A = `item-a-${RUN}`;
+const ITEM_B = `item-b-${RUN}`;
+const ITEM_W = `item-w-${RUN}`;
+
 // Pluggy de mentira: itens por id (com o clientUserId de quem conectou),
 // uma conta corrente e um cartão, e as transações da conta.
 const fake = {
@@ -93,20 +101,20 @@ describe("Conectar conta (Pluggy)", () => {
     const { userAId, userBId } = await createTestGroup();
     expect(await createConnectToken(userAId, "dono@test.com")).toEqual({ accessToken: `token-${userAId}` });
 
-    fake.items.set("item-a", { clientUserId: userAId });
-    await expect(registerItem(userBId, "dono@test.com", "item-a")).rejects.toBeInstanceOf(OpenFinanceNotYoursError);
-    expect(await registerItem(userAId, "dono@test.com", "item-a")).toEqual({ itemId: "item-a", connectorName: "MeuPluggy" });
-    expect((await findItem("item-a"))?.userId).toBe(userAId);
+    fake.items.set(ITEM_A, { clientUserId: userAId });
+    await expect(registerItem(userBId, "dono@test.com", ITEM_A)).rejects.toBeInstanceOf(OpenFinanceNotYoursError);
+    expect(await registerItem(userAId, "dono@test.com", ITEM_A)).toEqual({ itemId: ITEM_A, connectorName: "MeuPluggy" });
+    expect((await findItem(ITEM_A))?.userId).toBe(userAId);
 
     // Outra pessoa não lê, não marca e não apaga a conexão de A.
-    await expect(previewFromBank(userBId, "dono@test.com", "item-a", "acc-1")).rejects.toBeInstanceOf(OpenFinanceItemNotFoundError);
-    await expect(markBankSynced(userBId, "dono@test.com", "item-a", "acc-1", "2026-09-01")).rejects.toBeInstanceOf(OpenFinanceItemNotFoundError);
-    await expect(removeBankConnection(userBId, "dono@test.com", "item-a")).rejects.toBeInstanceOf(OpenFinanceItemNotFoundError);
+    await expect(previewFromBank(userBId, "dono@test.com", ITEM_A, "acc-1")).rejects.toBeInstanceOf(OpenFinanceItemNotFoundError);
+    await expect(markBankSynced(userBId, "dono@test.com", ITEM_A, "acc-1", "2026-09-01")).rejects.toBeInstanceOf(OpenFinanceItemNotFoundError);
+    await expect(removeBankConnection(userBId, "dono@test.com", ITEM_A)).rejects.toBeInstanceOf(OpenFinanceItemNotFoundError);
     expect(fake.deleted).toEqual([]);
 
-    await removeBankConnection(userAId, "dono@test.com", "item-a");
-    expect(fake.deleted).toEqual(["item-a"]);
-    expect(await findItem("item-a")).toBeNull();
+    await removeBankConnection(userAId, "dono@test.com", ITEM_A);
+    expect(fake.deleted).toEqual([ITEM_A]);
+    expect(await findItem(ITEM_A)).toBeNull();
   });
 
   it("converte as transações: sinal, nome da loja/pessoa, pendente e crédito do cartão", () => {
@@ -141,27 +149,27 @@ describe("Conectar conta (Pluggy)", () => {
 
   it("puxa do banco e entrega a mesma revisão da importação, com entrada continuando entrada", async () => {
     const { userAId } = await createTestGroup();
-    fake.items.set("item-b", { clientUserId: userAId });
-    await registerItem(userAId, "dono@test.com", "item-b");
+    fake.items.set(ITEM_B, { clientUserId: userAId });
+    await registerItem(userAId, "dono@test.com", ITEM_B);
     fake.transactions = [
       { id: "t1", accountId: "acc-1", date: "2026-09-10T03:00:00.000Z", description: "PIX RECEBIDO", type: "CREDIT", amount: 3000, paymentData: { payer: { name: "Empresa X" } } },
       { id: "t2", accountId: "acc-1", date: "2026-09-11T03:00:00.000Z", description: "PIX RECEBIDO", type: "CREDIT", amount: 3000, paymentData: { payer: { name: "Empresa X" } } },
     ];
-    const result = await previewFromBank(userAId, "dono@test.com", "item-b", "acc-1");
+    const result = await previewFromBank(userAId, "dono@test.com", ITEM_B, "acc-1");
     expect(result.format).toBe("bank");
     expect(result.assumedAllExpenses).toBe(false);
     expect(result.groups).toMatchObject([{ key: "empresa x", transactionType: "income", count: 2, total: "6000.00", kind: "PIX RECEBIDO" }]);
-    expect(result.source).toMatchObject({ itemId: "item-b", accountId: "acc-1" });
+    expect(result.source).toMatchObject({ itemId: ITEM_B, accountId: "acc-1" });
 
-    await markBankSynced(userAId, "dono@test.com", "item-b", "acc-1", "2026-09-26");
-    expect((await findItem("item-b"))?.syncedUntil).toEqual({ "acc-1": "2026-09-26" });
+    await markBankSynced(userAId, "dono@test.com", ITEM_B, "acc-1", "2026-09-26");
+    expect((await findItem(ITEM_B))?.syncedUntil).toEqual({ "acc-1": "2026-09-26" });
   });
 
   it("aviso do Pluggy: conta o que falta importar, notifica uma vez e zera ao importar", async () => {
     const { userAId } = await createTestGroup();
-    fake.items.set("item-w", { clientUserId: userAId });
-    await registerItem(userAId, "dono@test.com", "item-w");
-    await markBankSynced(userAId, "dono@test.com", "item-w", "acc-1", "2026-09-10");
+    fake.items.set(ITEM_W, { clientUserId: userAId });
+    await registerItem(userAId, "dono@test.com", ITEM_W);
+    await markBankSynced(userAId, "dono@test.com", ITEM_W, "acc-1", "2026-09-10");
     fake.transactions = [
       { id: "a", accountId: "acc-1", date: "2026-09-09T03:00:00.000Z", description: "Antigo", type: "DEBIT", amount: 10 },
       { id: "b", accountId: "acc-1", date: "2026-09-12T03:00:00.000Z", description: "Mercado", type: "DEBIT", amount: 50 },
@@ -169,26 +177,26 @@ describe("Conectar conta (Pluggy)", () => {
     ];
     const sent = vi.spyOn(push, "sendPushToUser").mockResolvedValue(1);
 
-    await processPluggyEvent({ event: "transactions/created", itemId: "item-w" });
-    const after = await findItem("item-w");
+    await processPluggyEvent({ event: "transactions/created", itemId: ITEM_W });
+    const after = await findItem(ITEM_W);
     expect(after?.pending?.accounts["acc-1"]).toBe(2);
     expect(sent).toHaveBeenCalledTimes(1);
     expect(sent.mock.calls[0][0]).toBe(userAId);
     expect(sent.mock.calls[0][1].url).toBe("/dashboard?importar=banco");
 
     // O mesmo aviso de novo, sem nada novo: não notifica outra vez.
-    await processPluggyEvent({ event: "item/updated", itemId: "item-w" });
+    await processPluggyEvent({ event: "item/updated", itemId: ITEM_W });
     const calls = sent.mock.calls.filter(([id]) => id === userAId).length;
     // (o cartão não conta crédito; os dois débitos/créditos da conta são os mesmos)
     expect(calls).toBe(1);
 
     // Evento estranho ou item de ninguém: ignora.
-    await processPluggyEvent({ event: "item/deleted", itemId: "item-w" });
+    await processPluggyEvent({ event: "item/deleted", itemId: ITEM_W });
     await processPluggyEvent({ event: "transactions/created", itemId: "nao-existe" });
     expect(sent.mock.calls.filter(([id]) => id === userAId).length).toBe(1);
 
-    await markBankSynced(userAId, "dono@test.com", "item-w", "acc-1", "2026-09-13");
-    expect((await findItem("item-w"))?.pending?.accounts["acc-1"]).toBe(0);
+    await markBankSynced(userAId, "dono@test.com", ITEM_W, "acc-1", "2026-09-13");
+    expect((await findItem(ITEM_W))?.pending?.accounts["acc-1"]).toBe(0);
     sent.mockRestore();
   });
 
