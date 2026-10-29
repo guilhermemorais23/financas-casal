@@ -9,14 +9,18 @@ export interface EditableDebt {
   name: string;
   description: string | null;
   dueDay: number | null;
+  categoryId: string | null;
 }
 
 export function EditDebtModal({
   debt,
+  categories,
   onClose,
   onSaved,
 }: {
   debt: EditableDebt;
+  // Só as de despesa: é a categoria do gasto de cada parcela paga.
+  categories: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -26,6 +30,7 @@ export function EditDebtModal({
   const [name, setName] = useState(debt.name);
   const [description, setDescription] = useState(debt.description ?? "");
   const [dueDay, setDueDay] = useState(debt.dueDay !== null ? String(debt.dueDay) : "");
+  const [categoryId, setCategoryId] = useState(debt.categoryId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -52,6 +57,7 @@ export function EditDebtModal({
           name: name.trim(),
           description: description.trim() || null,
           dueDay: parsedDueDay,
+          categoryId: categoryId || null,
         },
       });
       showToast("Dívida atualizada");
@@ -94,6 +100,21 @@ export function EditDebtModal({
             value={dueDay}
             onChange={(e) => setDueDay(e.target.value)}
           />
+        </div>
+
+        <div className="field">
+          <label htmlFor="edit-debt-category">Categoria (opcional)</label>
+          <select id="edit-debt-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Sem categoria</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+          <p className="card-subtitle" style={{ marginBottom: 0 }}>
+            Vale pras próximas parcelas pagas.
+          </p>
         </div>
 
         {error && (
