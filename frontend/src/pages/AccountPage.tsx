@@ -142,9 +142,14 @@ export function AccountPage() {
   }
 
   async function handleDeleteCategory(categoryId: string) {
+    const category = categories?.find((c) => c.id === categoryId);
     const confirmed = await confirm({
       title: "Excluir categoria?",
-      body: "Lançamentos que já usam ela ficam sem categoria, mas não são apagados.",
+      // O backend move o que usava ela pra "Receita" (se for de receita) ou "Outros".
+      body:
+        category && categoryTypeOf(category) === "income"
+          ? "As entradas que usam ela passam pra Receita. Nada é apagado."
+          : "Os lançamentos que usam ela passam pra Outros. Nada é apagado.",
       confirmLabel: "Excluir",
     });
     if (!confirmed) return;
