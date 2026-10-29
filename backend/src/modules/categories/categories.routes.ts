@@ -125,7 +125,7 @@ categoriesRouter.delete(
   asyncHandler(async (req, res) => {
     try {
       const category = await requireOwnCategory(req.user!.id, req.params.id);
-      await deleteCategory(category.id, category.groupId!);
+      await deleteCategory({ id: category.id, groupId: category.groupId!, type: category.type });
       res.status(204).send();
     } catch (err) {
       if (err instanceof NoGroupError || err instanceof CategoryNotFoundError) {

@@ -19,6 +19,12 @@ export interface CategoryRow {
 // outras fontes (salário, aluguel recebido, freela) cria as suas.
 const DEFAULT_INCOME = { id: "global__receita", name: "Receita", emoji: "💰" };
 
+// Pra onde vai o que usava uma categoria apagada: despesa cai em "Outros"
+// (mesmo id e emoji do script de seed), entrada cai em "Receita".
+const DEFAULT_OTHER = { id: "global__outros", name: "Outros", emoji: "✨" };
+export const OTHER_CATEGORY_ID = DEFAULT_OTHER.id;
+export const INCOME_CATEGORY_ID = DEFAULT_INCOME.id;
+
 const categoriesCol = db.collection("categories");
 
 function normalize(name: string): string {
@@ -41,18 +47,23 @@ function toCategoryRow(doc: FirebaseFirestore.DocumentSnapshot): CategoryRow {
   };
 }
 
-// As padrão são criadas por script (seed); a de receita veio depois, então é
-// criada aqui na primeira leitura se ainda não existir.
-async function ensureDefaultIncomeCategory(rows: CategoryRow[]): Promise<CategoryRow[]> {
-  if (rows.some((row) => row.id === DEFAULT_INCOME.id)) return rows;
-  const created: CategoryRow = { ...DEFAULT_INCOME, groupId: null, isDefault: true, type: "income" };
+// As padrão são criadas por script (seed). "Receita" veio depois, e "Outros"
+// passou a ser o destino do que usava uma categoria apagada -- então as duas
+// são criadas aqui na primeira leitura se ainda não existirem.
+async function ensureDefaultCategory(
+  rows: CategoryRow[],
+  base: { id: string; name: string; emoji: string },
+  type: CategoryType
+): Promise<CategoryRow[]> {
+  if (rows.some((row) => row.id === base.id)) return rows;
+  const created: CategoryRow = { ...base, groupId: null, isDefault: true, type };
   try {
-    await categoriesCol.doc(DEFAULT_INCOME.id).create({
+    await categoriesCol.doc(base.id).create({
       groupId: null,
       name: created.name,
       emoji: created.emoji,
       isDefault: true,
-      type: "income",
+      type,
       createdAt: FieldValue.serverTimestamp(),
     });
   } catch (err) {
@@ -72,7 +83,9 @@ async function loadFindVisibleCategories(groupId: string | null): Promise<Catego
     queries.push(categoriesCol.where("groupId", "==", groupId).get());
   }
   const snapshots = await Promise.all(queries);
-  const rows = await ensureDefaultIncomeCategory(snapshots.flatMap((snapshot) => snapshot.docs.map(toCategoryRow)));
+  const found = snapshots.flatMap((snapshot) => snapshot.docs.map(toCategoryRow));
+  const withIncome = await ensureDefaultCategory(found, DEFAULT_INCOME, "income");
+  const rows = await ensureDefaultCategory(withIncome, DEFAULT_OTHER, "expense");
   return rows.sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
 }
 
@@ -135,19 +148,24 @@ export async function updateCategory(
   return toCategoryRow(doc);
 }
 
-// Onde mais o id da categoria fica guardado. Ao excluir, tudo isso passa a
-// ficar SEM categoria (categoryId null), que é o que a tela de excluir promete.
-// Só esconder o nome não basta: Relatórios agrupa pelo id (viravam dois
-// "Sem categoria") e o aviso de classificar gastos só pega categoryId vazio.
+// Pra qual categoria vai o que apontava pra uma que não existe mais:
+// entrada vai pra "Receita", despesa vai pra "Outros".
+export function replacementCategoryId(type: CategoryType): string {
+  return type === "income" ? INCOME_CATEGORY_ID : OTHER_CATEGORY_ID;
+}
+
+// Onde mais o id da categoria fica guardado. Ao excluir, tudo isso passa pra
+// "Outros" (ou "Receita", se a categoria era de receita), que é o que a tela
+// de excluir avisa. Só esconder o nome não basta: Relatórios agrupa pelo id.
 // O orçamento por categoria não entra: a tela só lista categorias que existem.
-const COLLECTIONS_WITH_CATEGORY = ["transactions", "recurringBills", "debts", "importRules"];
+const COLLECTIONS_MOVED_TO_REPLACEMENT = ["transactions", "recurringBills", "debts"];
 
 // Grava em lotes de até 400 (o limite do Firestore é 500 por lote).
-async function clearCategoryIn(docs: FirebaseFirestore.QueryDocumentSnapshot[]): Promise<void> {
+async function setCategoryIn(docs: FirebaseFirestore.QueryDocumentSnapshot[], categoryId: string | null): Promise<void> {
   for (let start = 0; start < docs.length; start += 400) {
     const batch = db.batch();
     for (const doc of docs.slice(start, start + 400)) {
-      batch.update(doc.ref, { categoryId: null });
+      batch.update(doc.ref, { categoryId });
     }
     await batch.commit();
   }
@@ -157,15 +175,20 @@ async function clearCategoryIn(docs: FirebaseFirestore.QueryDocumentSnapshot[]):
 // buscar só por categoryId já fica dentro do grupo. As compras de cartão são
 // subcoleção de cada cartão: percorre os cartões do grupo em vez de usar
 // collectionGroup (o projeto evita, ver transactions.repository.ts).
-export async function deleteCategory(categoryId: string, groupId: string): Promise<void> {
-  for (const name of COLLECTIONS_WITH_CATEGORY) {
-    const snapshot = await db.collection(name).where("categoryId", "==", categoryId).get();
-    await clearCategoryIn(snapshot.docs);
+// As regras de importação ficam VAZIAS (não viram "Outros"): senão toda
+// importação futura daquele nome cairia em Outros sem a pessoa escolher.
+export async function deleteCategory(category: { id: string; groupId: string; type: CategoryType }): Promise<void> {
+  const replacement = replacementCategoryId(category.type);
+  for (const name of COLLECTIONS_MOVED_TO_REPLACEMENT) {
+    const snapshot = await db.collection(name).where("categoryId", "==", category.id).get();
+    await setCategoryIn(snapshot.docs, replacement);
   }
-  const cards = await db.collection("cards").where("groupId", "==", groupId).get();
+  const cards = await db.collection("cards").where("groupId", "==", category.groupId).get();
   for (const card of cards.docs) {
-    const purchases = await card.ref.collection("purchases").where("categoryId", "==", categoryId).get();
-    await clearCategoryIn(purchases.docs);
+    const purchases = await card.ref.collection("purchases").where("categoryId", "==", category.id).get();
+    await setCategoryIn(purchases.docs, replacement);
   }
-  await categoriesCol.doc(categoryId).delete();
+  const rules = await db.collection("importRules").where("categoryId", "==", category.id).get();
+  await setCategoryIn(rules.docs, null);
+  await categoriesCol.doc(category.id).delete();
 }

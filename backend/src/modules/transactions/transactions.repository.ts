@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
-import { findVisibleCategories } from "../categories/categories.repository";
+import { findVisibleCategories, replacementCategoryId } from "../categories/categories.repository";
 import { fromCents, toCents } from "../../utils/money";
 import { invalidateTransactionReads, memoizeReads } from "../../utils/readCache";
 
@@ -126,6 +126,20 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
 async function loadCategoriesMap(groupId: string): Promise<Map<string, { name: string; emoji: string | null }>> {
   const categories = await findVisibleCategories(groupId);
   return new Map(categories.map((c) => [c.id, { name: c.name, emoji: c.emoji }]));
+}
+
+// Lançamento que aponta pra uma categoria que o grupo não tem mais (apagada
+// antes de a exclusão passar a mover tudo pra "Outros") é lido como "Outros"
+// (ou "Receita", se for entrada). Não grava nada: só muda o que a leitura
+// devolve, então Relatórios, Painel e Orçamento somam no lugar certo.
+// Sem categoria (null) continua null -- é o que o aviso de classificar pega.
+function resolveCategoryId(
+  categoryId: string | null,
+  transactionType: TransactionType,
+  categoriesById: Map<string, unknown>
+): string | null {
+  if (!categoryId || categoriesById.has(categoryId)) return categoryId;
+  return replacementCategoryId(transactionType === "income" ? "income" : "expense");
 }
 
 export interface NewTransactionInput {
@@ -415,7 +429,8 @@ export async function findTransactionsVisibleTo(
     })
     .slice(0, limit)
     .map((doc) => {
-      const row = toTransactionRow(doc);
+      const stored = toTransactionRow(doc);
+      const row = { ...stored, categoryId: resolveCategoryId(stored.categoryId, stored.transactionType, categoriesById) };
       const category = row.categoryId ? categoriesById.get(row.categoryId) : undefined;
       return { ...row, categoryName: category?.name ?? null, categoryEmoji: category?.emoji ?? null };
     });
@@ -600,8 +615,9 @@ export async function getMonthlySummary(
     byPayerMap.set(data.payerId, (byPayerMap.get(data.payerId) ?? 0) + data.amountCents);
 
     if (data.isPrivate === false || data.createdBy === requestingUserId) {
-      const key = data.categoryId ?? "none";
-      const entry = byCategoryMap.get(key) ?? { categoryId: data.categoryId ?? null, total: 0 };
+      const categoryId = resolveCategoryId(data.categoryId ?? null, data.transactionType, categoriesById);
+      const key = categoryId ?? "none";
+      const entry = byCategoryMap.get(key) ?? { categoryId, total: 0 };
       entry.total += data.amountCents;
       byCategoryMap.set(key, entry);
     }
