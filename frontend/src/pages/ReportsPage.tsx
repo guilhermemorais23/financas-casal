@@ -23,7 +23,7 @@ import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
-import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
+import { canDeleteFromStatement, deleteLinkedNote, linkedHint, type LinkKind } from "../utils/linkedTransaction";
 import { NoPaymentModal } from "../components/NoPaymentModal";
 
 interface CategorySummaryRow {
@@ -363,9 +363,10 @@ export function ReportsPage() {
     }
   }
 
-  // Fatura paga, parcela, reembolso, transferência: não entram na seleção
-  // (só dá pra desfazer pela tela que criou).
-  const isLocked = (tx: TransactionListRow) => Boolean(tx.securedCardId || tx.loanId || tx.goalId) || isLinkedTransaction(tx);
+  // Transferência, reembolso e lista de compras: não entram na seleção (só dá
+  // pra desfazer pela tela que criou). Parcela de dívida e fatura paga
+  // entram: excluir desfaz na origem.
+  const isLocked = (tx: TransactionListRow) => Boolean(tx.securedCardId || tx.loanId || tx.goalId) || !canDeleteFromStatement(tx);
 
   function toggleSelected(tx: TransactionListRow) {
     setSelectedIds((current) => {
@@ -390,6 +391,9 @@ export function ReportsPage() {
     });
   }
 
+  const isGroupSelected = (items: TransactionListRow[]) =>
+    selecting && items.filter((tx) => !isLocked(tx)).every((tx) => selectedIds.has(tx.id));
+
   function stopSelecting() {
     setSelecting(false);
     setSelectedIds(new Set());
@@ -404,9 +408,17 @@ export function ReportsPage() {
   async function handleBulkDelete() {
     const rows = selectedRows;
     if (rows.length === 0) return;
+    const linkedCount = rows.filter((tx) => deleteLinkedNote(tx)).length;
     const confirmed = await confirm({
       title: `Excluir ${rows.length} ${rows.length === 1 ? "lançamento" : "lançamentos"}?`,
-      body: `Saem do extrato e dos totais do mês. Você ainda vai poder desfazer por alguns segundos.`,
+      body: [
+        "Saem do extrato e dos totais do mês.",
+        linkedCount === 1 && "1 é parcela de dívida ou fatura paga: volta a ficar em aberto.",
+        linkedCount > 1 && `${linkedCount} são parcelas de dívida ou faturas pagas: voltam a ficar em aberto.`,
+        "Você ainda vai poder desfazer por alguns segundos.",
+      ]
+        .filter(Boolean)
+        .join(" "),
       confirmLabel: "Excluir",
     });
     if (!confirmed) return;
@@ -428,7 +440,7 @@ export function ReportsPage() {
           setError(
             `${result.skipped.length} ${result.skipped.length === 1 ? "lançamento não pôde" : "lançamentos não puderam"} ser excluído${
               result.skipped.length === 1 ? "" : "s"
-            } (fatura paga, parcela ou de outra pessoa).`
+            } (reembolso, lista de compras ou de outra pessoa).`
           );
         }
         await load(targetMonth, { silent: true });
@@ -454,7 +466,13 @@ export function ReportsPage() {
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
-      body: `${formatCurrency(Number(tx.amount))} sai do extrato e dos totais do mês. Você ainda vai poder desfazer por alguns segundos.`,
+      body: [
+        `${formatCurrency(Number(tx.amount))} sai do extrato e dos totais do mês.`,
+        deleteLinkedNote(tx),
+        "Você ainda vai poder desfazer por alguns segundos.",
+      ]
+        .filter(Boolean)
+        .join(" "),
       confirmLabel: "Excluir",
     });
     if (!confirmed) return;
@@ -629,7 +647,7 @@ export function ReportsPage() {
               className="transaction-check"
               checked={selectedIds.has(tx.id)}
               disabled={isLocked(tx)}
-              title={isLocked(tx) ? "Esse só dá pra desfazer pela tela que criou (fatura, parcela, reembolso)" : undefined}
+              title={isLocked(tx) ? linkedHint(tx) || "Esse só dá pra desfazer pela tela que criou" : undefined}
               onChange={() => toggleSelected(tx)}
               aria-label={`Selecionar ${tx.description}`}
             />
@@ -696,8 +714,15 @@ export function ReportsPage() {
                     icon: "repeat" as const,
                     onClick: () => navigate(repeatHref(tx)),
                   },
-                  ...(isLinkedTransaction(tx)
-                    ? []
+                  ...(!canDeleteFromStatement(tx)
+                    ? [
+                        {
+                          key: "how-to-undo",
+                          label: "Como excluir",
+                          icon: "info" as const,
+                          onClick: () => showToast(linkedHint(tx), { variant: "info" }),
+                        },
+                      ]
                     : [
                         {
                           key: "delete",
@@ -945,10 +970,13 @@ export function ReportsPage() {
                       </span>
                     </button>
                     {groupBy === "day" && (
-                      <button type="button" className="link-button report-group-select" onClick={() => selectGroup(group.items)}>
-                        {selecting && group.items.filter((tx) => !isLocked(tx)).every((tx) => selectedIds.has(tx.id))
-                          ? "Desmarcar o dia"
-                          : "Selecionar o dia"}
+                      <button
+                        type="button"
+                        className="link-button report-group-select"
+                        onClick={() => selectGroup(group.items)}
+                        aria-label={`${isGroupSelected(group.items) ? "Desmarcar" : "Selecionar"} os lançamentos de ${group.label}`}
+                      >
+                        {isGroupSelected(group.items) ? "Desmarcar" : "Selecionar"}
                       </button>
                     )}
                   </li>
@@ -1028,15 +1056,19 @@ export function ReportsPage() {
       {selecting && (
         <div className="selection-bar" role="region" aria-label="Lançamentos selecionados">
           <span className="selection-bar-text">
-            {selectedRows.length} {selectedRows.length === 1 ? "selecionado" : "selecionados"}
-            {selectedTotal > 0 && <> · {formatCurrency(selectedTotal)}</>}
+            <span>
+              {selectedRows.length} {selectedRows.length === 1 ? "selecionado" : "selecionados"}
+            </span>
+            {selectedTotal > 0 && <span className="selection-bar-total">{formatCurrency(selectedTotal)}</span>}
           </span>
-          <button type="button" className="btn btn-outline" onClick={stopSelecting}>
-            Cancelar
-          </button>
-          <button type="button" className="btn btn-danger" disabled={selectedRows.length === 0} onClick={() => void handleBulkDelete()}>
-            Excluir
-          </button>
+          <span className="selection-bar-actions">
+            <button type="button" className="btn btn-outline" onClick={stopSelecting}>
+              Cancelar
+            </button>
+            <button type="button" className="btn btn-danger" disabled={selectedRows.length === 0} onClick={() => void handleBulkDelete()}>
+              Excluir
+            </button>
+          </span>
         </div>
       )}
       {isNoPaymentOpen && (

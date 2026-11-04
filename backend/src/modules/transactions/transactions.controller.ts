@@ -15,8 +15,6 @@ import {
   UnsupportedSplitTypeError,
   cancelRecurringForUser,
   createTransaction,
-  deleteTransactionForUser,
-  deleteTransactionsForUser,
   InvalidBulkDeleteError,
   MAX_BULK_DELETE,
   exportTransactionsForUser,
@@ -31,6 +29,7 @@ import {
   updateRecurringForUser,
   updateTransactionForUser,
 } from "./transactions.service";
+import { deleteTransactionsUndoingLinked, deleteTransactionUndoingLinked } from "./linkedUndo";
 import { PAYMENT_METHODS, type PaymentMethod, type SplitType, type TransactionType } from "./transactions.repository";
 import { isIsoDate, isNonEmptyString, isValidAmount, MAX_DESCRIPTION_LENGTH } from "../../utils/validation";
 
@@ -292,7 +291,8 @@ const LINKED_MESSAGES: Record<LinkedTransactionError["kind"], string> = {
 
 export async function deleteTransactionHandler(req: Request, res: Response) {
   try {
-    await deleteTransactionForUser(req.user!.id, req.params.id);
+    // Parcela de dívida e pagamento de fatura: desfaz na origem (linkedUndo.ts).
+    await deleteTransactionUndoingLinked(req.user!.id, req.params.id);
     res.status(204).send();
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
@@ -400,7 +400,7 @@ export async function bulkDeleteHandler(req: Request, res: Response) {
     return;
   }
   try {
-    res.status(200).json(await deleteTransactionsForUser(req.user!.id, transactionIds));
+    res.status(200).json(await deleteTransactionsUndoingLinked(req.user!.id, transactionIds));
   } catch (err) {
     if (err instanceof InvalidBulkDeleteError) {
       res.status(400).json({ error: `Selecione entre 1 e ${MAX_BULK_DELETE} lançamentos.` });
