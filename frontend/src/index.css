@@ -9044,7 +9044,21 @@ select {
   border-radius: 16px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
 }
-.selection-bar-text { flex: 1; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 0; }
+/* Sem espaço pro texto (celular estreito): os botões descem pra uma segunda linha. */
+.selection-bar { flex-wrap: wrap; row-gap: 0.5rem; }
+.selection-bar-text { flex: 1 1 9rem; display: grid; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 0; line-height: 1.2; }
+.selection-bar-total { font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted); }
+/* O .btn global tem width: 100% -- aqui cada botão ocupava a barra inteira,
+   esmagava o "N selecionados" e empurrava o Excluir pra fora. */
+.selection-bar-actions { display: flex; gap: 0.5rem; flex: 1 0 auto; justify-content: flex-end; }
+.selection-bar .btn { width: auto; flex: 1 0 auto; padding: 0.6rem 1.1rem; font-size: 0.95rem; }
+/* O .btn + .btn global dá margem em cima (botões empilhados); aqui eles ficam lado a lado. */
+.selection-bar .btn + .btn { margin-top: 0; }
+/* Cabeçalho do dia: o total (gasto e receita) não quebra linha, então com os
+   dois ele passava por cima do "Selecionar". Empilhados ele cabe, e o
+   cabeçalho corta o que sobrar em vez de vazar. */
+.report-group > .report-group-header { overflow: hidden; }
+.report-group-total:has(> span + span) { flex-direction: column; align-items: flex-end; gap: 0; font-size: 0.82rem; line-height: 1.25; }
 @media (max-width: 720px) { .selection-bar { bottom: calc(env(safe-area-inset-bottom, 0px) + 8.5rem); } }
 
 /* ---- Limite do cartão ---- */
