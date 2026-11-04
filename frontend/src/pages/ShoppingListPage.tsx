@@ -176,9 +176,16 @@ export function ShoppingListPage() {
               value={newItemName}
               onChange={(e) => setNewItemName(e.target.value)}
               placeholder="Ex: Leite, detergente..."
-              style={{ flex: 1 }}
+              aria-label="Item pra comprar"
+              style={{ flex: 1, minWidth: 0 }}
             />
-            <button type="submit" className="btn btn-primary" disabled={isAdding}>
+            {/* Largura automática: o .btn do form-card ocupa 100% e esmagava o campo. */}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={isAdding}
+              style={{ flex: "none", width: "auto", paddingInline: "1.25rem" }}
+            >
               {isAdding ? "..." : "+ Item"}
             </button>
           </form>
