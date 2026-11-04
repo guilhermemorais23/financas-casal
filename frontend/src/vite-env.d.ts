@@ -18,3 +18,5 @@ interface ImportMeta {
 }
 
 declare const __APP_VERSION__: string;
+// Commit (7 letras) do build no CI; vazio fora dele.
+declare const __APP_COMMIT__: string;

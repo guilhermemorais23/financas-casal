@@ -176,7 +176,7 @@ export async function sendPasswordResetEmail(to: string, displayName: string, li
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
         <h1 style="font-size: 20px;">Oi, ${escapeHtml(displayName || "tudo bem")}!</h1>
         <p>Você pediu ajuda pra entrar no PAR. Toque no botão pra criar uma senha nova:</p>
-        <p style="margin: 24px 0;"><a href="${escapeHtml(link)}" style="background:#6d54ec;color:#fff;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold;">Criar senha nova</a></p>
+        <p style="margin: 24px 0;"><a href="${escapeHtml(link)}" style="background:#0e5e58;color:#fff;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold;">Criar senha nova</a></p>
         <p style="font-size: 13px; color: #666;">Se não foi você que pediu, é só ignorar este email: sua senha continua a mesma.</p>
       </div>
     `

@@ -9610,3 +9610,21 @@ select {
   .login-copy { margin-top: 0.5rem; }
   .login-preview { display: none; }
 }
+
+/* ---- Versão no ar, ao lado da logo: discreta, mas dá pra ver ---- */
+.app-version {
+  flex: none;
+  align-self: center;
+  margin-left: -0.35rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  user-select: all;
+}

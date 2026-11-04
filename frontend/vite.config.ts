@@ -13,6 +13,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 // 0.0.0 porque nunca é publicado sozinho.
 const rootPackageJson = JSON.parse(readFileSync('../package.json', 'utf-8'))
 
+// No CI o deploy sai antes do semantic-release subir a versão, então o CI
+// calcula a versão que este código vai ganhar (scripts/proxima-versao.mjs) e
+// passa em APP_VERSION. Sem ela (no seu PC), vale a do package.json.
+const appVersion = process.env.APP_VERSION?.trim() || rootPackageJson.version
+// Commit do build (o GitHub Actions preenche GITHUB_SHA): sempre exato, bom
+// pra conferir qual código está no ar. No seu PC fica vazio.
+const appCommit = (process.env.GITHUB_SHA ?? '').slice(0, 7)
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -46,6 +54,7 @@ export default defineConfig({
     }),
   ],
   define: {
-    __APP_VERSION__: JSON.stringify(rootPackageJson.version),
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __APP_COMMIT__: JSON.stringify(appCommit),
   },
 })

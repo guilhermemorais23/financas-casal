@@ -9,8 +9,12 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
+      # Histórico inteiro com as tags: o passo "Descobre a versão" conta os
+      # commits desde a última versão publicada.
       - name: Baixa o código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configura o Node
         uses: actions/setup-node@v4
@@ -76,6 +80,15 @@ jobs:
       # vazia (auth/invalid-api-key, app inteiro em branco). Vite tambem le
       # env vars reais do processo, nao só arquivos .env -- por isso basta
       # declarar aqui, sem precisar escrever um .env.production no runner.
+      # O deploy sai antes do semantic-release subir a versão (release.yml roda
+      # em paralelo). Sem isto, a versão no topo do app mostraria sempre a
+      # anterior. Mesma conta do semantic-release, sem precisar de token.
+      - name: Descobre a versão que este deploy vai ter
+        run: |
+          version=$(node scripts/proxima-versao.mjs)
+          echo "Versão deste build: $version"
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+
       - name: Verifica os tipos e builda o frontend
         run: npm run build
         working-directory: frontend
