@@ -9,7 +9,7 @@ import { playwright } from "@vitest/browser-playwright";
 
 export default defineConfig({
   plugins: [react()],
-  define: { __APP_VERSION__: JSON.stringify("test") },
+  define: { __APP_VERSION__: JSON.stringify("test"), __APP_COMMIT__: JSON.stringify("abc1234") },
   // O app não usa PostCSS. Sem isto o Vite sai procurando a config nas
   // pastas de cima e, no OneDrive, esbarra em arquivo que não dá pra ler.
   css: { postcss: {} },

@@ -73,6 +73,16 @@ function readCoupleFlag(userId: string | undefined): boolean | null {
   return null;
 }
 
+// Versão no ar, discreta ao lado da logo (o commit aparece ao passar o mouse).
+function AppVersion() {
+  const title = __APP_COMMIT__ ? `Versão ${__APP_VERSION__} · build ${__APP_COMMIT__}` : `Versão ${__APP_VERSION__}`;
+  return (
+    <span className="app-version" title={title} aria-label={title}>
+      v{__APP_VERSION__}
+    </span>
+  );
+}
+
 export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const { user, token, logout } = useAuth();
   const { theme, toggle } = useTheme();
@@ -168,6 +178,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
     <div className="app-shell-nav has-topnav">
       <header className="app-mobile-topbar">
         <Brand animated />
+        <AppVersion />
         <GroupSwitcher className="group-switcher-topbar" />
         <button
           type="button"
@@ -181,6 +192,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
 
       <header className="app-topnav">
         <Brand animated />
+        <AppVersion />
         <GroupSwitcher className="group-switcher-topnav" />
         <nav className="app-topnav-links" aria-label="Menu principal">
           {NAV_ITEMS.filter(showItem).map((item) => (
