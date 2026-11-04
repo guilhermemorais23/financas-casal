@@ -22,6 +22,17 @@ export function splitEvenly(totalAmount: number, count: number): number[] {
   return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
 }
 
+// Valor digitado por uma pessoa ("54,90", "1.234,56", "1.500", "54.90") ->
+// número. As mesmas regras do parseMoney do frontend (utils/money.ts lá):
+// com vírgula, ela é o decimal e os pontos são milhar; sem vírgula, ponto
+// seguido de grupos de 3 dígitos é milhar e os outros pontos são decimal.
+export function parseTypedAmount(raw: string): number {
+  const clean = raw.trim();
+  if (clean.includes(",")) return Number(clean.replace(/\./g, "").replace(",", "."));
+  if (/^\d{1,3}(\.\d{3})+$/.test(clean)) return Number(clean.replace(/\./g, ""));
+  return Number(clean);
+}
+
 // "R$ 1.234,56" -- pra mensagens (e-mail, Telegram, alertas).
 export function formatBRL(amount: number): string {
   return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

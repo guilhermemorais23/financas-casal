@@ -8,6 +8,15 @@ describe("parseQuickEntry", () => {
     expect(parseQuickEntry("recebi 200")).toEqual({ type: "income", amount: 200, description: "Entrada" });
     expect(parseQuickEntry("quanto posso gastar?")).toBeNull();
   });
+
+  it("reads a thousands dot without decimals as thousands", () => {
+    expect(parseQuickEntry("gastei 1.500 no mercado")?.amount).toBe(1500);
+    expect(parseQuickEntry("recebi 2.000 de salário")?.amount).toBe(2000);
+  });
+
+  it("reads a dot with 1-2 digits as decimal", () => {
+    expect(parseQuickEntry("gastei 54.90 no mercado")?.amount).toBe(54.9);
+  });
 });
 
 describe("answerFromSnapshot", () => {
