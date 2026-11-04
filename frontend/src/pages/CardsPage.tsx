@@ -12,6 +12,7 @@ import { BillsTabs } from "../components/BillsTabs";
 import { SplitSummary } from "../components/SplitSummary";
 import { personColor } from "../utils/categoryColor";
 import { readCreditCardPreference, saveCreditCardPreference } from "../utils/creditCardPreference";
+import { parseMoney } from "../utils/money";
 
 interface MemberRow {
   id: string;
@@ -106,7 +107,7 @@ export function CardsPage() {
     setError(null);
     const parsedClosing = Number(closingDay);
     const parsedDue = Number(dueDay);
-    const parsedLimit = limit.trim() ? Number(limit.replace(",", ".")) : null;
+    const parsedLimit = limit.trim() ? parseMoney(limit) : null;
     if (!name.trim() || !(parsedClosing >= 1 && parsedClosing <= 31) || !(parsedDue >= 1 && parsedDue <= 31)) {
       setError("Informe nome, dia de fechamento e dia de vencimento (1 a 31).");
       return;
@@ -230,7 +231,7 @@ export function CardsPage() {
     event.preventDefault();
     if (!limitAdjust) return;
     setLimitAdjustError(null);
-    const parsedAmount = Number(limitAdjustAmount.replace(",", "."));
+    const parsedAmount = parseMoney(limitAdjustAmount);
     if (!(parsedAmount > 0)) {
       setLimitAdjustError("Informe um valor maior que zero.");
       return;
@@ -277,7 +278,7 @@ export function CardsPage() {
   async function saveLimit(event: FormEvent, card: CardRow) {
     event.preventDefault();
     const raw = limitEditValue.trim();
-    const value = raw === "" ? null : Number(raw.replace(/\./g, "").replace(",", "."));
+    const value = raw === "" ? null : parseMoney(raw);
     if (value !== null && !(value > 0)) {
       setError("O limite precisa ser um valor maior que zero.");
       return;

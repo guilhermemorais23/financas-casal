@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { currentMonthParam, formatCurrency } from "../utils/format";
 import { Sheet } from "./Sheet";
 import { useToast } from "./ToastProvider";
+import { parseMoney } from "../utils/money";
 
 interface PayOffInstallment {
   installmentNumber: number;
@@ -40,7 +41,7 @@ export function PayOffDebtSheet({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const parsedAmount = Number(amount.includes(",") ? amount.replace(/\./g, "").replace(",", ".") : amount);
+    const parsedAmount = parseMoney(amount);
     if (!(parsedAmount > 0)) {
       setError("Informe quanto você pagou.");
       return;

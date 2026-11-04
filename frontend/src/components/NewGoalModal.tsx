@@ -8,6 +8,7 @@ import { minimumMonthlySaving } from "../utils/goals";
 import { initialOf } from "../utils/initial";
 import { Icon } from "./Icon";
 import { Sheet } from "./Sheet";
+import { parseMoney } from "../utils/money";
 
 const PHOTO_SIZE = 240;
 
@@ -29,7 +30,7 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
 
   const parsePrice = (value: string) => {
     const clean = value.trim().replace(/\s|R\$/g, "");
-    return Number(clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean) || 0;
+    return parseMoney(clean) || 0;
   };
   const filledItems = items.filter((item) => item.name.trim() && parsePrice(item.price) > 0);
   const itemsTotal = filledItems.reduce((sum, item) => sum + parsePrice(item.price), 0);

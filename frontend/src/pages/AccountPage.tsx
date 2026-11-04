@@ -15,6 +15,7 @@ import { ImportStatementModal } from "../components/ImportStatementModal";
 import { initialOf } from "../utils/initial";
 import { categoryTypeOf, type CategoryType } from "../utils/categories";
 import { useTheme } from "../hooks/useTheme";
+import { parseMoney } from "../utils/money";
 
 interface AccountRow {
   id: string;
@@ -189,7 +190,7 @@ export function AccountPage() {
   async function handleSaveBudget(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    const capAmount = Number(capInput.replace(",", "."));
+    const capAmount = parseMoney(capInput);
     if (!(capAmount > 0)) {
       setError("Informe um valor válido para o orçamento.");
       return;
@@ -215,7 +216,7 @@ export function AccountPage() {
     if (savingCategoryId) return;
     setError(null);
     const raw = (categoryCapInputs[categoryId] ?? "").trim();
-    const capAmount = raw === "" ? null : Number(raw.replace(",", "."));
+    const capAmount = raw === "" ? null : parseMoney(raw);
     if (capAmount !== null && !(capAmount > 0)) {
       setError("Informe um valor válido para o teto da categoria, ou deixe em branco pra remover.");
       return;

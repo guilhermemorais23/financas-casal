@@ -13,6 +13,7 @@ import { minimumMonthlySaving } from "../utils/goals";
 import { useConfirm } from "../components/ConfirmDialog";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { whenWritesSettled } from "../utils/pendingWrites";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 interface GoalItemRow {
   id: string;
@@ -48,10 +49,6 @@ interface MemberRow {
   displayName: string;
 }
 
-function parseMoney(value: string): number {
-  const clean = value.trim().replace(/\s|R\$/g, "");
-  return Number(clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean);
-}
 
 export function GoalsPage() {
   const { user, token } = useAuth();
@@ -302,7 +299,7 @@ export function GoalsPage() {
                         className="link-button"
                         onClick={() => {
                           setEditingItem({ goalId: goal.id, itemId: item.id });
-                          setEditPrice(Number(item.targetAmount).toFixed(2).replace(".", ","));
+                          setEditPrice(toMoneyInput(Number(item.targetAmount)));
                         }}
                       >
                         Mudar preço
@@ -505,7 +502,7 @@ export function GoalsPage() {
                               title="Corrigir valor"
                               aria-label="Corrigir valor"
                               onClick={() =>
-                                setEditingContribution({ id: row.id, value: Math.abs(amount).toFixed(2).replace(".", ",") })
+                                setEditingContribution({ id: row.id, value: toMoneyInput(Math.abs(amount)) })
                               }
                             >
                               <Icon name="pencil" />

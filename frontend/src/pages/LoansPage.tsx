@@ -9,6 +9,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, parseLocalDate, todayISO } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
 import { Sheet } from "../components/Sheet";
+import { parseMoney } from "../utils/money";
 
 interface Repayment {
   id: string;
@@ -98,7 +99,7 @@ function dueLabel(loan: Loan): { text: string; tone: "bad" | "warn" | "muted" | 
 }
 
 function parseAmount(raw: string): number {
-  return Number(raw.replace(/\./g, "").replace(",", "."));
+  return parseMoney(raw);
 }
 
 export function LoansPage() {
@@ -576,7 +577,7 @@ function CreateLoanModal({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const parsed = parseAmount(amount);
-    const rate = hasInterest ? Number(interestRate.replace(",", ".")) : null;
+    const rate = hasInterest ? parseMoney(interestRate) : null;
     const owe = direction === "borrowed";
     if (!personName.trim()) return setError(owe ? "Quem te emprestou?" : "Pra quem você emprestou?");
     if (rate !== null && !(rate > 0 && rate <= 20)) return setError("Juros entre 0,1% e 20% ao mês.");
@@ -819,7 +820,7 @@ function EditLoanModal({ loan, onClose, onSaved }: { loan: Loan; onClose: () => 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!personName.trim()) return setError("Informe o nome.");
-    const rate = hasInterest ? Number(interestRate.replace(",", ".")) : null;
+    const rate = hasInterest ? parseMoney(interestRate) : null;
     if (rate !== null && !(rate > 0 && rate <= 20)) return setError("Juros entre 0,1% e 20% ao mês.");
     if (hasDueDate && !dueDate) return setError("Escolha o prazo ou desmarque \"Tem prazo\".");
     setError(null);

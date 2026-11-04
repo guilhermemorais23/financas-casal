@@ -6,6 +6,7 @@ import { formatCurrency, parseLocalDate, todayISO } from "../utils/format";
 import { Icon } from "./Icon";
 import { Sheet } from "./Sheet";
 import { useToast } from "./ToastProvider";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 // Contas fixas sem valor certo (celular, água, luz): o PAR. avisa uns dias
 // antes e a pessoa diz quanto foi ("Já paguei") ou pede pra lembrar depois.
@@ -22,15 +23,9 @@ export interface BillReminder {
   snoozed?: boolean;
 }
 
-// "54,90", "1.234,56" ou "54.90" -> número.
-export function parseMoney(value: string): number {
-  const clean = value.trim().replace(/\s|R\$/g, "");
-  const normalized = clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean;
-  return Number(normalized);
-}
 
 function moneyInput(value: number | null): string {
-  return value === null ? "" : value.toFixed(2).replace(".", ",");
+  return value === null ? "" : toMoneyInput(value);
 }
 
 export function billDueText(daysUntil: number, dueDate: string): string {

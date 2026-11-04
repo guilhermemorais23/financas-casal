@@ -7,6 +7,7 @@ import { readCache, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { categoriesFor, type CategoryType } from "../utils/categories";
+import { parseMoney } from "../utils/money";
 
 interface AccountRow {
   id: string;
@@ -98,7 +99,7 @@ export function ShoppingListPage() {
   async function handleConfirmCheck(event: FormEvent, itemId: string) {
     event.preventDefault();
     setError(null);
-    const parsedAmount = Number(checkAmount.replace(",", "."));
+    const parsedAmount = parseMoney(checkAmount);
     if (!(parsedAmount > 0) || !checkAccountId) {
       setError("Informe o valor e a conta.");
       return;

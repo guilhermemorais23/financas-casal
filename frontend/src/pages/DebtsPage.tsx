@@ -13,6 +13,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
 import { categoriesFor, type CategoryType } from "../utils/categories";
+import { parseMoney } from "../utils/money";
 
 interface CategoryRow {
   id: string;
@@ -99,7 +100,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    const parsedTotal = Number(totalAmount.replace(",", "."));
+    const parsedTotal = parseMoney(totalAmount);
     const parsedCount = isInstallment ? Number(installmentsCount) : 1;
     const parsedDueDay = dueDay ? Number(dueDay) : null;
     if (!name.trim() || !(parsedTotal > 0) || !(parsedCount >= 1) || !startMonth) {
@@ -400,7 +401,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
                 />
                 {totalAmount && Number(installmentsCount) >= 1 && (
                   <p className="card-subtitle" style={{ marginBottom: 0 }}>
-                    ≈ {formatCurrency(Number(totalAmount.replace(",", ".")) / Number(installmentsCount))} por parcela
+                    ≈ {formatCurrency(parseMoney(totalAmount) / Number(installmentsCount))} por parcela
                   </p>
                 )}
               </div>

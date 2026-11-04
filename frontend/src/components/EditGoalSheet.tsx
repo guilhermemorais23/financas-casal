@@ -3,6 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "./Sheet";
 import { useToast } from "./ToastProvider";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 export interface EditableGoal {
   id: string;
@@ -13,12 +14,8 @@ export interface EditableGoal {
   items?: unknown[];
 }
 
-function parseMoney(value: string): number {
-  const clean = value.trim().replace(/\s|R\$/g, "");
-  return Number(clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean);
-}
 
-const toInput = (value: string) => Number(value).toFixed(2).replace(".", ",");
+const toInput = (value: string) => toMoneyInput(Number(value));
 
 // Editar a meta: nome, prazo e -- sem submetas -- o alvo e quanto já tem
 // guardado (a diferença entra no histórico como "Ajuste", sem mexer em conta).

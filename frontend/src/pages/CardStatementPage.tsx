@@ -19,6 +19,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoriesFor, type CategoryType } from "../utils/categories";
 import { formatCurrency, monthLongName, monthYearLabel, parseLocalDate, todayISO } from "../utils/format";
 import { initialOf } from "../utils/initial";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 interface CardRow {
   id: string;
@@ -422,7 +423,7 @@ function PurchaseSheet({
   const isEdit = purchase !== null;
   const isInstallment = (purchase?.installmentsCount ?? 1) > 1;
   const [description, setDescription] = useState(purchase?.description ?? "");
-  const [amount, setAmount] = useState(purchase ? Number(purchase.amount).toFixed(2).replace(".", ",") : "");
+  const [amount, setAmount] = useState(purchase ? toMoneyInput(Number(purchase.amount)) : "");
   const [purchaseDate, setPurchaseDate] = useState(purchase?.purchaseDate ?? todayISO());
   const [installments, setInstallments] = useState("1");
   const [categoryId, setCategoryId] = useState(purchase?.categoryId ?? "");
@@ -432,7 +433,7 @@ function PurchaseSheet({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const parsedAmount = Number(amount.includes(",") ? amount.replace(/\./g, "").replace(",", ".") : amount);
+    const parsedAmount = parseMoney(amount);
     if (!description.trim() || !(parsedAmount > 0) || !buyerId || !purchaseDate) {
       setError("Informe descrição, valor, quem comprou e a data.");
       return;
