@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createTestGroup } from "../../test-helpers";
-import { createDebt, listDebts, setInstallmentPaidForUser, updateDebtForUser } from "./debts.service";
+import {
+  createDebt,
+  listDebts,
+  payOffDebtForUser,
+  setInstallmentPaidForUser,
+  updateDebtForUser,
+  updateInstallmentAmountForUser,
+} from "./debts.service";
 import { findTransactionById } from "../transactions/transactions.repository";
 import { addMonths, todayInBrazil } from "../../utils/month";
 import { insertCategory } from "../categories/categories.repository";
@@ -195,5 +202,63 @@ describe("setInstallmentPaidForUser", () => {
     await expect(
       updateDebtForUser(userAId, debt.id, { name: "Exame", description: null, categoryId: alheia.id })
     ).rejects.toBeInstanceOf(InvalidCategoryError);
+  });
+});
+
+describe("quitação e valor da parcela", () => {
+  it("paying everything at once with a discount replaces the old payments and the total follows", async () => {
+    const { userAId } = await createTestGroup();
+    const debt = await createDebt(userAId, {
+      name: "Nubank",
+      description: null,
+      totalAmount: 500,
+      installmentsCount: 5,
+      scope: "personal",
+      startMonth: currentMonthParam(),
+      dueDay: null,
+    });
+    // Marcou as 5 como pagas no valor cheio...
+    const before = (await listDebts(userAId)).find((d) => d.id === debt.id)!;
+    for (const installment of before.installments) {
+      await setInstallmentPaidForUser(userAId, debt.id, installment.id, true);
+    }
+    const oldTransactionIds = (await listDebts(userAId))
+      .find((d) => d.id === debt.id)!
+      .installments.map((i) => i.transactionId!);
+
+    // ...mas pagou tudo de uma vez por 400.
+    await payOffDebtForUser(userAId, debt.id, { fromInstallment: 1, amount: 400, referenceMonth: currentMonthParam() });
+
+    const after = (await listDebts(userAId)).find((d) => d.id === debt.id)!;
+    expect(after.totalAmount).toBe("400.00");
+    expect(after.paidAmount).toBe(400);
+    expect(after.remainingAmount).toBe(0);
+    for (const id of oldTransactionIds) {
+      expect(await findTransactionById(id)).toBeNull();
+    }
+    const newTransactions = await Promise.all(after.installments.map((i) => findTransactionById(i.transactionId!)));
+    expect(newTransactions.reduce((sum, t) => sum + Number(t!.amount), 0)).toBe(400);
+  });
+
+  it("changing a paid installment's amount updates the expense and the debt total", async () => {
+    const { userAId } = await createTestGroup();
+    const debt = await createDebt(userAId, {
+      name: "Loja",
+      description: null,
+      totalAmount: 300,
+      installmentsCount: 3,
+      scope: "personal",
+      startMonth: currentMonthParam(),
+      dueDay: null,
+    });
+    const [first] = (await listDebts(userAId)).find((d) => d.id === debt.id)!.installments;
+    await setInstallmentPaidForUser(userAId, debt.id, first.id, true);
+
+    await updateInstallmentAmountForUser(userAId, debt.id, first.id, 80);
+
+    const after = (await listDebts(userAId)).find((d) => d.id === debt.id)!;
+    expect(after.totalAmount).toBe("280.00");
+    const transaction = await findTransactionById(after.installments[0].transactionId!);
+    expect(transaction!.amount).toBe("80.00");
   });
 });

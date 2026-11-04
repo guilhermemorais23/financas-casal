@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { EditDebtModal } from "../components/EditDebtModal";
 import { EditInstallmentModal } from "../components/EditInstallmentModal";
 import { EmptyState } from "../components/EmptyState";
+import { PayOffDebtSheet } from "../components/PayOffDebtSheet";
 import { AppLayout } from "../layouts/AppLayout";
 import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
 import { readCache, writeCache } from "../utils/pageCache";
@@ -56,6 +57,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
   const [debts, setDebts] = useState<DebtRow[] | null>(() => readCache(cacheKey));
   const [error, setError] = useState<string | null>(null);
   const [editingDebt, setEditingDebt] = useState<DebtRow | null>(null);
+  const [payingOff, setPayingOff] = useState<DebtRow | null>(null);
   const [editingInstallment, setEditingInstallment] = useState<
     (InstallmentRow & { debtId: string; installmentsCount: number }) | null
   >(null);
@@ -241,6 +243,15 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
               </button>
             ))}
           </div>
+        )}
+
+        {debt.installmentsCount > 1 && (
+          <p className="field-hint" style={{ marginTop: "0.6rem", marginBottom: 0 }}>
+            Toque numa parcela paga (✓) pra mudar o valor ou o mês.{" "}
+            <button type="button" className="link-button" onClick={() => setPayingOff(debt)}>
+              Paguei tudo de uma vez (com desconto)
+            </button>
+          </p>
         )}
 
         {debt.installmentsCount === 1 && (
@@ -452,6 +463,8 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
           onSaved={load}
         />
       )}
+
+      {payingOff && <PayOffDebtSheet debt={payingOff} onClose={() => setPayingOff(null)} onSaved={load} />}
 
       {editingInstallment && (
         <EditInstallmentModal

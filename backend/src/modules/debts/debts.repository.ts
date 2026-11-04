@@ -198,6 +198,26 @@ export async function updateInstallmentReferenceMonth(
   return toInstallmentRow(debtId, doc);
 }
 
+// Valor de uma parcela (pagou com desconto, juros, etc.).
+export async function updateInstallmentAmount(
+  debtId: string,
+  installmentId: string,
+  amountCents: number
+): Promise<DebtInstallmentRow> {
+  const ref = debtsCol.doc(debtId).collection("installments").doc(installmentId);
+  await ref.update({ amountCents });
+  const doc = await ref.get();
+  return toInstallmentRow(debtId, doc);
+}
+
+// O total da dívida é a soma das parcelas: mudou o valor de uma, o total
+// acompanha (pagou com desconto = a dívida custou menos).
+export async function syncDebtTotal(debtId: string): Promise<void> {
+  const snapshot = await debtsCol.doc(debtId).collection("installments").get();
+  const totalAmountCents = snapshot.docs.reduce((sum, doc) => sum + (doc.data().amountCents as number), 0);
+  await debtsCol.doc(debtId).update({ totalAmountCents, updatedAt: FieldValue.serverTimestamp() });
+}
+
 export async function updateDebt(
   debtId: string,
   input: { name: string; description: string | null; dueDay?: number | null; categoryId?: string | null }
