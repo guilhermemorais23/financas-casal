@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { NewGoalModal } from "../components/NewGoalModal";
+import { EditGoalSheet } from "../components/EditGoalSheet";
 import { GoalMoneySheet, type GoalForMoney } from "../components/GoalMoneySheet";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
@@ -72,6 +73,8 @@ export function GoalsPage() {
   // Histórico aberto
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [history, setHistory] = useState<ContributionRow[] | null>(null);
+  const [editingContribution, setEditingContribution] = useState<{ id: string; value: string } | null>(null);
+  const [editingGoal, setEditingGoal] = useState<GoalRow | null>(null);
 
   async function loadGoals() {
     await whenWritesSettled();
@@ -164,6 +167,57 @@ export function GoalsPage() {
       setHistory(await apiRequest<ContributionRow[]>(`/goals/${goal.id}/contributions`, { token }));
     } catch {
       setHistory([]);
+    }
+  }
+
+  async function reloadHistory(goalId: string) {
+    try {
+      setHistory(await apiRequest<ContributionRow[]>(`/goals/${goalId}/contributions`, { token }));
+    } catch {
+      setHistory([]);
+    }
+  }
+
+  // Corrigir o valor de um guardar/retirar: a meta e a transferência no extrato mudam junto.
+  async function saveContribution(event: FormEvent, goal: GoalRow, row: ContributionRow) {
+    event.preventDefault();
+    if (!editingContribution) return;
+    const value = parseMoney(editingContribution.value);
+    if (!(value > 0)) {
+      setError("Informe um valor maior que zero (ou apague o registro).");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      replaceGoal(await apiRequest<GoalRow>(`/goals/${goal.id}/contributions/${row.id}`, { method: "PATCH", token, body: { amount: value } }));
+      setEditingContribution(null);
+      showToast("Valor corrigido");
+      await reloadHistory(goal.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível corrigir o valor");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteContribution(goal: GoalRow, row: ContributionRow) {
+    const amount = Number(row.amount);
+    const confirmed = await confirm({
+      title: `Apagar esse ${amount >= 0 ? "guardar" : "retirar"} de ${formatCurrency(Math.abs(amount))}?`,
+      body: row.accountId
+        ? "A meta recalcula e a transferência some do extrato (o saldo da conta volta)."
+        : "A meta recalcula sem esse valor.",
+      confirmLabel: "Apagar",
+    });
+    if (!confirmed) return;
+    setError(null);
+    try {
+      replaceGoal(await apiRequest<GoalRow>(`/goals/${goal.id}/contributions/${row.id}`, { method: "DELETE", token }));
+      showToast("Registro apagado");
+      await reloadHistory(goal.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível apagar o registro");
     }
   }
 
@@ -363,6 +417,9 @@ export function GoalsPage() {
                       </span>
                     )
                   )}
+                  <button type="button" className="btn-icon" onClick={() => setEditingGoal(goal)} title="Editar meta">
+                    <Icon name="pencil" />
+                  </button>
                   <button type="button" className="btn-icon" onClick={() => handleDelete(goal)} title="Remover meta">
                     ✕
                   </button>
@@ -415,16 +472,55 @@ export function GoalsPage() {
                   {history?.length === 0 && <li className="field-hint">Nada guardado ainda.</li>}
                   {history?.map((row) => {
                     const amount = Number(row.amount);
+                    const isEditingRow = editingContribution?.id === row.id;
                     return (
                       <li key={row.id}>
                         <span>
                           {memberName(row.userId)} {amount >= 0 ? "guardou" : "retirou"}
                           {row.itemName && <> · {row.itemName}</>}
                         </span>
-                        <span className={amount >= 0 ? "" : "goal-history-out"}>
-                          {formatCurrency(Math.abs(amount))} ·{" "}
-                          {new Date(row.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                        </span>
+                        {isEditingRow ? (
+                          <form className="goal-item-price-form" onSubmit={(e) => void saveContribution(e, goal, row)}>
+                            <input
+                              aria-label="Valor certo"
+                              inputMode="decimal"
+                              value={editingContribution.value}
+                              onChange={(e) => setEditingContribution({ id: row.id, value: e.target.value })}
+                              autoFocus
+                            />
+                            <button type="submit" className="btn-icon" title="Salvar" disabled={busy}>
+                              ✓
+                            </button>
+                            <button type="button" className="btn-icon" title="Cancelar" onClick={() => setEditingContribution(null)}>
+                              ×
+                            </button>
+                          </form>
+                        ) : (
+                          <span className={amount >= 0 ? "" : "goal-history-out"}>
+                            {formatCurrency(Math.abs(amount))} ·{" "}
+                            {new Date(row.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              title="Corrigir valor"
+                              aria-label="Corrigir valor"
+                              onClick={() =>
+                                setEditingContribution({ id: row.id, value: Math.abs(amount).toFixed(2).replace(".", ",") })
+                              }
+                            >
+                              <Icon name="pencil" />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              title="Apagar do histórico"
+                              aria-label="Apagar do histórico"
+                              onClick={() => void deleteContribution(goal, row)}
+                            >
+                              <Icon name="trash" />
+                            </button>
+                          </span>
+                        )}
                       </li>
                     );
                   })}
@@ -440,6 +536,16 @@ export function GoalsPage() {
         <Icon name="trend" /> Ver cotações do mercado (Ibovespa e ações)
       </Link>
 
+      {editingGoal && (
+        <EditGoalSheet
+          goal={editingGoal}
+          onClose={() => setEditingGoal(null)}
+          onSaved={(updated) => {
+            replaceGoal(updated as GoalRow);
+            if (historyFor === editingGoal.id) void reloadHistory(editingGoal.id);
+          }}
+        />
+      )}
       {isCreating && <NewGoalModal onClose={() => setIsCreating(false)} onCreated={loadGoals} />}
       {moving && (
         <GoalMoneySheet

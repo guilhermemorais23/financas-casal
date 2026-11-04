@@ -20,6 +20,7 @@ import {
   createDebtHandler,
   deleteDebtHandler,
   listDebtsHandler,
+  payOffDebtHandler,
   setInstallmentPaidHandler,
   updateDebtHandler,
 } from "./debts.controller";
@@ -31,5 +32,6 @@ debtsRouter.use(requireAuth);
 debtsRouter.post("/", asyncHandler(createDebtHandler));
 debtsRouter.get("/", asyncHandler(listDebtsHandler));
 debtsRouter.patch("/:debtId/installments/:installmentId", asyncHandler(setInstallmentPaidHandler));
+debtsRouter.post("/:id/payoff", asyncHandler(payOffDebtHandler));
 debtsRouter.patch("/:id", asyncHandler(updateDebtHandler));
 debtsRouter.delete("/:id", asyncHandler(deleteDebtHandler));

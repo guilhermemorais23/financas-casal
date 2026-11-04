@@ -9516,6 +9516,17 @@ select {
 .fatura-months button { border: 0; background: none; font: inherit; font-weight: 600; padding: 0.35rem 0.7rem; border-radius: var(--radius-pill); color: var(--color-text); cursor: pointer; }
 .fatura-months button:hover { background: var(--glyph-bg); }
 .fatura-months .fatura-month-label { min-width: 9.5rem; text-align: center; font-weight: 700; }
+/* Faixa de faturas, uma por mês (rola de lado no celular). */
+.fatura-month-strip { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.25rem; scrollbar-width: thin; }
+.fatura-month-chip { flex: none; display: grid; gap: 0.1rem; text-align: left; min-width: 6.5rem; padding: 0.55rem 0.8rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--surface); color: var(--color-text); font: inherit; cursor: pointer; }
+.fatura-month-chip:hover { background: var(--glyph-bg); }
+.fatura-month-chip.active { background: var(--band-bg); color: var(--band-ink); border-color: transparent; }
+.fatura-month-chip-name { font-size: 0.78rem; font-weight: 700; text-transform: capitalize; }
+.fatura-month-chip-total { font-weight: 700; font-variant-numeric: tabular-nums; }
+.fatura-month-chip-status { font-size: 0.72rem; opacity: 0.75; }
+.fatura-month-chip-status.paid { color: var(--olive-700); opacity: 1; }
+.fatura-month-chip.active .fatura-month-chip-status.paid { color: inherit; }
+.fatura-row-amount { display: inline-flex; align-items: center; gap: 0.15rem; }
 .fatura-summary {
   --series-1: #f2b84b;
   background: var(--band-bg);

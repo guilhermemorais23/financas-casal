@@ -13,6 +13,8 @@ import {
   moveGoalMoney,
   removeGoal,
   removeGoalItem,
+  updateContribution,
+  updateGoal,
   updateGoalItem,
 } from "./goals.service";
 import { InvalidAccountError } from "../transactions/transactions.service";
@@ -171,6 +173,60 @@ export async function deleteGoalHandler(req: Request, res: Response) {
   try {
     await removeGoal(req.user!.id, req.params.id);
     res.status(204).send();
+  } catch (err) {
+    if (goalError(err, res)) return;
+    throw err;
+  }
+}
+
+// Editar a meta: nome, prazo e (sem submetas) alvo e quanto já tem guardado.
+export async function updateGoalHandler(req: Request, res: Response) {
+  const { name, deadline, targetAmount, currentAmount } = req.body ?? {};
+  const isMoney = (value: unknown, allowZero: boolean) =>
+    typeof value === "number" && Number.isFinite(value) && (allowZero ? value >= 0 : value > 0);
+  if (
+    !isNonEmptyString(name) ||
+    (deadline !== undefined && deadline !== null && !isNonEmptyString(deadline)) ||
+    (targetAmount !== undefined && !isMoney(targetAmount, false)) ||
+    (currentAmount !== undefined && !isMoney(currentAmount, true))
+  ) {
+    res.status(400).json({ error: "name is required; targetAmount (> 0) and currentAmount (>= 0) are optional" });
+    return;
+  }
+  try {
+    res.status(200).json(
+      await updateGoal(req.user!.id, req.params.id, {
+        name,
+        deadline: isNonEmptyString(deadline) ? deadline : null,
+        targetAmount,
+        currentAmount,
+      })
+    );
+  } catch (err) {
+    if (goalError(err, res)) return;
+    throw err;
+  }
+}
+
+// Corrigir o valor de um guardar/retirar do histórico.
+export async function updateContributionHandler(req: Request, res: Response) {
+  const { amount } = req.body ?? {};
+  if (!isValidAmount(amount)) {
+    res.status(400).json({ error: "amount is required" });
+    return;
+  }
+  try {
+    res.status(200).json(await updateContribution(req.user!.id, req.params.id, req.params.contributionId, amount));
+  } catch (err) {
+    if (goalError(err, res)) return;
+    throw err;
+  }
+}
+
+// Apagar um guardar/retirar do histórico (a transferência no extrato some junto).
+export async function deleteContributionHandler(req: Request, res: Response) {
+  try {
+    res.status(200).json(await updateContribution(req.user!.id, req.params.id, req.params.contributionId, null));
   } catch (err) {
     if (goalError(err, res)) return;
     throw err;

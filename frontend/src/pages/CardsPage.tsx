@@ -196,6 +196,29 @@ export function CardsPage() {
     }
   }
 
+  // Cartão criado no lugar errado (do grupo x pessoal): muda o dono, e o
+  // dinheiro guardado num cartão garantido vai junto pra conta certa.
+  async function handleScopeChange(card: CardRow) {
+    const toPersonal = card.scope === "joint";
+    const movesMoney = card.limitType === "secured" && card.securedFromAccount;
+    const confirmed = await confirm({
+      title: toPersonal ? "Passar esse cartão pra pessoal?" : "Passar esse cartão pro grupo?",
+      body: toPersonal
+        ? `Ele fica só seu.${movesMoney ? " O dinheiro guardado no limite sai da Nossa Conta e passa pra sua conta pessoal." : ""}`
+        : `Todo mundo do grupo passa a ver e lançar nele.${movesMoney ? " O dinheiro guardado no limite sai da sua conta pessoal e passa pra Nossa Conta." : ""}`,
+      confirmLabel: toPersonal ? "Passar pra pessoal" : "Passar pro grupo",
+      tone: "primary",
+    });
+    if (!confirmed) return;
+    try {
+      await apiRequest(`/cards/${card.id}/scope`, { method: "PATCH", token, body: { scope: toPersonal ? "personal" : "joint" } });
+      showToast(toPersonal ? "Cartão agora é pessoal" : "Cartão agora é do grupo");
+      await loadCards();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível mudar o cartão");
+    }
+  }
+
   function openLimitAdjust(cardId: string, direction: "deposit" | "withdraw") {
     const isSameForm = limitAdjust?.cardId === cardId && limitAdjust.direction === direction;
     setLimitAdjust(isSameForm ? null : { cardId, direction });
@@ -274,6 +297,100 @@ export function CardsPage() {
     } finally {
       setIsSavingLimit(false);
     }
+  }
+
+  // Editar nome, dia de fechamento e dia de vencimento.
+  const [detailsEdit, setDetailsEdit] = useState<{ cardId: string; name: string; closingDay: string; dueDay: string } | null>(null);
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
+
+  async function saveDetails(event: FormEvent, card: CardRow) {
+    event.preventDefault();
+    if (!detailsEdit) return;
+    const parsedClosing = Number(detailsEdit.closingDay);
+    const parsedDue = Number(detailsEdit.dueDay);
+    if (
+      !detailsEdit.name.trim() ||
+      !Number.isInteger(parsedClosing) ||
+      !(parsedClosing >= 1 && parsedClosing <= 31) ||
+      !Number.isInteger(parsedDue) ||
+      !(parsedDue >= 1 && parsedDue <= 31)
+    ) {
+      setError("Informe o nome e os dias de fechamento e vencimento (1 a 31).");
+      return;
+    }
+    if (parsedClosing !== card.closingDay) {
+      const confirmed = await confirm({
+        title: "Mudar o dia de fechamento?",
+        body: "As compras das faturas em aberto são reorganizadas pela data de fechamento nova. Faturas já pagas continuam como estão.",
+        confirmLabel: "Mudar fechamento",
+        tone: "primary",
+      });
+      if (!confirmed) return;
+    }
+    setIsSavingDetails(true);
+    try {
+      await apiRequest(`/cards/${card.id}`, {
+        method: "PATCH",
+        token,
+        body: { name: detailsEdit.name.trim(), closingDay: parsedClosing, dueDay: parsedDue },
+      });
+      setDetailsEdit(null);
+      showToast("Cartão atualizado");
+      await loadCards();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar o cartão");
+    } finally {
+      setIsSavingDetails(false);
+    }
+  }
+
+  function renderDetailsForm(card: CardRow) {
+    if (!detailsEdit) return null;
+    return (
+      <form className="limit-adjust-form" onSubmit={(e) => void saveDetails(e, card)}>
+        <div className="field">
+          <label htmlFor={`card-edit-name-${card.id}`}>Nome do cartão</label>
+          <input
+            id={`card-edit-name-${card.id}`}
+            value={detailsEdit.name}
+            onChange={(e) => setDetailsEdit({ ...detailsEdit, name: e.target.value })}
+            required
+          />
+        </div>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor={`card-edit-closing-${card.id}`}>Dia de fechamento</label>
+            <input
+              id={`card-edit-closing-${card.id}`}
+              type="number"
+              min={1}
+              max={31}
+              value={detailsEdit.closingDay}
+              onChange={(e) => setDetailsEdit({ ...detailsEdit, closingDay: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor={`card-edit-due-${card.id}`}>Dia de vencimento</label>
+            <input
+              id={`card-edit-due-${card.id}`}
+              type="number"
+              min={1}
+              max={31}
+              value={detailsEdit.dueDay}
+              onChange={(e) => setDetailsEdit({ ...detailsEdit, dueDay: e.target.value })}
+            />
+          </div>
+        </div>
+        <div className="limit-adjust-actions">
+          <button type="button" className="btn btn-outline" onClick={() => setDetailsEdit(null)}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={isSavingDetails}>
+            {isSavingDetails ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </form>
+    );
   }
 
   function renderLimitForm(card: CardRow) {
@@ -487,11 +604,30 @@ export function CardsPage() {
         )}
 
         <p className="card-subtitle card-closing-note">
-          Fecha dia {card.closingDay}. Compras a partir daí caem na fatura seguinte.{" "}
+          Fecha dia {card.closingDay} e vence dia {card.dueDay}. Compras depois do fechamento caem na fatura seguinte.{" "}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() =>
+              setDetailsEdit(
+                detailsEdit?.cardId === card.id
+                  ? null
+                  : { cardId: card.id, name: card.name, closingDay: String(card.closingDay), dueDay: String(card.dueDay) }
+              )
+            }
+          >
+            Editar cartão
+          </button>
+          {" · "}
           <button type="button" className="link-button" onClick={() => toggleDefaultCreditCard(card.id)}>
             {defaultCreditCardId === card.id ? "Deixar de ser o padrão no crédito" : "Usar nas compras no crédito"}
           </button>
+          {" · "}
+          <button type="button" className="link-button" onClick={() => void handleScopeChange(card)}>
+            {card.scope === "joint" ? "É só meu (passar pra pessoal)" : "Passar pro grupo"}
+          </button>
         </p>
+        {detailsEdit?.cardId === card.id && renderDetailsForm(card)}
 
         {s.byPerson.length > 1 && (
           <SplitSummary
@@ -626,7 +762,7 @@ export function CardsPage() {
                     className={`segmented-option${securedFromAccount === true ? " active" : ""}`}
                     onClick={() => setSecuredFromAccount(true)}
                   >
-                    Tirei da minha conta
+                    {scope === "joint" ? "Tirei da Nossa Conta" : "Tirei da minha conta"}
                   </button>
                   <button
                     type="button"
@@ -655,7 +791,7 @@ export function CardsPage() {
                   ? securedFromAccount === null
                     ? "Ex.: sobrou do salário e você passou pro cartão = tirei da minha conta. Tinha numa poupança que o app não acompanha = já estava guardado fora."
                     : securedFromAccount
-                      ? "Esse valor sai da sua conta hoje e vira o limite do cartão. Continua sendo seu: dá pra guardar mais ou resgatar depois."
+                      ? `Esse valor sai ${scope === "joint" ? "da Nossa Conta (cartão do grupo)" : "da sua conta pessoal"} hoje e vira o limite do cartão. Continua sendo seu: dá pra guardar mais ou resgatar depois.`
                       : "Vira o limite do cartão sem mexer no saldo da conta. O que você comprar entra na fatura do mês seguinte."
                   : "Se preencher, a gente acompanha quanto do limite já está comprometido."}
               </p>

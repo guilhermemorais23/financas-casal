@@ -24,6 +24,9 @@ import {
   listGoalsHandler,
   moveGoalMoneyHandler,
   removeGoalItemHandler,
+  deleteContributionHandler,
+  updateContributionHandler,
+  updateGoalHandler,
   updateGoalItemHandler,
 } from "./goals.controller";
 
@@ -36,6 +39,9 @@ goalsRouter.get("/", asyncHandler(listGoalsHandler));
 goalsRouter.post("/:id/contribute", asyncHandler(contributeToGoalHandler));
 goalsRouter.post("/:id/money", asyncHandler(moveGoalMoneyHandler));
 goalsRouter.get("/:id/contributions", asyncHandler(listContributionsHandler));
+goalsRouter.patch("/:id/contributions/:contributionId", asyncHandler(updateContributionHandler));
+goalsRouter.delete("/:id/contributions/:contributionId", asyncHandler(deleteContributionHandler));
+goalsRouter.patch("/:id", asyncHandler(updateGoalHandler));
 goalsRouter.post("/:id/items", asyncHandler(addGoalItemHandler));
 goalsRouter.patch("/:id/items/:itemId", asyncHandler(updateGoalItemHandler));
 goalsRouter.delete("/:id/items/:itemId", asyncHandler(removeGoalItemHandler));

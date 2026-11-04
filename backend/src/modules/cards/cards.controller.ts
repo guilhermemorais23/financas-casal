@@ -18,8 +18,11 @@ import {
   createCard,
   getStatement,
   listCards,
+  listStatements,
   removeCard,
   removePurchase,
+  updatePurchase,
+  setCardScopeForUser,
   setSecuredSourceForUser,
   setStatementPaidForUser,
   updateCardForUser,
@@ -156,6 +159,28 @@ export async function setSecuredSourceHandler(req: Request, res: Response) {
   }
 }
 
+export async function setCardScopeHandler(req: Request, res: Response) {
+  const { scope } = req.body ?? {};
+  if (scope !== "personal" && scope !== "joint") {
+    res.status(400).json({ error: "scope (personal | joint) is required" });
+    return;
+  }
+
+  try {
+    res.status(200).json(await setCardScopeForUser(req.user!.id, req.params.id, scope));
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof CardNotFoundError) {
+      res.status(404).json({ error: "card not found" });
+      return;
+    }
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: "not allowed to manage this card" });
+      return;
+    }
+    throw err;
+  }
+}
+
 export async function adjustSecuredLimitHandler(req: Request, res: Response) {
   const { direction, amount } = req.body ?? {};
   if ((direction !== "deposit" && direction !== "withdraw") || !isValidAmount(amount)) {
@@ -273,6 +298,66 @@ export async function addPurchaseHandler(req: Request, res: Response) {
     }
     if (err instanceof StatementAlreadyPaidError) {
       res.status(409).json({ error: "statement already paid" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function updatePurchaseHandler(req: Request, res: Response) {
+  const { description, amount, categoryId, buyerId, purchaseDate } = req.body ?? {};
+
+  if (
+    !isNonEmptyString(description) ||
+    description.length > MAX_DESCRIPTION_LENGTH ||
+    !isValidAmount(amount) ||
+    !isNonEmptyString(buyerId) ||
+    !isIsoDate(purchaseDate)
+  ) {
+    res.status(400).json({ error: "description, amount, buyerId and purchaseDate (YYYY-MM-DD) are required" });
+    return;
+  }
+
+  try {
+    const purchase = await updatePurchase(req.user!.id, req.params.id, req.params.purchaseId, {
+      description: description.trim(),
+      amount,
+      categoryId: isNonEmptyString(categoryId) ? categoryId : null,
+      buyerId,
+      purchaseDate,
+    });
+    res.status(200).json(purchase);
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof CardNotFoundError || err instanceof PurchaseNotFoundError) {
+      res.status(404).json({ error: "card or purchase not found" });
+      return;
+    }
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: "not allowed to manage this card" });
+      return;
+    }
+    if (err instanceof InvalidBuyerError || err instanceof InvalidCategoryError) {
+      res.status(400).json({ error: err.constructor.name });
+      return;
+    }
+    if (err instanceof StatementAlreadyPaidError) {
+      res.status(409).json({ error: "statement already paid" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function listStatementsHandler(req: Request, res: Response) {
+  try {
+    res.status(200).json(await listStatements(req.user!.id, req.params.id));
+  } catch (err) {
+    if (err instanceof NoGroupError || err instanceof CardNotFoundError) {
+      res.status(404).json({ error: "card not found" });
+      return;
+    }
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: "not allowed to view this card" });
       return;
     }
     throw err;

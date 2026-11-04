@@ -12,16 +12,20 @@ import {
   InsufficientAvailableLimitError,
   InvalidLimitError,
   NotSecuredCardError,
+  StatementAlreadyPaidError,
   addPurchase,
   adjustSecuredLimit,
   createCard,
   getStatement,
   listCards,
+  listStatements,
   removeCard,
   removePurchase,
+  setCardScopeForUser,
   setSecuredSourceForUser,
   setStatementPaidForUser,
   updateCardForUser,
+  updatePurchase,
 } from "./cards.service";
 
 const todayISO = new Date().toISOString().slice(0, 10);
@@ -88,6 +92,137 @@ describe("cards: limite e parcelamento", () => {
     const thirdMonthStatement = await getStatement(userAId, card.id, installments[2].statementMonth);
     expect(firstMonthStatement.purchases).toHaveLength(1);
     expect(thirdMonthStatement.purchases).toHaveLength(1);
+  });
+
+  it("editing an installment renames every open installment but changes only its own amount", async () => {
+    const { userAId } = await createTestGroup();
+    const card = await createCard(userAId, {
+      name: "Nubank",
+      closingDay: 31,
+      dueDay: 5,
+      scope: "personal",
+      limit: null,
+      limitType: "normal",
+    });
+    const installments = await addPurchase(userAId, card.id, {
+      description: "Geladeira",
+      amount: 300,
+      categoryId: null,
+      buyerId: userAId,
+      purchaseDate: todayISO,
+      installments: 3,
+    });
+
+    const edited = await updatePurchase(userAId, card.id, installments[0].id, {
+      description: "Geladeira nova",
+      amount: 120,
+      categoryId: null,
+      buyerId: userAId,
+      purchaseDate: "2000-01-01", // ignorado numa parcelada
+    });
+    expect(edited.amount).toBe("120.00");
+    expect(edited.purchaseDate).toBe(todayISO);
+
+    const third = await getStatement(userAId, card.id, installments[2].statementMonth);
+    expect(third.purchases[0].description).toBe("Geladeira nova");
+    expect(third.purchases[0].amount).toBe("100.00");
+  });
+
+  it("editing the date of an à vista purchase moves it to the right statement, and paid ones can't be edited", async () => {
+    const { userAId } = await createTestGroup();
+    const card = await createCard(userAId, {
+      name: "Nubank",
+      closingDay: 10,
+      dueDay: 20,
+      scope: "personal",
+      limit: null,
+      limitType: "normal",
+    });
+    const [purchase] = await addPurchase(userAId, card.id, {
+      description: "Doce",
+      amount: 12,
+      categoryId: null,
+      buyerId: userAId,
+      purchaseDate: "2030-03-05",
+      installments: 1,
+    });
+    expect(purchase.statementMonth).toBe("2030-03");
+
+    const moved = await updatePurchase(userAId, card.id, purchase.id, {
+      description: "Doce",
+      amount: 15,
+      categoryId: null,
+      buyerId: userAId,
+      purchaseDate: "2030-03-15",
+    });
+    expect(moved.statementMonth).toBe("2030-04");
+
+    const months = await listStatements(userAId, card.id);
+    expect(months.find((m) => m.month === "2030-04")?.total).toBe("15.00");
+    expect(months.some((m) => m.month === "2030-03")).toBe(false);
+
+    await setStatementPaidForUser(userAId, card.id, "2030-04", true);
+    await expect(
+      updatePurchase(userAId, card.id, purchase.id, {
+        description: "Doce",
+        amount: 20,
+        categoryId: null,
+        buyerId: userAId,
+        purchaseDate: "2030-03-15",
+      })
+    ).rejects.toBeInstanceOf(StatementAlreadyPaidError);
+    expect((await listStatements(userAId, card.id)).find((m) => m.month === "2030-04")?.isPaid).toBe(true);
+  });
+
+  it("changing the closing day moves open purchases to the statement the new rule gives", async () => {
+    const { userAId } = await createTestGroup();
+    const card = await createCard(userAId, {
+      name: "Nubank",
+      closingDay: 9,
+      dueDay: 15,
+      scope: "personal",
+      limit: null,
+      limitType: "normal",
+    });
+    const [purchase] = await addPurchase(userAId, card.id, {
+      description: "Mercado",
+      amount: 50,
+      categoryId: null,
+      buyerId: userAId,
+      purchaseDate: "2030-05-12",
+      installments: 1,
+    });
+    expect(purchase.statementMonth).toBe("2030-06");
+
+    await updateCardForUser(userAId, card.id, { name: "Nubank", closingDay: 20, dueDay: 27 });
+
+    expect((await getStatement(userAId, card.id, "2030-05")).purchases.map((p) => p.id)).toEqual([purchase.id]);
+    expect((await getStatement(userAId, card.id, "2030-06")).purchases).toHaveLength(0);
+  });
+
+  it("moving a secured group card to personal moves the saved money to the owner's account", async () => {
+    const { userAId } = await createTestGroup();
+    const card = await createCard(userAId, {
+      name: "Garantido",
+      closingDay: 31,
+      dueDay: 5,
+      scope: "joint",
+      limit: 100,
+      limitType: "secured",
+      securedFromAccount: true,
+    });
+    const balances = async () => {
+      const group = (await getGroupForUser(userAId))!;
+      return {
+        personal: Number(group.accounts.find((a) => a.type === "personal" && a.ownerUserId === userAId)!.balance),
+        joint: Number(group.accounts.find((a) => a.type === "joint")!.balance),
+      };
+    };
+    expect(await balances()).toEqual({ personal: 0, joint: -100 });
+
+    const moved = await setCardScopeForUser(userAId, card.id, "personal");
+    expect(moved.ownerUserId).toBe(userAId);
+    expect(await balances()).toEqual({ personal: -100, joint: 0 });
   });
 
   it("a card with no limit set never computes limitUsed", async () => {

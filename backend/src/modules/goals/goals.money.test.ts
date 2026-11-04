@@ -13,6 +13,8 @@ import {
   moveGoalMoney,
   removeGoal,
   removeGoalItem,
+  updateContribution,
+  updateGoal,
 } from "./goals.service";
 
 const pcGamer = {
@@ -107,5 +109,33 @@ describe("Guardei / entre minhas contas na importação", () => {
     const month = today.slice(0, 7);
     const summary = await getMonthlySummary(groupId, userAId, `${month}-01`, `${month}-32`, "visible");
     expect(summary.total).toBe("0.00");
+  });
+});
+
+describe("editar meta e corrigir o histórico", () => {
+  it("corrigir e apagar um guardar mexe na meta e na transferência do extrato", async () => {
+    const { groupId, userAId, personalAccountId } = await createTestGroup();
+    const goal = await createGoal(userAId, { name: "Viagem", emoji: null, photoDataUrl: null, targetAmount: 1000, deadline: null });
+    await moveGoalMoney(userAId, goal.id, { direction: "deposit", amount: 300, accountId: personalAccountId });
+    const [contribution] = await listContributions(userAId, goal.id);
+
+    const fixed = await updateContribution(userAId, goal.id, contribution.id, 250);
+    expect(fixed.currentAmount).toBe("250.00");
+    expect(await balanceOf(groupId, personalAccountId)).toBe(-250);
+
+    const removed = await updateContribution(userAId, goal.id, contribution.id, null);
+    expect(removed.currentAmount).toBe("0.00");
+    expect(await balanceOf(groupId, personalAccountId)).toBe(0);
+    expect(await listContributions(userAId, goal.id)).toHaveLength(0);
+  });
+
+  it("editar a meta muda nome, alvo e guardado (com ajuste no histórico)", async () => {
+    const { userAId } = await createTestGroup();
+    const goal = await createGoal(userAId, { name: "Viagem", emoji: null, photoDataUrl: null, targetAmount: 1000, deadline: null });
+
+    const edited = await updateGoal(userAId, goal.id, { name: "Viagem praia", deadline: null, targetAmount: 1500, currentAmount: 200 });
+    expect(edited).toMatchObject({ name: "Viagem praia", targetAmount: "1500.00", currentAmount: "200.00" });
+    const [adjustment] = await listContributions(userAId, goal.id);
+    expect(adjustment).toMatchObject({ amount: "200.00", itemName: "Ajuste", accountId: null });
   });
 });

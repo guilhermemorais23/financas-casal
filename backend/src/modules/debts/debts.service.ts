@@ -19,7 +19,9 @@ import {
   findInstallmentsByDebtIds,
   insertDebt,
   insertInstallments,
+  syncDebtTotal,
   updateDebt,
+  updateInstallmentAmount,
   updateInstallmentReferenceMonth,
   type DebtInstallmentRow,
   installmentRef,
@@ -241,6 +243,92 @@ export async function updateInstallmentMonth(
     await updateTransaction(installment.transactionId, { occurredAt: monthToDate(referenceMonth) });
   }
   return updated;
+}
+
+export class InvalidPayoffError extends Error {}
+
+// Mudar o valor de uma parcela, paga ou não. Paga: o gasto no extrato muda
+// junto. O total da dívida vira a soma das parcelas.
+export async function updateInstallmentAmountForUser(
+  userId: string,
+  debtId: string,
+  installmentId: string,
+  amount: number
+) {
+  const groupId = await requireGroupId(userId);
+  await requireManageableDebt(userId, groupId, debtId);
+  const installment = await findInstallmentById(debtId, installmentId);
+  if (!installment) {
+    throw new InstallmentNotFoundError();
+  }
+  const amountCents = Math.round(amount * 100);
+  const updated = await updateInstallmentAmount(debtId, installmentId, amountCents);
+  if (installment.isPaid && installment.transactionId) {
+    await updateTransaction(installment.transactionId, { amount: amountCents / 100 });
+  }
+  await syncDebtTotal(debtId);
+  return updated;
+}
+
+// "Paguei tudo de uma vez" (com desconto): da parcela `fromInstallment` até a
+// última, todas viram pagas em `referenceMonth`, dividindo o valor que saiu
+// de verdade. As que já estavam marcadas como pagas nesse trecho têm o
+// lançamento antigo trocado pelo novo -- o extrato fica com o que foi pago.
+export async function payOffDebtForUser(
+  userId: string,
+  debtId: string,
+  input: { fromInstallment: number; amount: number; referenceMonth: string }
+) {
+  const groupId = await requireGroupId(userId);
+  const debt = await requireManageableDebt(userId, groupId, debtId);
+  const all = (await findInstallmentsByDebtIds([debtId])).sort((a, b) => a.installmentNumber - b.installmentNumber);
+  const targets = all.filter((installment) => installment.installmentNumber >= input.fromInstallment);
+  if (targets.length === 0 || !(input.amount > 0)) {
+    throw new InvalidPayoffError();
+  }
+  const account = await findAccountForOwner(groupId, debt.ownerUserId);
+  if (!account) {
+    throw new DebtNotFoundError();
+  }
+
+  const shares = splitEvenly(input.amount, targets.length);
+  await runLedgerTransaction(groupId, async (t) => {
+    // Firestore: todas as leituras antes das gravações.
+    const docs = await Promise.all(targets.map((installment) => t.get(installmentRef(debtId, installment.id))));
+    const removals = await Promise.all(
+      docs.map((doc) => {
+        const transactionId = doc.data()?.transactionId as string | null | undefined;
+        return transactionId ? prepareTransactionDelete(t, transactionId) : Promise.resolve(null);
+      })
+    );
+    removals.forEach((removal) => removal?.apply());
+    targets.forEach((installment, index) => {
+      const transactionId = writeNewTransaction(t, {
+        groupId,
+        accountId: account.id,
+        accountType: account.type,
+        accountOwnerId: account.ownerUserId,
+        categoryId: debt.categoryId,
+        payerId: userId,
+        createdBy: userId,
+        description: `${debt.name} — quitação, parcela ${installment.installmentNumber}/${debt.installmentsCount}`,
+        amount: shares[index] / 100,
+        transactionType: "expense",
+        occurredAt: monthToDate(input.referenceMonth),
+        isPrivate: false,
+        splitType: "none",
+        linkKind: "debt_installment",
+      });
+      t.update(installmentRef(debtId, installment.id), {
+        amountCents: shares[index],
+        referenceMonth: input.referenceMonth,
+        isPaid: true,
+        paidAt: FieldValue.serverTimestamp(),
+        transactionId,
+      });
+    });
+  });
+  await syncDebtTotal(debtId);
 }
 
 export async function removeDebt(userId: string, debtId: string) {

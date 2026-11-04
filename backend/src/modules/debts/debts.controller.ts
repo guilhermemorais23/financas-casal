@@ -6,11 +6,14 @@ import {
   DebtNotFoundError,
   ForbiddenError,
   InstallmentNotFoundError,
+  InvalidPayoffError,
   createDebt,
   listDebts,
+  payOffDebtForUser,
   removeDebt,
   setInstallmentPaidForUser,
   updateDebtForUser,
+  updateInstallmentAmountForUser,
   updateInstallmentMonth,
   type DebtScope,
 } from "./debts.service";
@@ -68,17 +71,27 @@ export async function listDebtsHandler(req: Request, res: Response) {
 }
 
 export async function setInstallmentPaidHandler(req: Request, res: Response) {
-  const { isPaid, referenceMonth } = req.body ?? {};
-  if (typeof isPaid !== "boolean" && !isValidMonthParam(referenceMonth)) {
-    res.status(400).json({ error: "isPaid (boolean) or referenceMonth (YYYY-MM) is required" });
+  const { isPaid, referenceMonth, amount } = req.body ?? {};
+  const hasMonth = referenceMonth !== undefined;
+  const hasAmount = amount !== undefined;
+  if (
+    (typeof isPaid !== "boolean" && !hasMonth && !hasAmount) ||
+    (hasMonth && !isValidMonthParam(referenceMonth)) ||
+    (hasAmount && !isValidAmount(amount))
+  ) {
+    res.status(400).json({ error: "isPaid (boolean), referenceMonth (YYYY-MM) or a positive amount is required" });
     return;
   }
 
   try {
-    const installment =
-      typeof isPaid === "boolean"
-        ? await setInstallmentPaidForUser(req.user!.id, req.params.debtId, req.params.installmentId, isPaid)
-        : await updateInstallmentMonth(req.user!.id, req.params.debtId, req.params.installmentId, referenceMonth);
+    const { debtId, installmentId } = req.params;
+    let installment;
+    if (typeof isPaid === "boolean") {
+      installment = await setInstallmentPaidForUser(req.user!.id, debtId, installmentId, isPaid);
+    } else {
+      if (hasMonth) installment = await updateInstallmentMonth(req.user!.id, debtId, installmentId, referenceMonth);
+      if (hasAmount) installment = await updateInstallmentAmountForUser(req.user!.id, debtId, installmentId, amount);
+    }
     res.status(200).json(installment);
   } catch (err) {
     if (err instanceof NoGroupError || err instanceof DebtNotFoundError || err instanceof InstallmentNotFoundError) {
@@ -117,6 +130,39 @@ export async function updateDebtHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof InvalidCategoryError) {
       res.status(400).json({ error: "Categoria inválida." });
+      return;
+    }
+    if (err instanceof NoGroupError || err instanceof DebtNotFoundError) {
+      res.status(404).json({ error: "debt not found" });
+      return;
+    }
+    if (err instanceof ForbiddenError) {
+      res.status(403).json({ error: "not allowed to manage this debt" });
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function payOffDebtHandler(req: Request, res: Response) {
+  const { fromInstallment, amount, referenceMonth } = req.body ?? {};
+  if (
+    typeof fromInstallment !== "number" ||
+    !Number.isInteger(fromInstallment) ||
+    fromInstallment < 1 ||
+    !isValidAmount(amount) ||
+    !isValidMonthParam(referenceMonth)
+  ) {
+    res.status(400).json({ error: "fromInstallment (>= 1), a positive amount and referenceMonth (YYYY-MM) are required" });
+    return;
+  }
+
+  try {
+    await payOffDebtForUser(req.user!.id, req.params.id, { fromInstallment, amount, referenceMonth });
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof InvalidPayoffError) {
+      res.status(400).json({ error: "Nenhuma parcela nesse trecho." });
       return;
     }
     if (err instanceof NoGroupError || err instanceof DebtNotFoundError) {
