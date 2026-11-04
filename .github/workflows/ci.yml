@@ -47,6 +47,27 @@ jobs:
         run: npm run build
         working-directory: backend
 
+      # Testes de tela: componentes de verdade num Chromium de verdade, com a
+      # API e o login falsos (frontend/src/test/). Pegam botão por cima de
+      # texto, campo espremido e ação que sumiu -- coisa que o build não vê.
+      - name: Instala o Chromium dos testes do frontend
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Roda os testes do frontend
+        run: npm test
+        working-directory: frontend
+
+      # Teste de tela que falhou: a captura de como a tela estava fica nos
+      # "Artifacts" da execução no GitHub.
+      - name: Guarda as capturas dos testes que falharam
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-testes-frontend
+          path: frontend/.vitest/attachments/
+          if-no-files-found: ignore
+
       # O frontend le VITE_* via import.meta.env em build-time (Vite grava o
       # valor direto no JS gerado) -- ate agora o build so rodava na maquina
       # de quem fazia o deploy, que tinha frontend/.env.production (fora do

@@ -85,5 +85,6 @@ Comentários no código (`//`, `/* */`, `{/* */}` no JSX) são escritos **em por
 
 - [ ] `npm --prefix backend run build` sem erro
 - [ ] `npm --prefix frontend run build` sem erro
+- [ ] `npm --prefix frontend test` passando (testes de tela num Chromium; na primeira vez rode `npx --prefix frontend playwright install chromium`). Mexeu numa tela? Vale um teste em `frontend/src/pages/<Tela>.test.tsx` -- a API e o login falsos ficam em `frontend/src/test/` (`onApi` diz o que cada endereço responde, `callsTo` confere o que a tela mandou, `overlaps`/`isInside` medem a tela).
 - [ ] Testado manualmente contra o emulador local
 - [ ] Nenhum arquivo de segredo (`.env`, `.env.production`, `serviceAccountKey.json`) staged — confira com `git status`
