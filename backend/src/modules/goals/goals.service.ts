@@ -1,9 +1,12 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { findUsableAccount } from "../groups/groups.repository";
 import { requireGroupId } from "../groups/groups.service";
 import {
   deleteTransactionsBatch,
   findGoalTransferIds,
+  prepareTransactionDelete,
   runLedgerTransaction,
+  transactionDocRef,
   writeNewTransaction,
 } from "../transactions/transactions.repository";
 import { InvalidAccountError } from "../transactions/transactions.service";
@@ -11,6 +14,7 @@ import { toCents } from "../../utils/money";
 import { todayInBrazil } from "../../utils/month";
 import {
   MAX_GOAL_ITEMS,
+  contributionDocRef,
   contributionRef,
   deleteGoal,
   findContributions,
@@ -260,6 +264,111 @@ export async function removeGoalItem(userId: string, goalId: string, itemId: str
     }
     rest[0] = { ...rest[0], currentCents: rest[0].currentCents + removed.currentCents };
     t.update(ref, { items: rest, ...goalTotals(data, rest) });
+  });
+  return (await findGoalById(goalId))!;
+}
+
+// ---------------------------------------------------------------------------
+// Editar a meta e corrigir o histórico
+// ---------------------------------------------------------------------------
+
+export interface UpdateGoalInput {
+  name: string;
+  deadline: string | null;
+  // Só em meta sem submetas (com submetas, o alvo é a soma delas).
+  targetAmount?: number;
+  // Só em meta sem submetas: "na verdade tem X guardado". A diferença entra
+  // no histórico como ajuste (sem mexer em conta nenhuma).
+  currentAmount?: number;
+}
+
+export async function updateGoal(userId: string, goalId: string, input: UpdateGoalInput): Promise<GoalRow> {
+  const name = cleanItemName(input.name);
+  const badAmount = (value: number | undefined, allowZero: boolean) =>
+    value !== undefined && !(Number.isFinite(value) && (allowZero ? value >= 0 : value > 0));
+  if (!name || badAmount(input.targetAmount, false) || badAmount(input.currentAmount, true)) {
+    throw new InvalidContributionError();
+  }
+  const { groupId } = await requireGoalInGroup(userId, goalId);
+  const ref = goalRef(goalId);
+  await runLedgerTransaction(groupId, async (t) => {
+    const doc = await t.get(ref);
+    if (!doc.exists) throw new GoalNotFoundError();
+    const data = doc.data()!;
+    const items = storedItems(data);
+    const update: Record<string, unknown> = { name, deadline: input.deadline, updatedAt: FieldValue.serverTimestamp() };
+    if (items.length === 0) {
+      const targetCents = input.targetAmount !== undefined ? toCents(input.targetAmount) : (data.targetAmountCents as number);
+      const oldCurrent = data.currentAmountCents as number;
+      const currentCents = input.currentAmount !== undefined ? toCents(input.currentAmount) : oldCurrent;
+      Object.assign(update, goalTotals(data, [], { targetCents, currentCents }));
+      if (currentCents !== oldCurrent) {
+        t.set(contributionRef(goalId), {
+          userId,
+          amountCents: currentCents - oldCurrent,
+          itemId: null,
+          itemName: "Ajuste",
+          accountId: null,
+          transactionId: null,
+          createdAt: Date.now(),
+        });
+      }
+    }
+    t.update(ref, update);
+  });
+  return (await findGoalById(goalId))!;
+}
+
+// Corrigir (`amount` > 0, no mesmo sentido: guardou/retirou) ou apagar
+// (`amount` null) um registro do histórico. A meta (e a submeta) recalcula, e
+// a transferência ligada no extrato muda ou some junto.
+export async function updateContribution(
+  userId: string,
+  goalId: string,
+  contributionId: string,
+  amount: number | null
+): Promise<GoalRow> {
+  if (amount !== null && !(Number.isFinite(amount) && amount > 0)) {
+    throw new InvalidContributionError();
+  }
+  const { groupId } = await requireGoalInGroup(userId, goalId);
+  const ref = goalRef(goalId);
+  const cRef = contributionDocRef(goalId, contributionId);
+  await runLedgerTransaction(groupId, async (t) => {
+    const [goalDoc, contributionDoc] = await Promise.all([t.get(ref), t.get(cRef)]);
+    if (!goalDoc.exists || !contributionDoc.exists) throw new GoalNotFoundError();
+    const data = goalDoc.data()!;
+    const contribution = contributionDoc.data()!;
+    const oldSigned = contribution.amountCents as number;
+    const newSigned = amount === null ? 0 : Math.sign(oldSigned || 1) * toCents(amount);
+    const delta = newSigned - oldSigned;
+    const transactionId = (contribution.transactionId as string | null) ?? null;
+    const removal = amount === null && transactionId ? await prepareTransactionDelete(t, transactionId) : null;
+    const linkedExists =
+      amount !== null && transactionId ? (await t.get(transactionDocRef(transactionId))).exists : false;
+
+    const items = storedItems(data);
+    if (items.length > 0) {
+      // A submeta original, ou a primeira se ela já foi tirada.
+      const index = Math.max(0, items.findIndex((item) => item.id === contribution.itemId));
+      if (items[index].currentCents + delta < 0) throw new NotEnoughInGoalError();
+      const next = items.map((item, i) => (i === index ? { ...item, currentCents: item.currentCents + delta } : item));
+      t.update(ref, { items: next, ...goalTotals(data, next) });
+    } else {
+      const current = (data.currentAmountCents as number) + delta;
+      if (current < 0) throw new NotEnoughInGoalError();
+      t.update(ref, goalTotals(data, [], { targetCents: data.targetAmountCents, currentCents: current }));
+    }
+
+    if (amount === null) {
+      removal?.apply();
+      t.delete(cRef);
+    } else {
+      t.update(cRef, { amountCents: newSigned });
+      if (transactionId && linkedExists) {
+        t.update(transactionDocRef(transactionId), { amountCents: Math.abs(newSigned), updatedAt: FieldValue.serverTimestamp() });
+      }
+    }
   });
   return (await findGoalById(goalId))!;
 }

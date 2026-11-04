@@ -163,6 +163,10 @@ export function contributionRef(goalId: string): FirebaseFirestore.DocumentRefer
   return goalsCol.doc(goalId).collection("contributions").doc();
 }
 
+export function contributionDocRef(goalId: string, contributionId: string): FirebaseFirestore.DocumentReference {
+  return goalsCol.doc(goalId).collection("contributions").doc(contributionId);
+}
+
 export async function findContributions(goalId: string, limit = 30): Promise<GoalContributionRow[]> {
   const snapshot = await goalsCol.doc(goalId).collection("contributions").orderBy("createdAt", "desc").limit(limit).get();
   return snapshot.docs.map((doc) => {
