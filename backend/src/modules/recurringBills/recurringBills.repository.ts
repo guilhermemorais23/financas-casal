@@ -196,8 +196,17 @@ export async function updateRecurringBill(
   return toRow(doc);
 }
 
-export async function markRecurringBillGenerated(id: string, month: string): Promise<void> {
-  await recurringBillsCol.doc(id).update({ lastGeneratedMonth: month });
+// Reserva o mês da conta antes de lançar: lê e grava lastGeneratedMonth numa
+// transação do Firestore, então só uma de duas execuções simultâneas do cron
+// (o /reminders/run e a rede de segurança do /health) recebe true e lança.
+export async function claimRecurringBillMonth(id: string, month: string): Promise<boolean> {
+  const ref = recurringBillsCol.doc(id);
+  return db.runTransaction(async (t) => {
+    const doc = await t.get(ref);
+    if (!doc.exists || doc.data()!.lastGeneratedMonth === month) return false;
+    t.update(ref, { lastGeneratedMonth: month });
+    return true;
+  });
 }
 
 // "Me lembre mais tarde" do mês pendente.
