@@ -5,7 +5,8 @@
 //   - GET /api/cards                       -> nome, limite, limite usado, dia que fecha
 //   - GET /api/cards/:id/statement?month=  -> total, vencimento, paga, compras
 //   - PATCH /api/cards/:id/statements/:mes -> marcar como paga / reabrir
-//   - POST/DELETE /api/cards/:id/purchases -> lançar / remover compra
+//   - GET /api/cards/:id/statements        -> todas as faturas, mês a mês (faixa de meses)
+//   - POST/PATCH/DELETE /api/cards/:id/purchases -> lançar / editar / remover compra
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
@@ -47,6 +48,13 @@ interface StatementDetail {
   purchases: PurchaseRow[];
 }
 
+interface StatementMonthRow {
+  month: string;
+  dueDate: string;
+  total: string;
+  isPaid: boolean;
+}
+
 interface CategoryRow {
   id: string;
   name: string;
@@ -86,6 +94,8 @@ export function CardStatementPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [editing, setEditing] = useState<PurchaseRow | null>(null);
+  const [statementMonths, setStatementMonths] = useState<StatementMonthRow[]>([]);
 
   // Mês da fatura: o da URL (?mes=) ou, sem ele, a fatura atual do cartão.
   const month = searchParams.get("mes") ?? card?.currentStatement.month ?? null;
@@ -111,6 +121,19 @@ export function CardStatementPage() {
     },
     [cardId, token]
   );
+
+  // Todas as faturas do cartão, uma por mês, pra faixa de meses no topo.
+  const loadStatementMonths = useCallback(async () => {
+    try {
+      setStatementMonths(await apiRequest<StatementMonthRow[]>(`/cards/${encodeURIComponent(cardId)}/statements`, { token }));
+    } catch {
+      setStatementMonths([]);
+    }
+  }, [cardId, token]);
+
+  useEffect(() => {
+    void loadStatementMonths();
+  }, [loadStatementMonths]);
 
   useEffect(() => {
     loadCard().catch((err) => setError(err instanceof ApiError ? err.message : "Não foi possível carregar o cartão"));
@@ -150,8 +173,18 @@ export function CardStatementPage() {
     }));
   }, [statement]);
 
+  // A faixa mostra as faturas com compra + o mês aberto agora (mesmo vazio,
+  // quando a pessoa navega pelas setas pra um mês sem nada).
+  const monthChips = useMemo(() => {
+    const list = [...statementMonths];
+    if (month && !list.some((s) => s.month === month)) {
+      list.push({ month, dueDate: "", total: "0", isPaid: false });
+    }
+    return list.sort((a, b) => b.month.localeCompare(a.month));
+  }, [statementMonths, month]);
+
   async function refresh() {
-    await Promise.all([loadCard(), month ? loadStatement(month) : Promise.resolve()]);
+    await Promise.all([loadCard(), loadStatementMonths(), month ? loadStatement(month) : Promise.resolve()]);
   }
 
   async function togglePaid() {
@@ -214,6 +247,29 @@ export function CardStatementPage() {
             </div>
           )}
         </div>
+
+        {/* Uma fatura por mês: toca no mês pra ver só as compras dela. */}
+        {statementMonths.length > 0 && month && (
+          <nav className="fatura-month-strip" aria-label="Faturas por mês">
+            {monthChips.map((s) => (
+                <button
+                  key={s.month}
+                  type="button"
+                  className={`fatura-month-chip${s.month === month ? " active" : ""}`}
+                  aria-current={s.month === month ? "true" : undefined}
+                  onClick={() => setSearchParams({ mes: s.month }, { replace: true })}
+                >
+                  <span className="fatura-month-chip-name">
+                    {monthLongName(s.month).slice(0, 3)}/{s.month.slice(2, 4)}
+                  </span>
+                  <span className="fatura-month-chip-total">{formatCurrency(Number(s.total))}</span>
+                  <span className={`fatura-month-chip-status${s.isPaid ? " paid" : ""}`}>
+                    {s.isPaid ? "Paga" : s.month === card?.currentStatement.month ? "Atual" : s.month > (card?.currentStatement.month ?? "") ? "Futura" : "Aberta"}
+                  </span>
+                </button>
+              ))}
+          </nav>
+        )}
 
         {error && (
           <p className="alert" role="alert">
@@ -294,6 +350,17 @@ export function CardStatementPage() {
                       <button
                         type="button"
                         className="btn-icon"
+                        title="Editar compra"
+                        aria-label={`Editar ${purchase.description}`}
+                        onClick={() => setEditing(purchase)}
+                      >
+                        <Icon name="pencil" />
+                      </button>
+                    )}
+                    {!statement?.isPaid && (
+                      <button
+                        type="button"
+                        className="btn-icon"
                         title="Remover compra"
                         aria-label={`Remover ${purchase.description}`}
                         onClick={() => void removePurchase(purchase)}
@@ -309,15 +376,20 @@ export function CardStatementPage() {
         </section>
       </div>
 
-      {isAdding && (
-        <AddPurchaseSheet
+      {(isAdding || editing) && (
+        <PurchaseSheet
           cardId={cardId}
+          purchase={editing}
           categories={categoriesFor(categories, "expense")}
           members={members}
-          onClose={() => setIsAdding(false)}
-          onSaved={async () => {
+          onClose={() => {
             setIsAdding(false);
-            showToast("Compra lançada no cartão");
+            setEditing(null);
+          }}
+          onSaved={async () => {
+            showToast(editing ? "Compra atualizada" : "Compra lançada no cartão");
+            setIsAdding(false);
+            setEditing(null);
             await refresh();
           }}
         />
@@ -327,51 +399,66 @@ export function CardStatementPage() {
 }
 
 // Mesma compra que dá pra lançar em Cartões: o que foi, valor, data,
-// parcelas, categoria e quem comprou.
-function AddPurchaseSheet({
+// parcelas, categoria e quem comprou. Com `purchase`, edita essa compra:
+// nome, categoria e quem comprou valem pra todas as parcelas em aberto; o
+// valor é só o desta parcela; a data só muda na compra à vista (e pode
+// levar a compra pra outra fatura).
+function PurchaseSheet({
   cardId,
+  purchase,
   categories,
   members,
   onClose,
   onSaved,
 }: {
   cardId: string;
+  purchase: PurchaseRow | null;
   categories: CategoryRow[];
   members: MemberRow[];
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
   const { user, token } = useAuth();
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [purchaseDate, setPurchaseDate] = useState(todayISO());
+  const isEdit = purchase !== null;
+  const isInstallment = (purchase?.installmentsCount ?? 1) > 1;
+  const [description, setDescription] = useState(purchase?.description ?? "");
+  const [amount, setAmount] = useState(purchase ? Number(purchase.amount).toFixed(2).replace(".", ",") : "");
+  const [purchaseDate, setPurchaseDate] = useState(purchase?.purchaseDate ?? todayISO());
   const [installments, setInstallments] = useState("1");
-  const [categoryId, setCategoryId] = useState("");
-  const [buyerId, setBuyerId] = useState(user?.id ?? "");
+  const [categoryId, setCategoryId] = useState(purchase?.categoryId ?? "");
+  const [buyerId, setBuyerId] = useState(purchase?.buyerId ?? user?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const parsedAmount = Number(amount.replace(",", "."));
+    const parsedAmount = Number(amount.includes(",") ? amount.replace(/\./g, "").replace(",", ".") : amount);
     if (!description.trim() || !(parsedAmount > 0) || !buyerId || !purchaseDate) {
       setError("Informe descrição, valor, quem comprou e a data.");
       return;
     }
     setIsSaving(true);
     try {
-      await apiRequest(`/cards/${encodeURIComponent(cardId)}/purchases`, {
-        method: "POST",
-        token,
-        body: {
-          description: description.trim(),
-          amount: parsedAmount,
-          categoryId: categoryId || null,
-          buyerId,
-          purchaseDate,
-          installments: Number(installments),
-        },
-      });
+      const base = {
+        description: description.trim(),
+        amount: parsedAmount,
+        categoryId: categoryId || null,
+        buyerId,
+        purchaseDate,
+      };
+      if (purchase) {
+        await apiRequest(`/cards/${encodeURIComponent(cardId)}/purchases/${encodeURIComponent(purchase.id)}`, {
+          method: "PATCH",
+          token,
+          body: base,
+        });
+      } else {
+        await apiRequest(`/cards/${encodeURIComponent(cardId)}/purchases`, {
+          method: "POST",
+          token,
+          body: { ...base, installments: Number(installments) },
+        });
+      }
       await onSaved();
     } catch (err) {
       setError(
@@ -379,38 +466,56 @@ function AddPurchaseSheet({
           ? "A fatura desse mês já foi paga. Mude a data ou reabra a fatura."
           : err instanceof ApiError
             ? err.message
-            : "Não foi possível lançar a compra"
+            : isEdit
+              ? "Não foi possível salvar a compra"
+              : "Não foi possível lançar a compra"
       );
       setIsSaving(false);
     }
   }
 
   return (
-    <Sheet onClose={onClose} labelledBy="add-purchase-title">
-      <h1 id="add-purchase-title">Lançar compra</h1>
+    <Sheet onClose={onClose} labelledBy="purchase-sheet-title">
+      <h1 id="purchase-sheet-title">{isEdit ? "Editar compra" : "Lançar compra"}</h1>
+      {isInstallment && purchase && (
+        <p className="refresh-note">
+          Parcela {purchase.installmentNumber}/{purchase.installmentsCount}. Nome, categoria e quem comprou mudam em todas as parcelas
+          em aberto; o valor muda só nesta.
+        </p>
+      )}
       <form onSubmit={handleSubmit}>
         <div className="field">
           <label htmlFor="purchase-description">O que foi</label>
           <input id="purchase-description" value={description} onChange={(e) => setDescription(e.target.value)} required />
         </div>
         <div className="field">
-          <label htmlFor="purchase-amount">Valor (R$)</label>
+          <label htmlFor="purchase-amount">{isInstallment ? "Valor desta parcela (R$)" : "Valor (R$)"}</label>
           <input id="purchase-amount" inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} required />
         </div>
         <div className="field">
           <label htmlFor="purchase-date">Data da compra</label>
-          <input id="purchase-date" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} required />
+          <input
+            id="purchase-date"
+            type="date"
+            value={purchaseDate}
+            onChange={(e) => setPurchaseDate(e.target.value)}
+            disabled={isInstallment}
+            required
+          />
+          {isEdit && !isInstallment && <p className="field-hint">Mudar a data pode passar a compra pra outra fatura.</p>}
         </div>
-        <div className="field">
-          <label htmlFor="purchase-installments">Parcelas</label>
-          <select id="purchase-installments" value={installments} onChange={(e) => setInstallments(e.target.value)}>
-            {INSTALLMENT_OPTIONS.map((count) => (
-              <option key={count} value={count}>
-                {count === 1 ? "À vista" : `${count}x`}
-              </option>
-            ))}
-          </select>
-        </div>
+        {!isEdit && (
+          <div className="field">
+            <label htmlFor="purchase-installments">Parcelas</label>
+            <select id="purchase-installments" value={installments} onChange={(e) => setInstallments(e.target.value)}>
+              {INSTALLMENT_OPTIONS.map((count) => (
+                <option key={count} value={count}>
+                  {count === 1 ? "À vista" : `${count}x`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="field">
           <label htmlFor="purchase-category">Categoria (opcional)</label>
           <select id="purchase-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
@@ -440,7 +545,7 @@ function AddPurchaseSheet({
           </p>
         )}
         <button type="submit" className="btn btn-primary" disabled={isSaving}>
-          {isSaving ? "Salvando..." : "Lançar no cartão"}
+          {isSaving ? "Salvando..." : isEdit ? "Salvar alterações" : "Lançar no cartão"}
         </button>
       </form>
     </Sheet>

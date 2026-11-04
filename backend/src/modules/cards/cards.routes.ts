@@ -24,9 +24,12 @@ import {
   deletePurchaseHandler,
   getStatementHandler,
   listCardsHandler,
+  listStatementsHandler,
+  setCardScopeHandler,
   setSecuredSourceHandler,
   setStatementPaidHandler,
   updateCardHandler,
+  updatePurchaseHandler,
 } from "./cards.controller";
 
 export const cardsRouter = Router();
@@ -39,7 +42,10 @@ cardsRouter.patch("/:id", asyncHandler(updateCardHandler));
 cardsRouter.delete("/:id", asyncHandler(deleteCardHandler));
 cardsRouter.post("/:id/secured-limit", asyncHandler(adjustSecuredLimitHandler));
 cardsRouter.patch("/:id/secured-source", asyncHandler(setSecuredSourceHandler));
+cardsRouter.patch("/:id/scope", asyncHandler(setCardScopeHandler));
 cardsRouter.get("/:id/statement", asyncHandler(getStatementHandler));
+cardsRouter.get("/:id/statements", asyncHandler(listStatementsHandler));
 cardsRouter.post("/:id/purchases", asyncHandler(addPurchaseHandler));
+cardsRouter.patch("/:id/purchases/:purchaseId", asyncHandler(updatePurchaseHandler));
 cardsRouter.delete("/:id/purchases/:purchaseId", asyncHandler(deletePurchaseHandler));
 cardsRouter.patch("/:id/statements/:month", asyncHandler(setStatementPaidHandler));

@@ -8,6 +8,7 @@ import {
   insertTransaction,
   prepareTransactionDelete,
   runLedgerTransaction,
+  updateTransaction,
   writeNewTransaction,
   type NewTransactionInput,
 } from "../transactions/transactions.repository";
@@ -23,12 +24,14 @@ import {
   findStatement,
   findStatementsByCardId,
   cardRef,
+  setCardOwner,
   setCardSecuredFromAccount,
   insertCard,
   insertPurchaseSeries,
   statementRef,
   toCardRow,
   updateCard,
+  updatePurchases,
   type CardRow,
   type LimitType,
   type PurchaseRow,
@@ -410,6 +413,97 @@ export async function removePurchase(userId: string, cardId: string, purchaseId:
   await deletePurchase(cardId, purchaseId);
 }
 
+export interface UpdatePurchaseInput {
+  description: string;
+  amount: number;
+  categoryId: string | null;
+  buyerId: string;
+  purchaseDate: string;
+}
+
+// Editar uma compra do cartão. Nome, categoria e quem comprou valem pra
+// compra toda (todas as parcelas em faturas ainda abertas); o valor é só o
+// desta parcela. A data só muda na compra à vista -- mudar a data de uma
+// parcelada embaralharia em que fatura cada parcela cai. Mudar a data pode
+// levar a compra pra outra fatura, que também precisa estar aberta.
+export async function updatePurchase(userId: string, cardId: string, purchaseId: string, input: UpdatePurchaseInput) {
+  const { groupId, card } = await requireManageableCard(userId, cardId);
+  const purchase = await findPurchaseById(cardId, purchaseId);
+  if (!purchase) {
+    throw new PurchaseNotFoundError();
+  }
+
+  const members = await findMembersByGroupId(groupId);
+  if (!members.some((member) => member.id === input.buyerId)) {
+    throw new InvalidBuyerError();
+  }
+  if (input.categoryId && input.categoryId !== purchase.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {
+    throw new InvalidCategoryError();
+  }
+
+  const statements = await findStatementsByCardId(cardId);
+  const isPaidMonth = (month: string) => statements.get(month)?.isPaid ?? false;
+  if (isPaidMonth(purchase.statementMonth)) {
+    throw new StatementAlreadyPaidError();
+  }
+
+  const isInstallment = purchase.installmentsCount > 1;
+  const purchaseDate = isInstallment ? purchase.purchaseDate : input.purchaseDate;
+  const statementMonth = isInstallment ? purchase.statementMonth : statementMonthFor(purchaseDate, card.closingDay);
+  if (isPaidMonth(statementMonth)) {
+    throw new StatementAlreadyPaidError();
+  }
+
+  const siblings = isInstallment
+    ? (await findAllPurchasesByCardId(cardId)).filter(
+        (other) =>
+          other.purchaseGroupId === purchase.purchaseGroupId && other.id !== purchase.id && !isPaidMonth(other.statementMonth)
+      )
+    : [];
+
+  await updatePurchases(cardId, [
+    {
+      id: purchase.id,
+      description: input.description,
+      amountCents: Math.round(input.amount * 100),
+      categoryId: input.categoryId,
+      buyerId: input.buyerId,
+      purchaseDate,
+      statementMonth,
+    },
+    ...siblings.map((other) => ({
+      id: other.id,
+      description: input.description,
+      categoryId: input.categoryId,
+      buyerId: input.buyerId,
+    })),
+  ]);
+  return (await findPurchaseById(cardId, purchaseId))!;
+}
+
+// Todas as faturas do cartão que têm compra, mês a mês (da mais nova pra mais
+// antiga): total, vencimento e se já foi paga. A fatura atual entra mesmo
+// vazia, pra lista nunca ficar sem o mês de agora.
+export async function listStatements(userId: string, cardId: string) {
+  const { card } = await requireManageableCard(userId, cardId);
+  const [purchases, statements] = await Promise.all([findAllPurchasesByCardId(cardId), findStatementsByCardId(cardId)]);
+  const centsByMonth = new Map<string, number>([[currentStatementMonth(card.closingDay), 0]]);
+  for (const purchase of purchases) {
+    centsByMonth.set(
+      purchase.statementMonth,
+      (centsByMonth.get(purchase.statementMonth) ?? 0) + Math.round(Number(purchase.amount) * 100)
+    );
+  }
+  return [...centsByMonth.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([month, cents]) => ({
+      month,
+      dueDate: dueDateFor(month, card.closingDay, card.dueDay),
+      total: (cents / 100).toFixed(2),
+      isPaid: statements.get(month)?.isPaid ?? false,
+    }));
+}
+
 export async function getStatement(userId: string, cardId: string, month?: string) {
   const { card } = await requireManageableCard(userId, cardId);
   const statementMonth = month ?? currentStatementMonth(card.closingDay);
@@ -512,7 +606,26 @@ export async function updateCardForUser(
   if (card.limitType === "secured" && input.limit !== undefined) {
     throw new NotSecuredCardError();
   }
-  return updateCard(cardId, input);
+  const updated = await updateCard(cardId, input);
+  if (input.closingDay !== card.closingDay) {
+    await reassignOpenPurchases(cardId, input.closingDay);
+  }
+  return updated;
+}
+
+// Mudou o dia de fechamento: cada compra em fatura aberta volta pra fatura
+// que a regra nova dá (parcela k = mês da 1ª parcela + k-1). Faturas já pagas
+// não mudam, nem pra receber nem pra perder compra.
+async function reassignOpenPurchases(cardId: string, closingDay: number) {
+  const [purchases, statements] = await Promise.all([findAllPurchasesByCardId(cardId), findStatementsByCardId(cardId)]);
+  const isPaidMonth = (month: string) => statements.get(month)?.isPaid ?? false;
+  const updates = purchases.flatMap((purchase) => {
+    if (isPaidMonth(purchase.statementMonth)) return [];
+    const target = addMonths(statementMonthFor(purchase.purchaseDate, closingDay), purchase.installmentNumber - 1);
+    if (target === purchase.statementMonth || isPaidMonth(target)) return [];
+    return [{ id: purchase.id, statementMonth: target }];
+  });
+  await updatePurchases(cardId, updates);
 }
 
 // Cartão com limite garantido: "Guardar mais" aumenta o limite exatamente no
@@ -577,6 +690,29 @@ export async function setSecuredSourceForUser(userId: string, cardId: string, fr
     await deleteTransactionsBatch(await findSecuredCardTransferIds(cardId));
   }
   return setCardSecuredFromAccount(cardId, fromAccount);
+}
+
+// "Esse cartão é só meu" / "é do grupo" -- dá pra corrigir depois de criado
+// (o formulário começa em "Do grupo" e é fácil passar batido). O dinheiro
+// guardado num cartão garantido muda junto: os lançamentos de guardar/resgatar
+// passam pra conta nova (a pessoal de quem mudou, ou a Nossa Conta). Faturas
+// já pagas ficam onde foram pagas -- aquele dinheiro saiu mesmo daquela conta.
+export async function setCardScopeForUser(userId: string, cardId: string, scope: CardScope) {
+  const { groupId, card } = await requireManageableCard(userId, cardId);
+  const ownerUserId = scope === "personal" ? userId : null;
+  if (card.ownerUserId === ownerUserId) return card;
+
+  const account = await findAccountForOwner(groupId, ownerUserId);
+  if (!account) {
+    throw new CardNotFoundError();
+  }
+  const transferIds = await findSecuredCardTransferIds(cardId);
+  await Promise.all(
+    transferIds.map((id) =>
+      updateTransaction(id, { accountId: account.id, accountType: account.type, accountOwnerId: account.ownerUserId })
+    )
+  );
+  return setCardOwner(cardId, ownerUserId);
 }
 
 export async function removeCard(userId: string, cardId: string) {

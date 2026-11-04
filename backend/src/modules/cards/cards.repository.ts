@@ -191,6 +191,14 @@ export async function setCardSecuredFromAccount(cardId: string, securedFromAccou
   return toCardRow(doc);
 }
 
+// Cartão do grupo (null) <-> pessoal (id do dono).
+export async function setCardOwner(cardId: string, ownerUserId: string | null): Promise<CardRow> {
+  const ref = cardsCol.doc(cardId);
+  await ref.update({ ownerUserId, updatedAt: FieldValue.serverTimestamp() });
+  const doc = await ref.get();
+  return toCardRow(doc);
+}
+
 export function cardRef(cardId: string): FirebaseFirestore.DocumentReference {
   return cardsCol.doc(cardId);
 }
@@ -299,6 +307,29 @@ export async function findPurchaseById(cardId: string, purchaseId: string): Prom
   const doc = await cardsCol.doc(cardId).collection("purchases").doc(purchaseId).get();
   if (!doc.exists) return null;
   return toPurchaseRow(cardId, doc);
+}
+
+// Edição de compra: várias parcelas de uma vez (nome, categoria e quem comprou
+// valem pra compra toda), num batch só.
+export interface PurchaseUpdate {
+  id: string;
+  description?: string;
+  amountCents?: number;
+  categoryId?: string | null;
+  buyerId?: string;
+  purchaseDate?: string;
+  statementMonth?: string;
+}
+
+export async function updatePurchases(cardId: string, updates: PurchaseUpdate[]): Promise<void> {
+  if (updates.length === 0) return;
+  const col = cardsCol.doc(cardId).collection("purchases");
+  const batch = db.batch();
+  for (const { id, ...fields } of updates) {
+    const data = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+    batch.update(col.doc(id), { ...data, updatedAt: FieldValue.serverTimestamp() });
+  }
+  await batch.commit();
 }
 
 export async function deletePurchase(cardId: string, purchaseId: string): Promise<void> {
