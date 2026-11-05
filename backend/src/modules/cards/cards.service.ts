@@ -36,7 +36,7 @@ import {
   type LimitType,
   type PurchaseRow,
 } from "./cards.repository";
-import { toCents } from "../../utils/money";
+import { fromCents, toCents } from "../../utils/money";
 
 export class CardNotFoundError extends Error {}
 export class PurchaseNotFoundError extends Error {}
@@ -139,8 +139,8 @@ function limitReleasesFor(card: CardRow, byMonth: Map<string, number>): LimitRel
       return {
         month,
         dueDate: dueDateFor(month, card.closingDay, card.dueDay),
-        amount: (cents / 100).toFixed(2),
-        availableAfter: (availableCents / 100).toFixed(2),
+        amount: fromCents(cents),
+        availableAfter: fromCents(availableCents),
       };
     });
 }
@@ -192,11 +192,11 @@ function summarizePurchases(
   return {
     month,
     dueDate: dueDateFor(month, card.closingDay, card.dueDay),
-    total: (totalCents / 100).toFixed(2),
+    total: fromCents(totalCents),
     isPaid,
     byPerson: Array.from(byPersonMap.entries()).map(([userId, cents]) => ({
       userId,
-      total: (cents / 100).toFixed(2),
+      total: fromCents(cents),
     })),
   };
 }
@@ -317,7 +317,7 @@ export async function listCards(userId: string): Promise<CardWithSummary[]> {
         ...card,
         scope: card.ownerUserId ? "personal" : ("joint" as CardScope),
         currentStatement: summarizePurchases(card, month, purchases, statement?.isPaid ?? false),
-        limitUsed: unpaidByMonth !== null ? (sumCents(unpaidByMonth) / 100).toFixed(2) : null,
+        limitUsed: unpaidByMonth !== null ? fromCents(sumCents(unpaidByMonth)) : null,
         limitReleases: unpaidByMonth !== null ? limitReleasesFor(card, unpaidByMonth) : [],
       };
     })
@@ -500,7 +500,7 @@ export async function listStatements(userId: string, cardId: string) {
     .map(([month, cents]) => ({
       month,
       dueDate: dueDateFor(month, card.closingDay, card.dueDay),
-      total: (cents / 100).toFixed(2),
+      total: fromCents(cents),
       isPaid: statements.get(month)?.isPaid ?? false,
     }));
 }

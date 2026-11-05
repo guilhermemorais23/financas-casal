@@ -2,7 +2,7 @@ import { requireGroupId } from "../groups/groups.service";
 import { findRulesByGroup, normalizeStatementName, upsertRules } from "../statements/importRules.repository";
 import { PAYMENT_METHODS, type PaymentMethod } from "./transactions.repository";
 import { canManageTransaction, listTransactions, updateTransactionForUser } from "./transactions.service";
-import { toCents } from "../../utils/money";
+import { fromCents, toCents } from "../../utils/money";
 
 // "Sem forma de pagamento": lançamentos do mês sem Pix/Crédito/Débito/Dinheiro,
 // agrupados pelo nome, pra marcar vários de uma vez (mesma ideia do "Sem
@@ -41,7 +41,7 @@ export async function listWithoutPaymentMethod(userId: string, month: string): P
         label: e.label,
         transactionType: e.type,
         count: e.ids.length,
-        total: (e.cents / 100).toFixed(2),
+        total: fromCents(e.cents),
         transactionIds: e.ids,
         suggestedPaymentMethod: ruleByKey.get(key) ?? null,
       };

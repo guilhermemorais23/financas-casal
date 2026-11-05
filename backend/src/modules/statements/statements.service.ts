@@ -114,8 +114,8 @@ async function readInput(input: StatementInput, ai?: PdfAiOptions): Promise<{ fo
       pdf: {
         reconciled: read.reconciled,
         difference: fromCents(Math.abs(read.differenceCents)),
-        openingBalance: read.openingBalanceCents === null ? null : (read.openingBalanceCents / 100).toFixed(2),
-        closingBalance: read.closingBalanceCents === null ? null : (read.closingBalanceCents / 100).toFixed(2),
+        openingBalance: read.openingBalanceCents === null ? null : fromCents(read.openingBalanceCents),
+        closingBalance: read.closingBalanceCents === null ? null : fromCents(read.closingBalanceCents),
         readBy: read.readBy,
         unreadLines: read.unreadLines,
         bank: read.bank,

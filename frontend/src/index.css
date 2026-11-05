@@ -2534,81 +2534,6 @@ input[type="checkbox"] {
   gap: 0.75rem;
 }
 
-.category-gauge-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.1rem 0.75rem;
-}
-
-.category-gauge-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  text-align: center;
-}
-
-.category-gauge-emoji {
-  font-size: 1.35rem;
-}
-
-.category-gauge-uncategorized {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 2px dashed var(--color-border);
-  color: var(--color-text-muted);
-}
-
-.category-gauge-name {
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.category-gauge-amount {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.category-gauge-bar-track {
-  width: 100%;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--gridline);
-  overflow: hidden;
-}
-
-.category-gauge-bar-fill {
-  height: 100%;
-  border-radius: var(--radius-pill);
-}
-
-.category-gauge-bar-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.category-gauge-bar-label.good {
-  color: var(--success-text);
-}
-
-.category-gauge-bar-label.warning {
-  color: var(--status-warning);
-}
-
-.category-gauge-bar-label.over {
-  color: var(--status-critical);
-}
-
-.category-gauge-no-cap {
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
 .category-budget-row {
   display: grid;
   grid-template-columns: auto 1fr auto auto;
@@ -5162,12 +5087,6 @@ video {
   color: var(--color-text-muted);
   font-size: 0.9rem;
   font-weight: 700;
-}
-
-.category-gauge-emoji {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text-muted);
 }
 
 /* Selo de saúde do mês: neutro, com um pontinho colorido. */

@@ -21,4 +21,10 @@ describe("excluir pelo extrato", () => {
       "R$ 10,00 sai do extrato e dos totais do mês. Você ainda vai poder desfazer por alguns segundos."
     );
   });
+
+  it("no Par, o começo fala da conta conjunta", () => {
+    expect(deleteConfirmBody({ amount: "10.00", linkKind: "card_statement" }, "da conta conjunta").replace(/\s/g, " ")).toBe(
+      "R$ 10,00 sai da conta conjunta. É o pagamento de uma fatura: a fatura volta a ficar aberta em Cartões. Você ainda vai poder desfazer por alguns segundos."
+    );
+  });
 });

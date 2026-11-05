@@ -1,4 +1,5 @@
 import type { PaymentMethod } from "../modules/transactions/transactions.repository";
+import { toCents } from "./money";
 import { plainText } from "./text";
 // Lê o arquivo de extrato do banco (OFX ou CSV) e devolve linhas simples.
 // Funções puras, sem I/O: quem chama decide o que fazer com as linhas
@@ -74,7 +75,7 @@ export function parseAmountToCents(raw: string): number | null {
   }
   const number = Number(normalized);
   if (!Number.isFinite(number)) return null;
-  const cents = Math.round(number * 100);
+  const cents = toCents(number);
   return negative ? -cents : cents;
 }
 

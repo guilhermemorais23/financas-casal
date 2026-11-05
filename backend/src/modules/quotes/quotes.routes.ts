@@ -1,8 +1,7 @@
 // ============================================================================
 // MÓDULO quotes -- endereços /api/quotes
 // ============================================================================
-// O que faz: Cotações (brapi): histórico do Ibovespa e de algumas ações, e a
-//            cotação de um papel.
+// O que faz: Cotações (brapi): histórico do Ibovespa e de algumas ações.
 // Quem chama: Tela Investimentos (pages/InvestmentsPage.tsx).
 //
 // Caminho de um pedido dentro do módulo:

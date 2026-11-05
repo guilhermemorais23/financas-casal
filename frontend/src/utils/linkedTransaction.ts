@@ -43,10 +43,13 @@ export function deleteLinkedNote(tx: { linkKind?: LinkKind | null; splitType?: s
 }
 
 // Texto da confirmação de "Excluir" -- o mesmo no Painel, no Par e nos
-// Relatórios.
-export function deleteConfirmBody(tx: { amount: string; linkKind?: LinkKind | null; splitType?: string }): string {
+// Relatórios. `where` muda só o começo (o Par fala da conta conjunta).
+export function deleteConfirmBody(
+  tx: { amount: string; linkKind?: LinkKind | null; splitType?: string },
+  where = "do extrato e dos totais do mês"
+): string {
   return [
-    `${formatCurrency(Number(tx.amount))} sai do extrato e dos totais do mês.`,
+    `${formatCurrency(Number(tx.amount))} sai ${where}.`,
     deleteLinkedNote(tx),
     "Você ainda vai poder desfazer por alguns segundos.",
   ]
