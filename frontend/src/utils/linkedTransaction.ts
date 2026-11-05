@@ -4,11 +4,24 @@
 // é o único com divisão "custom"; os demais o backend recusa com a mensagem
 // de onde desfazer.
 import { formatCurrency } from "./format";
+import { isPendingTransaction } from "./optimisticTransactions";
 
 export type LinkKind = "card_statement" | "debt_installment" | "settlement" | "shopping";
 
 export function isLinkedTransaction(tx: { linkKind?: LinkKind | null; splitType?: string }): boolean {
   return Boolean(tx.linkKind) || tx.splitType === "custom";
+}
+
+// Linha que não se mexe pelo extrato (sem Editar/Excluir, fora do "excluir
+// vários"): transferência de cartão garantido, empréstimo ou meta -- que só a
+// tela delas desfaz -- ou lançamento ainda a caminho do servidor.
+export function isReadOnlyRow(tx: {
+  id: string;
+  securedCardId?: string | null;
+  loanId?: string | null;
+  goalId?: string | null;
+}): boolean {
+  return Boolean(tx.securedCardId || tx.loanId || tx.goalId) || isPendingTransaction(tx);
 }
 
 export function linkedHint(tx: { linkKind?: LinkKind | null; splitType?: string }): string {

@@ -28,6 +28,7 @@ import { hasAiLeft, recordAiTokens, reserveAi } from "../aiUsage/aiUsage";
 import { geminiModel, tokensOf } from "../../utils/gemini";
 import { answerFromSnapshot, buildMonthSnapshot, parseQuickEntry, snapshotAsText, type MonthSnapshot } from "./monthSnapshot";
 import { formatBRL } from "../../utils/money";
+import { isValidAmount } from "../../utils/validation";
 import { paymentFromSpeech } from "../../utils/paymentDetect";
 import { PAYMENT_METHODS, type PaymentMethod } from "../transactions/transactions.repository";
 
@@ -136,13 +137,22 @@ async function askGemini(prompt: string, audio?: AudioPayload, userId?: string):
   return result.response.text().trim();
 }
 
-function parseAssistantReply(raw: string): AssistantReply | null {
+export function parseAssistantReply(raw: string): AssistantReply | null {
   const cleaned = raw.replace(/^```json\s*|```$/g, "").trim();
+  let reply: AssistantReply;
   try {
-    return JSON.parse(cleaned) as AssistantReply;
+    reply = JSON.parse(cleaned) as AssistantReply;
   } catch {
     return null;
   }
+  // O valor vem da IA: negativo viraria gasto negativo (aumentando o saldo),
+  // texto quebraria depois de gravar. Fica só número de 0 até o máximo.
+  const amount = reply.amount as unknown;
+  // (0 vale: "não tenho nada guardado".)
+  if (amount !== undefined && amount !== 0 && !isValidAmount(amount)) {
+    delete reply.amount;
+  }
+  return reply;
 }
 
 // Usado por todos os canais (Telegram, WhatsApp, o chat dentro do app) --
@@ -215,7 +225,7 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
     return (raw || "Não entendi, pode repetir?") + quotaNote;
   }
 
-  if ((parsed.intent === "log_expense" || parsed.intent === "log_income") && personalAccount && parsed.amount) {
+  if ((parsed.intent === "log_expense" || parsed.intent === "log_income") && personalAccount && isValidAmount(parsed.amount)) {
     const category = categories.find(
       (candidate) => candidate.name.toLowerCase() === parsed.categoryName?.toLowerCase()
     );

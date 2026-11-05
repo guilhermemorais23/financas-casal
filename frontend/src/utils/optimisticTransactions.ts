@@ -4,6 +4,13 @@ import { readCache, writeCache } from "./pageCache";
 import { notifyDataChanged, trackWrite } from "./pendingWrites";
 import type { PaymentMethod } from "./paymentMethod";
 
+// Linha desenhada antes de o servidor responder (ver saveTransactionInBackground):
+// o id ainda não existe lá, então editar ou excluir daria 404.
+export const PENDING_ID_PREFIX = "pending-";
+export function isPendingTransaction(tx: { id: string }): boolean {
+  return tx.id.startsWith(PENDING_ID_PREFIX);
+}
+
 // Um lançamento como as listas mostram. Campos que nem toda tela usa
 // (isPrivate, accountType) estão aqui pra um formato só alimentar os caches do
 // Painel e de Relatórios.

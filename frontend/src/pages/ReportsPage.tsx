@@ -23,7 +23,7 @@ import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
-import { canDeleteFromStatement, deleteConfirmBody, deleteLinkedNote, linkedHint, type LinkKind } from "../utils/linkedTransaction";
+import { canDeleteFromStatement, deleteConfirmBody, deleteLinkedNote, isReadOnlyRow, linkedHint, type LinkKind } from "../utils/linkedTransaction";
 import { NoPaymentModal } from "../components/NoPaymentModal";
 
 interface CategorySummaryRow {
@@ -386,7 +386,7 @@ export function ReportsPage() {
   // Transferência, reembolso e lista de compras: não entram na seleção (só dá
   // pra desfazer pela tela que criou). Parcela de dívida e fatura paga
   // entram: excluir desfaz na origem.
-  const isLocked = (tx: TransactionListRow) => Boolean(tx.securedCardId || tx.loanId || tx.goalId) || !canDeleteFromStatement(tx);
+  const isLocked = (tx: TransactionListRow) => isReadOnlyRow(tx) || !canDeleteFromStatement(tx);
 
   function toggleSelected(tx: TransactionListRow) {
     setSelectedIds((current) => {
@@ -699,7 +699,7 @@ export function ReportsPage() {
             {tx.transactionType === "income" ? "+" : "-"}
             {formatCurrency(Number(tx.amount))}
           </span>
-          {!tx.securedCardId && !tx.loanId && !tx.goalId && (
+          {!isReadOnlyRow(tx) && (
             <div className="transaction-row-actions">
               <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                 <Icon name="pencil" />

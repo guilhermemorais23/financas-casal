@@ -227,7 +227,7 @@ export class InvalidYearError extends Error {}
 
 export async function getYearlySummaryForUser(userId: string, yearParam?: string, scope?: SummaryScope) {
   const groupId = await requireGroupId(userId);
-  const year = yearParam ? Number(yearParam) : new Date().getUTCFullYear();
+  const year = yearParam ? Number(yearParam) : Number(todayInBrazil().slice(0, 4));
   if (!Number.isInteger(year) || year < 2000 || year > 2100) {
     throw new InvalidYearError();
   }

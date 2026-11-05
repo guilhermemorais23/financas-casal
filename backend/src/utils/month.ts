@@ -77,9 +77,11 @@ export interface MonthRange {
   monthEnd: string;
 }
 
-// monthParam é "YYYY-MM"; o padrão é o mês atual em UTC.
+// monthParam é "YYYY-MM"; o padrão é o mês atual no Brasil.
 export function parseMonthRange(monthParam?: string): MonthRange {
-  const reference = monthParam ? new Date(`${monthParam}-01T00:00:00Z`) : new Date();
+  // Sem mês: o mês de agora no Brasil (em UTC, à noite do último dia já seria
+  // o mês seguinte).
+  const reference = new Date(`${monthParam || currentMonthParam()}-01T00:00:00Z`);
   if (Number.isNaN(reference.getTime())) {
     throw new InvalidMonthError();
   }
