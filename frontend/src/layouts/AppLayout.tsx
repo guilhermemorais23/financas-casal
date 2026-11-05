@@ -99,7 +99,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   const userMenuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const isOnNewTransaction = location.pathname === "/transactions/new";
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Enquanto não sabe (primeiro acesso), mostra tudo -- a maioria é casal.
   const [isCouple, setIsCouple] = useState<boolean | null>(() => readCoupleFlag(user?.id));
@@ -155,10 +155,21 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isMoreOpen]);
 
-  // O email "Você recebeu uma resposta" aponta pra ?feedback=1.
+  // O email "Você recebeu uma resposta" aponta pra ?feedback=1. Abre o chat e
+  // tira o parâmetro do endereço -- senão, como o Painel preserva os
+  // parâmetros ao trocar de mês, o chat reabria a cada troca.
   useEffect(() => {
-    if (searchParams.get("feedback") === "1") setIsFeedbackOpen(true);
-  }, [searchParams]);
+    if (searchParams.get("feedback") !== "1") return;
+    setIsFeedbackOpen(true);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("feedback");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [searchParams, setSearchParams]);
 
   // Qualquer navegação (um atalho, o botão voltar) fecha a folha.
   useEffect(() => {
