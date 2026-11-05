@@ -72,6 +72,13 @@ export function canMoveAccount(tx: {
   return Boolean(tx.securedCardId) || !isLinkedTransaction(tx);
 }
 
+// Guardado/resgatado de um cartão garantido: não edita (o valor é o do
+// cartão), mas sai do extrato -- o saldo da conta volta e o limite do cartão
+// continua.
+export function canDeleteSecuredTransfer(tx: { id: string; securedCardId?: string | null }): boolean {
+  return Boolean(tx.securedCardId) && !isPendingTransaction(tx);
+}
+
 // Confirmação do "Passar pra ..." -- diz o que muda pro grupo.
 export function moveConfirm(
   tx: { amount: string; securedCardId?: string | null },
@@ -101,12 +108,21 @@ export function moveConfirm(
 // Lançamento da Nossa Conta aparece no Par e no Painel de todo mundo: é o
 // mesmo lançamento, então avisa que some de todos os lugares.
 export function deleteConfirmBody(
-  tx: { amount: string; linkKind?: LinkKind | null; splitType?: string; accountType?: "personal" | "joint" },
+  tx: {
+    amount: string;
+    linkKind?: LinkKind | null;
+    splitType?: string;
+    accountType?: "personal" | "joint";
+    securedCardId?: string | null;
+  },
   where = "do extrato e dos totais do mês"
 ): string {
   return [
     `${formatCurrency(Number(tx.amount))} sai ${where}.`,
     tx.accountType === "joint" ? "É da Nossa Conta: some do Par e do Painel de todo mundo do grupo." : null,
+    tx.securedCardId
+      ? "O dinheiro continua guardado no cartão (o limite não muda): só deixa de contar como saído da conta."
+      : null,
     deleteLinkedNote(tx),
     "Você ainda vai poder desfazer por alguns segundos.",
   ]

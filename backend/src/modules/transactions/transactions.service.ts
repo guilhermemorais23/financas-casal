@@ -328,8 +328,11 @@ export async function deleteTransactionForUser(userId: string, transactionId: st
   if (!transaction || transaction.groupId !== groupId || !canManageTransaction(userId, transaction)) {
     throw new TransactionNotFoundError();
   }
-  if (transaction.securedCardId || transaction.loanId || transaction.transferKind === "goal") {
-    throw new SecuredCardTransferError(transaction.loanId ? "loan" : transaction.goalId ? "goal" : "card");
+  // O guardado/resgatado de um cartão garantido pode sair do extrato: é o
+  // "esse dinheiro não saiu da conta" de uma linha só -- o saldo da conta
+  // volta e o valor guardado no cartão (o limite) continua como está.
+  if (transaction.loanId || transaction.transferKind === "goal") {
+    throw new SecuredCardTransferError(transaction.loanId ? "loan" : "goal");
   }
   const linkKind = await linkKindOf(groupId, transaction);
   if (linkKind) {
