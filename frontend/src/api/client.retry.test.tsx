@@ -26,7 +26,7 @@ describe("apiRequest: token renovado + grupo perdido", () => {
 
     await expect(client.apiRequest("/dashboard", { token: "token-velho" })).resolves.toEqual({ ok: true });
 
-    const auth = fetchSpy.mock.calls.map(([, init]) => (init?.headers as Record<string, string>).Authorization);
+    const auth = fetchSpy.mock.calls.map(([, init]) => new Headers(init?.headers).get("Authorization"));
     expect(auth).toEqual(["Bearer token-velho", "Bearer token-novo", "Bearer token-novo"]);
   });
 });
