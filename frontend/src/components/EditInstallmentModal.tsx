@@ -5,6 +5,7 @@ import { formatCurrency } from "../utils/format";
 import { useConfirm } from "./ConfirmDialog";
 import { useToast } from "./ToastProvider";
 import { Sheet } from "./Sheet";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 export interface EditableInstallment {
   debtId: string;
@@ -31,7 +32,7 @@ export function EditInstallmentModal({
   const confirm = useConfirm();
 
   const [referenceMonth, setReferenceMonth] = useState(installment.referenceMonth);
-  const [amount, setAmount] = useState(Number(installment.amount).toFixed(2).replace(".", ","));
+  const [amount, setAmount] = useState(toMoneyInput(Number(installment.amount)));
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUndoing, setIsUndoing] = useState(false);
@@ -39,7 +40,7 @@ export function EditInstallmentModal({
   async function handleSave(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    const parsedAmount = Number(amount.includes(",") ? amount.replace(/\./g, "").replace(",", ".") : amount);
+    const parsedAmount = parseMoney(amount);
     if (!(parsedAmount > 0)) {
       setError("Informe um valor maior que zero.");
       return;

@@ -2,7 +2,7 @@ import { getGroupForUser } from "../groups/groups.service";
 import { listLoans, todayInBrazil } from "../loans/loans.service";
 import { getMonthlyTrendForUser } from "../transactions/transactions.service";
 import { getUpcomingForUser, type UpcomingItem } from "../upcoming/upcoming.service";
-import { formatBRL } from "../../utils/money";
+import { formatBRL, parseTypedAmount } from "../../utils/money";
 
 // Os números que uma conversa de "controle do mês" sempre volta a usar, num
 // lugar só: o que tem nas contas, o que entrou e saiu no mês, quanto sobra
@@ -136,10 +136,10 @@ export function answerFromSnapshot(s: MonthSnapshot, question: string): string {
 export function parseQuickEntry(text: string): { type: "expense" | "income"; amount: number; description: string } | null {
   const match = text
     .trim()
-    .match(/^(gastei|paguei|comprei|recebi|ganhei)\s+(?:r\$\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:reais)?\s*(?:(?:no|na|de|do|da|em|com|pro|pra)\s+)?(.*)$/i);
+    .match(/^(gastei|paguei|comprei|recebi|ganhei)\s+(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:reais)?\s*(?:(?:no|na|de|do|da|em|com|pro|pra)\s+)?(.*)$/i);
   if (!match) return null;
   const raw = match[2];
-  const amount = Number(raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw);
+  const amount = parseTypedAmount(raw);
   if (!(amount > 0)) return null;
   const verb = match[1].toLowerCase();
   const rest = match[3].trim();

@@ -9,9 +9,10 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
-import { MonthBillsCard, parseMoney } from "../components/BillReminders";
+import { MonthBillsCard } from "../components/BillReminders";
 import { Sheet } from "../components/Sheet";
 import { categoriesFor, type CategoryType } from "../utils/categories";
+import { parseMoney } from "../utils/money";
 
 interface AccountRow {
   id: string;

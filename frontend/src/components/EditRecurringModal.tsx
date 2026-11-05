@@ -3,6 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "./ToastProvider";
 import { Sheet } from "./Sheet";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 export interface EditableRecurring {
   id: string;
@@ -25,7 +26,7 @@ export function EditRecurringModal({
 }) {
   const { token } = useAuth();
   const { showToast } = useToast();
-  const [amount, setAmount] = useState(transaction.amount);
+  const [amount, setAmount] = useState(() => toMoneyInput(Number(transaction.amount)));
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -33,7 +34,7 @@ export function EditRecurringModal({
     event.preventDefault();
     setError(null);
 
-    const parsedAmount = Number(amount.replace(",", "."));
+    const parsedAmount = parseMoney(amount);
     if (!(parsedAmount > 0)) {
       setError("Informe um valor válido.");
       return;

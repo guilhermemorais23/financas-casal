@@ -21,6 +21,7 @@ import {
   saveCreditCardPreference,
 } from "../utils/creditCardPreference";
 import { categoriesFor, defaultCategoryFor, type CategoryType } from "../utils/categories";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 interface AccountRow {
   id: string;
@@ -85,7 +86,7 @@ export function NewTransactionPage() {
     prefill.get("tipo") === "receita" ? "income" : "expense"
   );
   const [description, setDescription] = useState(() => prefill.get("d") ?? "");
-  const [amount, setAmount] = useState(() => (prefill.get("v") ? Number(prefill.get("v")).toFixed(2).replace(".", ",") : ""));
+  const [amount, setAmount] = useState(() => (prefill.get("v") ? toMoneyInput(Number(prefill.get("v"))) : ""));
   const [accountId, setAccountId] = useState(() => prefill.get("a") ?? "");
   const [categoryId, setCategoryId] = useState(() => prefill.get("c") ?? "");
   // Depois que a pessoa escolhe a categoria na mão, a sugestão automática
@@ -136,7 +137,7 @@ export function NewTransactionPage() {
   // Só a prévia na tela -- a divisão de verdade (com o tratamento exato dos
   // centavos que sobram) é calculada no servidor pelo splitEvenly() quando o
   // lançamento é salvo.
-  const parsedAmountPreview = Number(amount.replace(",", "."));
+  const parsedAmountPreview = parseMoney(amount);
   const perPersonAmount =
     splitType === "equal" && members.length > 0 && parsedAmountPreview > 0
       ? parsedAmountPreview / members.length
@@ -273,7 +274,7 @@ export function NewTransactionPage() {
     event.preventDefault();
     setError(null);
 
-    const parsedAmount = Number(amount.replace(",", "."));
+    const parsedAmount = parseMoney(amount);
     const parsedMonths = Number(recurringMonths);
     if (!description.trim() || !accountId || !payerId || !occurredAt || !(parsedAmount > 0)) {
       setError("Preencha descrição, valor, conta e pagador.");

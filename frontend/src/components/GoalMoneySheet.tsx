@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { formatCurrency } from "../utils/format";
 import { Sheet } from "./Sheet";
 import { useToast } from "./ToastProvider";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 export interface GoalForMoney {
   id: string;
@@ -21,12 +22,8 @@ interface AccountRow {
   ownerUserId: string | null;
 }
 
-function parseMoney(value: string): number {
-  const clean = value.trim().replace(/\s|R\$/g, "");
-  return Number(clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean);
-}
 
-const asInput = (value: number) => value.toFixed(2).replace(".", ",");
+const asInput = (value: number) => toMoneyInput(value);
 
 // Guardar na meta (ou retirar dela). "Tirar da conta" (ligado por padrão):
 // o valor sai da conta escolhida e aparece no extrato como transferência --

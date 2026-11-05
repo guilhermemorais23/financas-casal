@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { apiRequest, ApiError } from "../api/client";
 import { useToast } from "./ToastProvider";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 interface SplitStatusPillProps {
   token: string | null;
@@ -42,7 +43,7 @@ export function SplitStatusPill({
     // Metade do total como padrão simples -- a maioria das divisões aqui é entre
     // 2 pessoas, e dá pra editar em qualquer outro caso (devolução parcial,
     // divisão desigual na prática etc.).
-    setAmount((totalAmount / 2).toFixed(2).replace(".", ","));
+    setAmount(toMoneyInput(totalAmount / 2));
     setIsFormOpen(true);
   }
 
@@ -62,7 +63,7 @@ export function SplitStatusPill({
   async function handleConfirmSettle(event: FormEvent) {
     event.preventDefault();
     event.stopPropagation();
-    const parsedAmount = Number(amount.replace(",", "."));
+    const parsedAmount = parseMoney(amount);
     if (!(parsedAmount > 0)) return;
 
     setIsSubmitting(true);

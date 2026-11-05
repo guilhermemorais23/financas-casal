@@ -6,6 +6,7 @@ import { useToast } from "./ToastProvider";
 import { Sheet } from "./Sheet";
 import { isLinkedTransaction, linkedHint, type LinkKind } from "../utils/linkedTransaction";
 import { categoriesFor, type CategoryType } from "../utils/categories";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 interface CategoryRow {
   id: string;
@@ -56,7 +57,7 @@ export function EditTransactionModal({
   const [members, setMembers] = useState<MemberRow[]>([]);
 
   const [description, setDescription] = useState(transaction.description);
-  const [amount, setAmount] = useState(transaction.amount);
+  const [amount, setAmount] = useState(() => toMoneyInput(Number(transaction.amount)));
   const [transactionType, setTransactionType] = useState<"expense" | "income">(
     transaction.transactionType
   );
@@ -84,7 +85,7 @@ export function EditTransactionModal({
     event.preventDefault();
     setError(null);
 
-    const parsedAmount = Number(amount.toString().replace(",", "."));
+    const parsedAmount = parseMoney(amount);
     if (!description.trim() || !occurredAt || !(parsedAmount > 0)) {
       setError("Preencha descrição, valor e data.");
       return;
