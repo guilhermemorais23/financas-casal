@@ -35,7 +35,14 @@ import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
-import { canDeleteFromStatement, deleteConfirmBody, isReadOnlyRow, type LinkKind } from "../utils/linkedTransaction";
+import {
+  canDeleteFromStatement,
+  canMoveAccount,
+  deleteConfirmBody,
+  isReadOnlyRow,
+  moveConfirm,
+  type LinkKind,
+} from "../utils/linkedTransaction";
 import { BillRemindersCard } from "../components/BillReminders";
 import { BalanceLineChart, InOutMonthsChart } from "../components/PainelCharts";
 import { minimumMonthlySaving } from "../utils/goals";
@@ -87,6 +94,7 @@ interface TransactionListRow {
   goalId?: string | null;
   linkKind?: LinkKind | null;
   accountId: string;
+  accountType: "personal" | "joint";
   paymentMethod: PaymentMethod | null;
   payerId: string;
 }
@@ -581,6 +589,34 @@ export function DashboardPage() {
   // Apagar com Desfazer: o pedido só é enviado quando o tempo de desfazer
   // acaba (ver utils/deferredDelete.ts), então desfazer nunca precisa recriar
   // nada no servidor.
+  // Lançado na conta errada: passa entre a sua conta pessoal e a Nossa Conta
+  // sem apagar (o guardado de um cartão garantido leva o cartão junto). Só
+  // com alguém no grupo -- sozinho, a Nossa Conta não aparece.
+  function moveActions(tx: TransactionListRow) {
+    if (!canMoveBetweenAccounts || !canMoveAccount(tx)) return [];
+    return [
+      {
+        key: "move",
+        label: tx.accountType === "joint" ? "Passar pra minha conta" : "Passar pro grupo",
+        icon: "user" as const,
+        onClick: () => handleMove(tx),
+      },
+    ];
+  }
+
+  async function handleMove(tx: TransactionListRow) {
+    const to = tx.accountType === "joint" ? "personal" : "joint";
+    if (!(await confirm({ ...moveConfirm(tx, to), tone: "primary" }))) return;
+    setError(null);
+    try {
+      await apiRequest(`/transactions/${tx.id}/account`, { method: "PATCH", token, body: { to } });
+      showToast(to === "personal" ? "Passou pra sua conta" : "Passou pro grupo");
+      await load(month, { skipCache: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível mudar a conta");
+    }
+  }
+
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
@@ -724,6 +760,7 @@ export function DashboardPage() {
   const recentGroups = useMemo(() => groupByDay(recent), [recent]);
 
   const jointAccount = group?.accounts.find((account) => account.type === "joint");
+  const canMoveBetweenAccounts = Boolean(jointAccount) && (group?.members.length ?? 0) > 1;
   // Ordem fixa: você primeiro, depois os outros ordenados pelo id -- a mesma
   // regra da ParPage, pra cor de cada pessoa não ficar trocando entre as duas
   // telas.
@@ -1355,13 +1392,17 @@ export function DashboardPage() {
                             {tx.transactionType === "income" ? "+" : "-"}
                             {formatCurrency(Number(tx.amount))}
                           </span>
-                          {!isReadOnlyRow(tx) && (
+                          {(!isReadOnlyRow(tx) || moveActions(tx).length > 0) && (
                             <div className="transaction-row-actions">
-                              <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
-                                <Icon name="pencil" />
-                              </button>
+                              {!isReadOnlyRow(tx) && (
+                                <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
+                                  <Icon name="pencil" />
+                                </button>
+                              )}
                               <RowActionsMenu
                                 actions={[
+                                  ...moveActions(tx),
+                                  ...(isReadOnlyRow(tx) ? [] : [
                                   ...(tx.recurringGroupId
                                     ? [
                                         {
@@ -1395,6 +1436,7 @@ export function DashboardPage() {
                                           onClick: () => handleDelete(tx),
                                         },
                                       ]),
+                                  ]),
                                 ]}
                               />
                             </div>

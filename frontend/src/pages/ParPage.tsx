@@ -17,7 +17,14 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { initialOf } from "../utils/initial";
-import { canDeleteFromStatement, deleteConfirmBody, isReadOnlyRow, type LinkKind } from "../utils/linkedTransaction";
+import {
+  canDeleteFromStatement,
+  canMoveAccount,
+  deleteConfirmBody,
+  isReadOnlyRow,
+  moveConfirm,
+  type LinkKind,
+} from "../utils/linkedTransaction";
 
 interface AccountRow {
   id: string;
@@ -59,6 +66,7 @@ interface TransactionListRow {
   transferKind?: "goal" | "accounts" | null;
   goalId?: string | null;
   linkKind?: LinkKind | null;
+  accountType: "personal" | "joint";
 }
 
 interface PayerSummaryRow {
@@ -163,6 +171,20 @@ export function ParPage() {
 
   // Apagar com Desfazer (ver utils/deferredDelete.ts): a linha sai da lista na
   // hora, e o pedido vai quando o tempo de desfazer acaba.
+  // Era só seu (ex.: guardado num cartão criado como "Do grupo"): passa pra
+  // sua conta pessoal sem apagar -- sai do Par e continua no seu Painel.
+  async function handleMoveToPersonal(tx: TransactionListRow) {
+    if (!(await confirm({ ...moveConfirm(tx, "personal"), tone: "primary" }))) return;
+    setError(null);
+    try {
+      await apiRequest(`/transactions/${tx.id}/account`, { method: "PATCH", token, body: { to: "personal" } });
+      showToast("Passou pra sua conta");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível passar pra sua conta");
+    }
+  }
+
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
@@ -419,12 +441,25 @@ export function ParPage() {
                   {tx.transactionType === "income" ? "+" : "-"}
                   {formatCurrency(Number(tx.amount))}
                 </span>
-                {!isReadOnlyRow(tx) && (
+                {(!isReadOnlyRow(tx) || canMoveAccount(tx)) && (
                   <div className="transaction-row-actions">
+                    {canMoveAccount(tx) && (
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Passar pra minha conta"
+                        aria-label="Passar pra minha conta"
+                        onClick={() => handleMoveToPersonal(tx)}
+                      >
+                        <Icon name="user" />
+                      </button>
+                    )}
+                    {!isReadOnlyRow(tx) && (
                     <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                       <Icon name="pencil" />
                     </button>
-                    {canDeleteFromStatement(tx) && (
+                    )}
+                    {!isReadOnlyRow(tx) && canDeleteFromStatement(tx) && (
                       <button
                         type="button"
                         className="btn-icon"

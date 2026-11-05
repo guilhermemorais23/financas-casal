@@ -464,6 +464,8 @@ export async function updateTransaction(
     accountId?: string;
     accountType?: "personal" | "joint";
     accountOwnerId?: string | null;
+    // Só ao passar um lançamento pra conta pessoal de quem moveu.
+    createdBy?: string;
   },
   // undefined: as divisões ficam como estão; uma lista (vazia inclusive):
   // troca todas, no mesmo lote da edição.
@@ -480,6 +482,7 @@ export async function updateTransaction(
   if (fields.accountId !== undefined) update.accountId = fields.accountId;
   if (fields.accountType !== undefined) update.accountType = fields.accountType;
   if (fields.accountOwnerId !== undefined) update.accountOwnerId = fields.accountOwnerId;
+  if (fields.createdBy !== undefined) update.createdBy = fields.createdBy;
 
   const ref = transactionsCol.doc(transactionId);
   const batch = db.batch();
