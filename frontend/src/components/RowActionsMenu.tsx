@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "./Icon";
 
 export interface RowAction {
@@ -14,9 +14,25 @@ export interface RowAction {
 // (cancelar recorrência, apagar...), em vez de 3 a 5 botões de ícone lado a
 // lado em cada linha -- a ação mais usada de fato (editar) fica fora deste
 // menu, sempre a um toque.
+// Espaço que a barra de navegação de baixo (celular) ocupa no pé da tela --
+// o menu não pode abrir por baixo dela.
+const BOTTOM_SAFE_AREA = 90;
+
 export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
+  const [opensUp, setOpensUp] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Nas últimas linhas da lista não cabe abrir pra baixo: abre pra cima.
+  useLayoutEffect(() => {
+    if (!open) {
+      setOpensUp(false);
+      return;
+    }
+    const rect = menuRef.current?.getBoundingClientRect();
+    if (rect && rect.bottom > window.innerHeight - BOTTOM_SAFE_AREA && rect.top - rect.height > 0) setOpensUp(true);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -51,7 +67,7 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
         <Icon name="more" />
       </button>
       {open && (
-        <div className="row-actions-dropdown" role="menu">
+        <div ref={menuRef} className={`row-actions-dropdown${opensUp ? " opens-up" : ""}`} role="menu">
           {actions.map((action) => (
             <button
               key={action.key}

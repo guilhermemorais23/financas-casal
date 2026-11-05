@@ -3464,7 +3464,10 @@ input[type="checkbox"] {
   width: 100%;
   max-width: 420px;
   max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
+  /* Chegar no fim da rolagem do modal não rola a página de trás. */
+  overscroll-behavior: contain;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
 }
 
@@ -3520,7 +3523,8 @@ input[type="checkbox"] {
   position: absolute;
   right: 0;
   top: calc(100% + 0.35rem);
-  z-index: 30;
+  /* Acima da barra de navegação de baixo e do botão + (45). */
+  z-index: 60;
   min-width: 200px;
   background: var(--color-card);
   border: 1px solid var(--color-border);
@@ -3530,6 +3534,12 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   gap: 0.05rem;
+}
+
+/* Nas últimas linhas da lista: abre pra cima (ver RowActionsMenu). */
+.row-actions-dropdown.opens-up {
+  top: auto;
+  bottom: calc(100% + 0.35rem);
 }
 
 .row-actions-item {
@@ -9364,6 +9374,9 @@ select {
   --focus-ring: #f2b84b;
   --band-bg: #0f3f3b;
   --band-soft: #17524d;
+  /* Sem isto, o fundo creme do tema claro aparecia como bloco claro. */
+  --olive-100: rgba(242, 184, 75, 0.14);
+  --olive-700: #f2c770;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -9388,6 +9401,8 @@ select {
     --focus-ring: #f2b84b;
     --band-bg: #0f3f3b;
     --band-soft: #17524d;
+    --olive-100: rgba(242, 184, 75, 0.14);
+    --olive-700: #f2c770;
   }
 }
 
@@ -9627,4 +9642,15 @@ select {
   color: var(--color-text-muted);
   white-space: nowrap;
   user-select: all;
+}
+
+/* iPhone: campo com fonte menor que 16px dá zoom ao tocar, e a tela fica com
+   zoom depois. Estes campos pequenos ficam com 16px no celular. */
+@media (max-width: 720px) {
+  .split-settle-form input,
+  .category-budget-input,
+  .rules-list select,
+  .bill-row-edit select {
+    font-size: 16px;
+  }
 }

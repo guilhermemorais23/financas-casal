@@ -42,3 +42,22 @@ describe("versão no topo", () => {
     });
   }
 });
+
+describe("link do e-mail de resposta (?feedback=1)", () => {
+  it("abre o chat uma vez e tira o ?feedback=1 do endereço (senão reabre a cada troca de mês)", async () => {
+    prepare();
+    const { useLocation } = await import("react-router-dom");
+    function Where() {
+      const loc = useLocation();
+      return <p data-testid="where">{`[${loc.pathname}${loc.search}]`}</p>;
+    }
+    const screen = await renderPage(
+      <AppLayout>
+        <Where />
+      </AppLayout>,
+      { route: "/dashboard?month=2026-11&feedback=1" }
+    );
+    await expect.element(screen.getByTestId("where")).toHaveTextContent("[/dashboard?month=2026-11]");
+    expect(screen.getByTestId("where").element().textContent).not.toContain("feedback");
+  });
+});
