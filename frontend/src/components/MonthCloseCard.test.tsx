@@ -24,7 +24,8 @@ describe("card do fechamento do mês", () => {
     const screen = await renderPage(<MonthCloseCard token="t" />);
     await screen.getByRole("button", { name: "Entendi" }).click();
     await expect.element(screen.getByText("Fechamento de outubro")).not.toBeInTheDocument();
-    expect(callsTo("POST", "/month-close/seen").map((c) => c.body)).toEqual([{ month: "2026-10" }]);
+    // O pedido é registrado de forma assíncrona (a API falsa entra por import()): espera chegar.
+    await expect.poll(() => callsTo("POST", "/month-close/seen").map((c) => c.body)).toEqual([{ month: "2026-10" }]);
   });
 
   it("já visto na conta: não aparece, mesmo num aparelho que nunca viu", async () => {
