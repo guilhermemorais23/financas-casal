@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../db/firestore";
 import { createTestGroup, todayISO } from "../../test-helpers";
 import { setPluggyFetch } from "../../utils/pluggy";
@@ -70,5 +70,31 @@ describe("excluir conta", () => {
     expect(await countWhere("transactions", "groupId", groupId)).toBe(0);
     expect(await countWhere("accounts", "groupId", groupId)).toBe(0);
     expect((await db.collection("groups").doc(groupId).get()).exists).toBe(false);
+  });
+});
+
+describe("excluir conta: assinatura", () => {
+  it("o último membro saindo cancela a assinatura no Asaas antes de apagar (senão a cobrança continua)", async () => {
+    const { groupId, userAId, userBId } = await createTestGroup();
+    await db.collection("subscriptions").doc(groupId).set({ status: "active", asaasSubscriptionId: "sub_123" });
+    process.env.ASAAS_API_KEY = "chave-de-teste";
+    const realFetch = globalThis.fetch;
+    const canceled: string[] = [];
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (!url.includes("asaas.com")) return realFetch(input, init);
+      if (init?.method === "DELETE") canceled.push(new URL(url).pathname);
+      return new Response(JSON.stringify({ deleted: true }), { status: 200 });
+    });
+    try {
+      await deleteAccountForUser(userAId);
+      expect(canceled).toEqual([]);
+      await deleteAccountForUser(userBId);
+      expect(canceled).toEqual(["/v3/subscriptions/sub_123"]);
+      expect((await db.collection("subscriptions").doc(groupId).get()).exists).toBe(false);
+    } finally {
+      spy.mockRestore();
+      delete process.env.ASAAS_API_KEY;
+    }
   });
 });

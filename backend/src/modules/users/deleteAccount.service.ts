@@ -1,8 +1,8 @@
 import { auth, db } from "../../db/firestore";
 import { findMembersByGroupId } from "../groups/groups.repository";
 import { invalidateTransactionReads } from "../../utils/readCache";
-import { pluggy, pluggyConfigured } from "../../utils/pluggy";
-import { findItemsByUser } from "../openFinance/openFinance.repository";
+import { endSubscriptionOfDeletedGroup } from "../billing/billing.service";
+import { disconnectAllBanks } from "../openFinance/openFinance.service";
 import { findUserById } from "./users.repository";
 
 // Coleções cujos documentos pertencem ao grupo inteiro (campo groupId).
@@ -35,20 +35,8 @@ async function deleteWholeGroup(groupId: string): Promise<void> {
   await Promise.all(
     GROUP_COLLECTIONS.map((name) => deleteDocs(db.collection(name).where("groupId", "==", groupId)))
   );
-  // A assinatura usa o id do grupo como id do documento.
-  await db.collection("subscriptions").doc(groupId).delete();
+  await endSubscriptionOfDeletedGroup(groupId);
   await db.recursiveDelete(db.collection("groups").doc(groupId));
-}
-
-// Conexões com o banco: desfaz no Pluggy também, senão ele seguiria lendo o
-// banco e mandando avisos de quem já saiu. Se o Pluggy falhar (ou já tiver
-// apagado), segue -- o que não pode é a exclusão da conta travar.
-async function disconnectBanks(userId: string): Promise<void> {
-  const items = await findItemsByUser(userId);
-  if (pluggyConfigured()) {
-    await Promise.all(items.map((item) => pluggy.deleteItem(item.itemId).catch(() => undefined)));
-  }
-  await deleteDocs(db.collection("openFinanceItems").where("userId", "==", userId));
 }
 
 // Ainda tem alguém no grupo: os dados conjuntos (Nossa Conta, cartões do
@@ -82,7 +70,7 @@ export async function deleteAccountForUser(userId: string): Promise<void> {
   if (user?.groupIds.length) invalidateTransactionReads();
 
   await Promise.all([
-    disconnectBanks(userId),
+    disconnectAllBanks(userId),
     deleteDocs(db.collection("pushSubscriptions").where("userId", "==", userId)),
     deleteDocs(db.collection("shares").where("ownerId", "==", userId)),
     deleteDocs(db.collection("telegramLinks").where("userId", "==", userId)),
