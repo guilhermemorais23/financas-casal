@@ -5,6 +5,7 @@
 // que o Admin mostra e que avisa o dono por e-mail quando acumula.
 import type { NextFunction, Request, Response } from "express";
 import { GroupAccessError, NoGroupError } from "../modules/groups/groups.service";
+import { PartnerPersonalEntryError } from "../utils/errors";
 import { isQuotaError, logError } from "../utils/errorLog";
 
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
@@ -18,6 +19,10 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   // controller repetia esse mesmo if.
   if (err instanceof NoGroupError) {
     res.status(404).json({ error: "no group yet" });
+    return;
+  }
+  if (err instanceof PartnerPersonalEntryError) {
+    res.status(403).json({ error: err.message });
     return;
   }
   console.error(err);

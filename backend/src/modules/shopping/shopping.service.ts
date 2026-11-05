@@ -7,6 +7,7 @@ import {
   runLedgerTransaction,
   writeNewTransaction,
 } from "../transactions/transactions.repository";
+import { assertCanManageLinked } from "../transactions/transactions.service";
 import { findItemById, findItemsByGroupId, insertItem, shoppingItemRef } from "./shopping.repository";
 
 export class ItemNotFoundError extends Error {}
@@ -90,6 +91,7 @@ export async function uncheckItem(userId: string, itemId: string) {
     const current = await t.get(ref);
     if (!current.exists || !current.data()!.isChecked) return;
     const transactionId = current.data()!.transactionId as string | null;
+    await assertCanManageLinked(t, userId, transactionId);
     const removal = transactionId ? await prepareTransactionDelete(t, transactionId) : null;
     removal?.apply();
     t.update(ref, { isChecked: false, checkedBy: null, transactionId: null });
@@ -105,6 +107,7 @@ export async function removeItem(userId: string, itemId: string) {
     const current = await t.get(ref);
     if (!current.exists) return;
     const transactionId = current.data()!.transactionId as string | null;
+    await assertCanManageLinked(t, userId, transactionId);
     const removal = transactionId ? await prepareTransactionDelete(t, transactionId) : null;
     removal?.apply();
     t.delete(ref);

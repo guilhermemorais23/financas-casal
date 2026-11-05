@@ -9,7 +9,7 @@ import {
   transactionDocRef,
   writeNewTransaction,
 } from "../transactions/transactions.repository";
-import { InvalidAccountError } from "../transactions/transactions.service";
+import { InvalidAccountError, assertCanManageLinked } from "../transactions/transactions.service";
 import { toCents } from "../../utils/money";
 import { todayInBrazil } from "../../utils/month";
 import {
@@ -343,6 +343,7 @@ export async function updateContribution(
     const newSigned = amount === null ? 0 : Math.sign(oldSigned || 1) * toCents(amount);
     const delta = newSigned - oldSigned;
     const transactionId = (contribution.transactionId as string | null) ?? null;
+    await assertCanManageLinked(t, userId, transactionId);
     const removal = amount === null && transactionId ? await prepareTransactionDelete(t, transactionId) : null;
     const linkedExists =
       amount !== null && transactionId ? (await t.get(transactionDocRef(transactionId))).exists : false;
