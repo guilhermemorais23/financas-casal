@@ -17,7 +17,6 @@ import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import {
   addGoalItemHandler,
-  contributeToGoalHandler,
   createGoalHandler,
   deleteGoalHandler,
   listContributionsHandler,
@@ -36,7 +35,6 @@ goalsRouter.use(requireAuth);
 
 goalsRouter.post("/", asyncHandler(createGoalHandler));
 goalsRouter.get("/", asyncHandler(listGoalsHandler));
-goalsRouter.post("/:id/contribute", asyncHandler(contributeToGoalHandler));
 goalsRouter.post("/:id/money", asyncHandler(moveGoalMoneyHandler));
 goalsRouter.get("/:id/contributions", asyncHandler(listContributionsHandler));
 goalsRouter.patch("/:id/contributions/:contributionId", asyncHandler(updateContributionHandler));

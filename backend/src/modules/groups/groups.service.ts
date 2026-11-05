@@ -11,7 +11,6 @@ import {
   joinGroupByInvite,
   addUserToGroup,
   removeUserFromGroup,
-  updateGroupFinancialProfile,
   updateGroupIdentity,
   type AccountRow,
   type GroupRow,
@@ -202,16 +201,6 @@ export async function getGroupForUser(userId: string): Promise<{
     }));
 
   return { group, accounts: visibleAccounts, members, pendingInviteToken };
-}
-
-export async function updateFinancialProfile(
-  userId: string,
-  updates: { financialGoal?: string | null; savingsAmount?: number | null }
-): Promise<GroupRow> {
-  const groupId = await requireGroupId(userId);
-  await updateGroupFinancialProfile(groupId, updates);
-  const group = await findGroupById(groupId);
-  return group!;
 }
 
 export interface GroupSummary {

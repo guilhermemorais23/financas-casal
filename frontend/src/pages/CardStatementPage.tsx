@@ -17,7 +17,15 @@ import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { categoriesFor, type CategoryType } from "../utils/categories";
-import { formatCurrency, monthLongName, monthYearLabel, parseLocalDate, todayISO } from "../utils/format";
+import {
+  formatCurrency,
+  monthLongName,
+  monthYearLabel,
+  nextMonthParam,
+  parseLocalDate,
+  previousMonthParam,
+  todayISO,
+} from "../utils/format";
 import { initialOf } from "../utils/initial";
 
 interface CardRow {
@@ -69,14 +77,9 @@ interface MemberRow {
 // As mesmas opções de Cartões e da Nova despesa (o backend só aceita estas).
 const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 6, 12];
 
-// "2026-10" + n meses -> "2026-11".
-function shiftMonth(month: string, count: number): string {
-  const [year, m] = month.split("-").map(Number);
-  const date = new Date(year, m - 1 + count, 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function dayLabel(iso: string): string {
+// "3 de novembro" -- sem o "Hoje"/"Ontem" do dayLabel de utils/format: numa
+// fatura conta a data da compra.
+function purchaseDayLabel(iso: string): string {
   return parseLocalDate(iso).toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
 }
 
@@ -149,9 +152,9 @@ export function CardStatementPage() {
     if (month) void loadStatement(month);
   }, [month, loadStatement]);
 
-  function goTo(count: number) {
+  function goTo(direction: -1 | 1) {
     if (!month) return;
-    setSearchParams({ mes: shiftMonth(month, count) }, { replace: true });
+    setSearchParams({ mes: direction < 0 ? previousMonthParam(month) : nextMonthParam(month) }, { replace: true });
   }
 
   const memberName = (userId: string) =>
@@ -323,7 +326,7 @@ export function CardStatementPage() {
           {days.map((day) => (
             <div key={day.date}>
               <div className="fatura-day">
-                <span>{dayLabel(day.date)}</span>
+                <span>{purchaseDayLabel(day.date)}</span>
                 <span>{formatCurrency(day.total)}</span>
               </div>
               {day.purchases.map((purchase) => (

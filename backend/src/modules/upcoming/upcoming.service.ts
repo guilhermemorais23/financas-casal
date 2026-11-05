@@ -36,7 +36,6 @@ function billDetail(mode: AmountMode): string {
 
 export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_WINDOW_DAYS): Promise<UpcomingItem[]> {
   const today = todayInBrazil();
-  const thisMonth = today.slice(0, 7);
   const [cards, debts, bills, loans] = await Promise.all([
     listCards(userId),
     listDebts(userId),

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createTestGroup, todayISO } from "./test-helpers";
 import { createTransaction, deleteTransactionForUser, updateTransactionForUser } from "./modules/transactions/transactions.service";
 import { findTransactionById } from "./modules/transactions/transactions.repository";
-import { createGoal, contributeToGoal, removeGoal } from "./modules/goals/goals.service";
+import { createGoal, moveGoalMoney, removeGoal } from "./modules/goals/goals.service";
 import { addItem, removeItem, uncheckItem } from "./modules/shopping/shopping.service";
 import { createDebt, removeDebt } from "./modules/debts/debts.service";
 import { createCard, removeCard, getStatement, addPurchase } from "./modules/cards/cards.service";
@@ -70,7 +70,7 @@ describe("segurança: um grupo não mexe nos dados de outro", () => {
     const attempts: [string, () => Promise<unknown>][] = [
       ["editar lançamento", () => updateTransactionForUser(x, tx.id, { description: "hack", amount: 1 } as never)],
       ["apagar lançamento", () => deleteTransactionForUser(x, tx.id)],
-      ["aportar em meta", () => contributeToGoal(x, goal.id, 10)],
+      ["aportar em meta", () => moveGoalMoney(x, goal.id, { direction: "deposit", amount: 10 })],
       ["apagar meta", () => removeGoal(x, goal.id)],
       ["desmarcar compra", () => uncheckItem(x, item.id)],
       ["apagar compra", () => removeItem(x, item.id)],

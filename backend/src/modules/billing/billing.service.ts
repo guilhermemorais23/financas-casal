@@ -1,5 +1,6 @@
 import { escapeHtml, sendOwnerEmail } from "../../email/mailer";
 import { isValidCpfCnpj, onlyDigits } from "../../utils/cpfCnpj";
+import { formatBRL } from "../../utils/money";
 import { todayInBrazil } from "../../utils/month";
 import { invalidateScopes } from "../../utils/readCache";
 import { findMembersByGroupId } from "../groups/groups.repository";
@@ -300,7 +301,7 @@ async function applyAsaasEvent(
       if (sub.status !== "active") {
         void sendOwnerEmail(
           "Nova assinatura no PAR.",
-          `<p>${escapeHtml(sub.payerName ?? "Alguém")} assinou o Premium (${sub.plan === "yearly" ? "anual" : "mensal"}) — R$ ${payment.value.toFixed(2)}.</p>`
+          `<p>${escapeHtml(sub.payerName ?? "Alguém")} assinou o Premium (${sub.plan === "yearly" ? "anual" : "mensal"}) — ${formatBRL(payment.value)}.</p>`
         );
       }
       break;

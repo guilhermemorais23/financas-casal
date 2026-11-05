@@ -16,7 +16,6 @@ import {
   leaveGroup,
   listGroupsForUser,
   removeMemberForUser,
-  updateFinancialProfile,
   updateGroupIdentityForUser,
 } from "./groups.service";
 import { isNonEmptyString } from "../../utils/validation";
@@ -102,29 +101,6 @@ export async function updateGroupIdentityHandler(req: Request, res: Response) {
 export async function createInviteHandler(req: Request, res: Response) {
   const inviteToken = await createNewInvite(req.user!.id);
   res.status(201).json({ inviteToken });
-}
-
-export async function updateFinancialProfileHandler(req: Request, res: Response) {
-  const { financialGoal, savingsAmount } = req.body ?? {};
-
-  const updates: { financialGoal?: string | null; savingsAmount?: number | null } = {};
-  if (financialGoal !== undefined) {
-    if (financialGoal !== null && typeof financialGoal !== "string") {
-      res.status(400).json({ error: "financialGoal must be a string or null" });
-      return;
-    }
-    updates.financialGoal = financialGoal === null || financialGoal.trim() === "" ? null : financialGoal.trim();
-  }
-  if (savingsAmount !== undefined) {
-    if (savingsAmount !== null && (typeof savingsAmount !== "number" || !Number.isFinite(savingsAmount) || savingsAmount < 0)) {
-      res.status(400).json({ error: "savingsAmount must be a non-negative number or null" });
-      return;
-    }
-    updates.savingsAmount = savingsAmount;
-  }
-
-  const group = await updateFinancialProfile(req.user!.id, updates);
-  res.status(200).json(group);
 }
 
 export async function leaveGroupHandler(req: Request, res: Response) {

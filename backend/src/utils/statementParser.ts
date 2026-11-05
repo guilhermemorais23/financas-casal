@@ -1,4 +1,5 @@
 import type { PaymentMethod } from "../modules/transactions/transactions.repository";
+import { plainText } from "./text";
 // Lê o arquivo de extrato do banco (OFX ou CSV) e devolve linhas simples.
 // Funções puras, sem I/O: quem chama decide o que fazer com as linhas
 // (prévia, duplicados, salvar). Os valores mantêm o sinal do próprio arquivo
@@ -175,10 +176,7 @@ export function splitCsvLine(line: string, delimiter: string): string[] {
 }
 
 function normalizeHeader(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+  return plainText(value)
     .trim();
 }
 

@@ -1,11 +1,5 @@
 import type { PaymentMethod } from "../modules/transactions/transactions.repository";
-
-function plain(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
+import { plainText as plain } from "./text";
 
 // Forma de pagamento pelo que o banco escreveu na linha do extrato ("PIX
 // ENVIADO MARIA", "COMPRA CARTAO DEB PADARIA"). Só quando é claro: na dúvida,

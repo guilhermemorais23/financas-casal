@@ -36,6 +36,7 @@ import {
   type LimitType,
   type PurchaseRow,
 } from "./cards.repository";
+import { toCents } from "../../utils/money";
 
 export class CardNotFoundError extends Error {}
 export class PurchaseNotFoundError extends Error {}
@@ -112,7 +113,7 @@ async function computeUnpaidByMonth(cardId: string): Promise<Map<string, number>
 
   for (const purchase of purchases) {
     if (paidMonths.has(purchase.statementMonth)) continue;
-    const cents = Math.round(Number(purchase.amount) * 100);
+    const cents = toCents(Number(purchase.amount));
     byMonth.set(purchase.statementMonth, (byMonth.get(purchase.statementMonth) ?? 0) + cents);
   }
   return byMonth;
@@ -130,7 +131,7 @@ function sumCents(byMonth: Map<string, number>): number {
 }
 
 function limitReleasesFor(card: CardRow, byMonth: Map<string, number>): LimitRelease[] {
-  let availableCents = Math.round(Number(card.limit) * 100) - sumCents(byMonth);
+  let availableCents = toCents(Number(card.limit)) - sumCents(byMonth);
   return [...byMonth.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([month, cents]) => {
@@ -182,10 +183,10 @@ function summarizePurchases(
   purchases: PurchaseRow[],
   isPaid: boolean
 ): CardStatementSummary {
-  const totalCents = purchases.reduce((sum, purchase) => sum + Math.round(Number(purchase.amount) * 100), 0);
+  const totalCents = purchases.reduce((sum, purchase) => sum + toCents(Number(purchase.amount)), 0);
   const byPersonMap = new Map<string, number>();
   for (const purchase of purchases) {
-    const cents = Math.round(Number(purchase.amount) * 100);
+    const cents = toCents(Number(purchase.amount));
     byPersonMap.set(purchase.buyerId, (byPersonMap.get(purchase.buyerId) ?? 0) + cents);
   }
   return {
@@ -286,7 +287,7 @@ async function recordSecuredTransfer(
 export function savedInSecuredCardsCents(cards: CardWithSummary[]): number {
   return cards
     .filter((card) => card.limitType === "secured")
-    .reduce((sum, card) => sum + Math.round(Number(card.limit ?? 0) * 100), 0);
+    .reduce((sum, card) => sum + toCents(Number(card.limit ?? 0)), 0);
 }
 
 // O que ainda vai sair das contas pra pagar os cartões: tudo que está em
@@ -294,9 +295,9 @@ export function savedInSecuredCardsCents(cards: CardWithSummary[]): number {
 // senão só a fatura atual se ainda não foi paga.
 export function owedOnCardsCents(cards: CardWithSummary[]): number {
   return cards.reduce((sum, card) => {
-    if (card.limitUsed !== null) return sum + Math.round(Number(card.limitUsed) * 100);
+    if (card.limitUsed !== null) return sum + toCents(Number(card.limitUsed));
     const statement = card.currentStatement;
-    return statement.isPaid ? sum : sum + Math.round(Number(statement.total) * 100);
+    return statement.isPaid ? sum : sum + toCents(Number(statement.total));
   }, 0);
 }
 
@@ -465,7 +466,7 @@ export async function updatePurchase(userId: string, cardId: string, purchaseId:
     {
       id: purchase.id,
       description: input.description,
-      amountCents: Math.round(input.amount * 100),
+      amountCents: toCents(input.amount),
       categoryId: input.categoryId,
       buyerId: input.buyerId,
       purchaseDate,
@@ -491,7 +492,7 @@ export async function listStatements(userId: string, cardId: string) {
   for (const purchase of purchases) {
     centsByMonth.set(
       purchase.statementMonth,
-      (centsByMonth.get(purchase.statementMonth) ?? 0) + Math.round(Number(purchase.amount) * 100)
+      (centsByMonth.get(purchase.statementMonth) ?? 0) + toCents(Number(purchase.amount))
     );
   }
   return [...centsByMonth.entries()]
@@ -545,7 +546,7 @@ export async function setStatementPaidForUser(
     const totalAmount = purchases.reduce((sum, purchase) => sum + Number(purchase.amount), 0);
     const byBuyerCents = new Map<string, number>();
     for (const purchase of purchases) {
-      const cents = Math.round(Number(purchase.amount) * 100);
+      const cents = toCents(Number(purchase.amount));
       byBuyerCents.set(purchase.buyerId, (byBuyerCents.get(purchase.buyerId) ?? 0) + cents);
     }
 
@@ -645,7 +646,7 @@ export async function adjustSecuredLimit(
     throw new InvalidLimitError();
   }
 
-  const amountCents = Math.round(input.amount * 100);
+  const amountCents = toCents(input.amount);
   const deltaCents = input.direction === "deposit" ? amountCents : -amountCents;
   // O quanto as compras em aberto prendem do limite (lido fora da transação:
   // compras novas não mudam o que já estava preso).
@@ -659,7 +660,7 @@ export async function adjustSecuredLimit(
   await runLedgerTransaction(groupId, async (t) => {
     const current = toCardRow(await t.get(cardRef(cardId)));
     if (input.direction === "withdraw") {
-      const availableCents = Math.round(Number(current.limit ?? 0) * 100) - heldCents;
+      const availableCents = toCents(Number(current.limit ?? 0)) - heldCents;
       if (amountCents > availableCents) {
         throw new InsufficientAvailableLimitError();
       }
