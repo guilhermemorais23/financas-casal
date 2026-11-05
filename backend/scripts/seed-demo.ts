@@ -99,7 +99,7 @@ async function main() {
   await api(partner, "/loans", "POST", { personName: "Cunhado", amount: 600, lentAt: day(-35), dueDate: day(60), note: "Entrada da moto", accountId: joint, interestRateMonthly: 2 });
 
   const goal = await api<{ id: string }>(you, "/goals", "POST", { name: "Viagem pro Nordeste", targetAmount: 8000, deadline: `${new Date().getFullYear()}-12-20` });
-  await api(you, `/goals/${goal.id}/contribute`, "POST", { amount: 4200 });
+  await api(you, `/goals/${goal.id}/money`, "POST", { direction: "deposit", amount: 4200 });
 
   await api(you, "/budgets/current", "PUT", { capAmount: 5500 }).catch((err) => console.warn("orçamento não criado:", err.message));
 

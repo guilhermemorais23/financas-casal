@@ -53,7 +53,7 @@ export function parseLocalDate(dateStr: string): Date {
 
 // "Hoje" / "Ontem" / "5 de agosto" -- supõe que quem chama passa uma data sem
 // hora (YYYY-MM-DD), igual o `occurredAt` no resto do app.
-export function dayLabel(dateStr: string): string {
+function dayLabel(dateStr: string): string {
   const date = parseLocalDate(dateStr);
   const today = new Date();
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();

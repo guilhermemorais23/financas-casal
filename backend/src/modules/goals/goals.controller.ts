@@ -6,7 +6,6 @@ import {
   NotEnoughInGoalError,
   TooManyGoalItemsError,
   addGoalItem,
-  contributeToGoal,
   createGoal,
   listContributions,
   listGoals,
@@ -96,21 +95,6 @@ export async function createGoalHandler(req: Request, res: Response) {
 export async function listGoalsHandler(req: Request, res: Response) {
   const goals = await listGoals(req.user!.id);
   res.status(200).json(goals);
-}
-
-// "Guardar" antigo: só soma.
-export async function contributeToGoalHandler(req: Request, res: Response) {
-  const { amount } = req.body ?? {};
-  if (!isValidAmount(amount)) {
-    res.status(400).json({ error: "amount is required" });
-    return;
-  }
-  try {
-    res.status(200).json(await contributeToGoal(req.user!.id, req.params.id, amount));
-  } catch (err) {
-    if (goalError(err, res)) return;
-    throw err;
-  }
 }
 
 // Guardar ou retirar, opcionalmente tirando/devolvendo pra uma conta.

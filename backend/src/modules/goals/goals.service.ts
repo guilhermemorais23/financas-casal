@@ -173,11 +173,6 @@ export async function moveGoalMoney(userId: string, goalId: string, input: MoveG
   return (await findGoalById(goalId))!;
 }
 
-// Compatível com o "Guardar" antigo (só soma na meta).
-export async function contributeToGoal(userId: string, goalId: string, amount: number) {
-  return moveGoalMoney(userId, goalId, { direction: "deposit", amount });
-}
-
 export async function listContributions(userId: string, goalId: string) {
   await requireGoalInGroup(userId, goalId);
   return findContributions(goalId);

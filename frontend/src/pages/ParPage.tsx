@@ -17,7 +17,7 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { initialOf } from "../utils/initial";
-import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
+import { canDeleteFromStatement, deleteConfirmBody, type LinkKind } from "../utils/linkedTransaction";
 
 interface AccountRow {
   id: string;
@@ -166,7 +166,7 @@ export function ParPage() {
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
-      body: `${formatCurrency(Number(tx.amount))} sai da conta conjunta. Você ainda vai poder desfazer por alguns segundos.`,
+      body: deleteConfirmBody(tx, "da conta conjunta"),
       confirmLabel: "Excluir",
     });
     if (!confirmed) return;
@@ -424,7 +424,7 @@ export function ParPage() {
                     <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                       <Icon name="pencil" />
                     </button>
-                    {!isLinkedTransaction(tx) && (
+                    {canDeleteFromStatement(tx) && (
                       <button
                         type="button"
                         className="btn-icon"

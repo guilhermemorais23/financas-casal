@@ -19,7 +19,6 @@ import {
   MAX_BULK_DELETE,
   exportTransactionsForUser,
   getBalance,
-  getDailySeriesForUser,
   getYearlySummaryForUser,
   InvalidYearError,
   LinkedTransactionError,
@@ -136,22 +135,6 @@ export async function getSummaryHandler(req: Request, res: Response) {
   try {
     const summary = await getMonthlySummaryForUser(req.user!.id, month, scope);
     res.status(200).json(summary);
-  } catch (err) {
-    if (err instanceof InvalidMonthError) {
-      res.status(400).json({ error: "invalid month" });
-      return;
-    }
-    throw err;
-  }
-}
-
-export async function getDailySeriesHandler(req: Request, res: Response) {
-  const month = typeof req.query.month === "string" ? req.query.month : undefined;
-  const scope = req.query.scope === "joint" ? "joint" : "visible";
-
-  try {
-    const points = await getDailySeriesForUser(req.user!.id, month, scope);
-    res.status(200).json(points);
   } catch (err) {
     if (err instanceof InvalidMonthError) {
       res.status(400).json({ error: "invalid month" });

@@ -16,6 +16,7 @@ import { findOwnDocsForRange } from "../transactions/transactions.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { listLoans } from "../loans/loans.service";
 import { getUpcomingForUser } from "../upcoming/upcoming.service";
+import { toCents } from "../../utils/money";
 
 export interface GoalHighlight {
   id: string;
@@ -227,7 +228,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
         deadline: goal.deadline,
         itemsCount: goal.items?.length ?? 0,
       })),
-    savedInGoals: goals.reduce((sum, goal) => sum + Math.round(Number(goal.currentAmount) * 100), 0) / 100,
+    savedInGoals: goals.reduce((sum, goal) => sum + toCents(Number(goal.currentAmount)), 0) / 100,
     trend6m,
     alerts,
   };

@@ -237,7 +237,7 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
         : null,
     });
     const emoji = parsed.intent === "log_expense" ? "💸" : "💰";
-    return `${emoji} Registrado: ${transaction.description} — R$ ${parsed.amount.toFixed(2)}${category ? ` (${category.name})` : ""}.` + quotaNote;
+    return `${emoji} Registrado: ${transaction.description} — ${formatBRL(parsed.amount)}${category ? ` (${category.name})` : ""}.` + quotaNote;
   }
 
   if (parsed.intent === "set_financial_goal" && parsed.goalText) {
@@ -247,7 +247,7 @@ Use "log_expense"/"log_income" quando a pessoa relata um gasto ou recebimento re
 
   if (parsed.intent === "set_savings" && parsed.amount !== undefined) {
     await updateGroupFinancialProfile(groupId, { savingsAmount: parsed.amount });
-    return `Anotado! Vocês têm R$ ${parsed.amount.toFixed(2)} guardado.` + quotaNote;
+    return `Anotado! Vocês têm ${formatBRL(parsed.amount)} guardado.` + quotaNote;
   }
 
   return (parsed.reply || "Prontinho.") + quotaNote;

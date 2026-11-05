@@ -8,6 +8,7 @@ import { sendPushToUser } from "../push/push.service";
 import { logError } from "../../utils/errorLog";
 import { todayInBrazil } from "../../utils/month";
 import { detectPaymentMethod } from "../../utils/paymentDetect";
+import { toCents } from "../../utils/money";
 
 export class OpenFinanceUnavailableError extends Error {}
 export class OpenFinanceItemNotFoundError extends Error {}
@@ -119,7 +120,7 @@ export function toStatementRows(transactions: PluggyTransaction[], account: Pick
   for (const tx of transactions) {
     if (tx.status === "PENDING") continue;
     if (account.type === "CREDIT" && tx.type === "CREDIT") continue;
-    const cents = Math.round(Math.abs(tx.amount) * 100);
+    const cents = toCents(Math.abs(tx.amount));
     if (!cents) continue;
     const counterpart = tx.type === "DEBIT" ? tx.paymentData?.receiver?.name : tx.paymentData?.payer?.name;
     const name = (tx.merchant?.name || counterpart || "").trim();

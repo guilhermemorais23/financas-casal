@@ -6,7 +6,7 @@ import { findDebtsByGroupId, findInstallmentsByDebtIds } from "../debts/debts.re
 import { escapeHtml, sendReminderEmail } from "../../email/mailer";
 import { findLoansByGroup, todayInBrazil } from "../loans/loans.service";
 import { findRecurringBillsByGroupId } from "../recurringBills/recurringBills.repository";
-import { addMonths, daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
+import { daysBetween, dateForDayInMonth, parseMonthRange } from "../../utils/month";
 import { generateDueRecurringBills } from "../recurringBills/recurringBills.service";
 import { logError } from "../../utils/errorLog";
 import { htmlToText, sendPushToUser, type PushMessage } from "../push/push.service";
@@ -21,7 +21,7 @@ import {
   wasReminderSent,
   type MemberWithEmail,
 } from "./reminders.repository";
-import { formatBRL } from "../../utils/money";
+import { formatBRL, toCents } from "../../utils/money";
 
 // O lembrete de vencimento de um cartão sai na primeira vez que o cron vê a
 // fatura atual em aberto e a até tantos dias do vencimento (ou já vencida) --
@@ -424,7 +424,7 @@ async function runCardLimitAlerts(groupId: string, members: MemberWithEmail[], o
   );
   let sent = 0;
   for (const card of cards) {
-    const limitCents = Math.round(Number(card.limit) * 100);
+    const limitCents = toCents(Number(card.limit));
     const usedCents = await limitUsedCents(card.id);
     const percent = (usedCents / limitCents) * 100;
     const step = LIMIT_STEPS.find((candidate) => percent >= candidate.percent);

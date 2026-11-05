@@ -1,4 +1,4 @@
-import { fromCents } from "../../utils/money";
+import { fromCents, toCents } from "../../utils/money";
 import { BANKS, PdfPasswordError, parsePdfStatement, type Bank, type PdfAiOptions } from "../../utils/pdfStatement";
 import { StatementParseError, cleanStatementDescription, parseDate, parseStatement, type ParsedStatementRow } from "../../utils/statementParser";
 import { categoryIsVisibleTo, findVisibleCategories } from "../categories/categories.repository";
@@ -23,6 +23,7 @@ import {
 import { isValidAmount } from "../../utils/validation";
 import { detectPaymentMethod } from "../../utils/paymentDetect";
 import { PAYMENT_METHODS, type PaymentMethod } from "../transactions/transactions.repository";
+import { plainText } from "../../utils/text";
 
 export { StatementParseError };
 export class InvalidImportItemError extends Error {}
@@ -95,10 +96,7 @@ export interface StatementInput {
 }
 
 function normalizeDescription(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+  return plainText(value)
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -116,8 +114,8 @@ async function readInput(input: StatementInput, ai?: PdfAiOptions): Promise<{ fo
       pdf: {
         reconciled: read.reconciled,
         difference: fromCents(Math.abs(read.differenceCents)),
-        openingBalance: read.openingBalanceCents === null ? null : (read.openingBalanceCents / 100).toFixed(2),
-        closingBalance: read.closingBalanceCents === null ? null : (read.closingBalanceCents / 100).toFixed(2),
+        openingBalance: read.openingBalanceCents === null ? null : fromCents(read.openingBalanceCents),
+        closingBalance: read.closingBalanceCents === null ? null : fromCents(read.closingBalanceCents),
         readBy: read.readBy,
         unreadLines: read.unreadLines,
         bank: read.bank,
@@ -214,7 +212,7 @@ async function previewRows(
 
   const existing: TransactionListRow[] = await findTransactionsVisibleTo(groupId, userId, COMPARE_LIMIT);
   const existingKeys = new Set(
-    existing.map((tx) => duplicateKey(tx.occurredAt.slice(0, 10), Math.round(Number(tx.amount) * 100), tx.transactionType))
+    existing.map((tx) => duplicateKey(tx.occurredAt.slice(0, 10), toCents(Number(tx.amount)), tx.transactionType))
   );
   // O findTransactionsVisibleTo devolve do mais novo pro mais antigo, então o
   // primeiro achado por descrição é a categoria usada mais recentemente.
@@ -284,7 +282,7 @@ async function previewRows(
       };
       byKey.set(id, entry);
     }
-    entry.cents += Math.round(Number(row.amount) * 100);
+    entry.cents += toCents(Number(row.amount));
     entry.group.count += 1;
     entry.group.rowIndexes.push(index);
     if (!entry.group.paymentMethod && row.paymentMethod) entry.group.paymentMethod = row.paymentMethod;

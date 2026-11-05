@@ -4,6 +4,7 @@ import { getGroupForUser } from "../groups/groups.service";
 import { listRecurringBillsForUser } from "../recurringBills/recurringBills.service";
 import { paymentsUntil, type PaymentAhead } from "../upcoming/upcoming.service";
 import { listLoans, todayInBrazil, type LoanWithTotals, type LoansSummary } from "./loans.service";
+import { toCents } from "../../utils/money";
 
 export interface LoansOverview {
   loans: LoanWithTotals[];
@@ -25,7 +26,7 @@ export async function getLoansOverview(userId: string): Promise<LoansOverview> {
     listRecurringBillsForUser(userId),
   ]);
   const today = todayInBrazil();
-  const accountsCents = (group?.accounts ?? []).reduce((sum, account) => sum + Math.round(account.balance * 100), 0);
+  const accountsCents = (group?.accounts ?? []).reduce((sum, account) => sum + toCents(account.balance), 0);
   const lastDue = list.loans
     .filter((loan) => loan.status === "open" && loan.dueDate)
     .reduce((max, loan) => (loan.dueDate! > max ? loan.dueDate! : max), today);

@@ -1,8 +1,7 @@
 // ============================================================================
 // MÓDULO quotes -- endereços /api/quotes
 // ============================================================================
-// O que faz: Cotações (brapi): histórico do Ibovespa e de algumas ações, e a
-//            cotação de um papel.
+// O que faz: Cotações (brapi): histórico do Ibovespa e de algumas ações.
 // Quem chama: Tela Investimentos (pages/InvestmentsPage.tsx).
 //
 // Caminho de um pedido dentro do módulo:
@@ -14,10 +13,9 @@
 import { Router } from "express";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
-import { getQuotesHandler, getStockQuoteHandler } from "./quotes.controller";
+import { getQuotesHandler } from "./quotes.controller";
 
 export const quotesRouter = Router();
 
 quotesRouter.use(requireAuth);
 quotesRouter.get("/", asyncHandler(getQuotesHandler));
-quotesRouter.get("/stock", asyncHandler(getStockQuoteHandler));

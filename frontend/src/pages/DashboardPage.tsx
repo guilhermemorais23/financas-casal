@@ -2,7 +2,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { type DailyTrendPoint } from "../components/AccumulatedSpendingChart";
 import { AnimatedNumber } from "../components/AnimatedNumber";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
@@ -36,10 +35,17 @@ import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
-import { isLinkedTransaction, type LinkKind } from "../utils/linkedTransaction";
+import { canDeleteFromStatement, deleteConfirmBody, type LinkKind } from "../utils/linkedTransaction";
 import { BillRemindersCard } from "../components/BillReminders";
 import { BalanceLineChart, InOutMonthsChart } from "../components/PainelCharts";
 import { minimumMonthlySaving } from "../utils/goals";
+
+// Um ponto por dia do mês, como o GET /dashboard devolve em dailyTrend.
+interface DailyTrendPoint {
+  day: string;
+  income: string;
+  expense: string;
+}
 
 interface AccountWithBalance {
   id: string;
@@ -578,7 +584,7 @@ export function DashboardPage() {
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
-      body: `${formatCurrency(Number(tx.amount))} sai do extrato e dos totais do mês. Você ainda vai poder desfazer por alguns segundos.`,
+      body: deleteConfirmBody(tx),
       confirmLabel: "Excluir",
     });
     if (!confirmed) return;
@@ -1378,7 +1384,7 @@ export function DashboardPage() {
                                     icon: "repeat" as const,
                                     onClick: () => navigate(repeatHref(tx)),
                                   },
-                                  ...(isLinkedTransaction(tx)
+                                  ...(!canDeleteFromStatement(tx)
                                     ? []
                                     : [
                                         {

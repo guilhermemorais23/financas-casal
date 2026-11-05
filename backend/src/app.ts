@@ -27,7 +27,6 @@ import rateLimit from "express-rate-limit";
 import { adminRouter } from "./modules/admin/admin.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
 import { billingRouter } from "./modules/billing/billing.routes";
-import { alertsRouter } from "./modules/alerts/alerts.routes";
 import { assistantRouter } from "./modules/assistant/assistant.routes";
 import { budgetsRouter } from "./modules/budgets/budgets.routes";
 import { cardsRouter } from "./modules/cards/cards.routes";
@@ -189,7 +188,6 @@ export function createApp() {
   app.use("/api/shopping", shoppingRouter);
   app.use("/api/reminders", remindersRouter);
   app.use("/api/recurring-bills", recurringBillsRouter);
-  app.use("/api/alerts", alertsRouter);
   app.use("/api/shares", sharesRouter);
   app.use("/api/statements", statementsRouter);
   // Aviso do Pluggy: sem login (confere o segredo do endereço), antes do

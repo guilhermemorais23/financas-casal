@@ -23,7 +23,7 @@ import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
-import { canDeleteFromStatement, deleteLinkedNote, linkedHint, type LinkKind } from "../utils/linkedTransaction";
+import { canDeleteFromStatement, deleteConfirmBody, deleteLinkedNote, linkedHint, type LinkKind } from "../utils/linkedTransaction";
 import { NoPaymentModal } from "../components/NoPaymentModal";
 
 interface CategorySummaryRow {
@@ -486,13 +486,7 @@ export function ReportsPage() {
   async function handleDelete(tx: TransactionListRow) {
     const confirmed = await confirm({
       title: `Excluir “${tx.description}”?`,
-      body: [
-        `${formatCurrency(Number(tx.amount))} sai do extrato e dos totais do mês.`,
-        deleteLinkedNote(tx),
-        "Você ainda vai poder desfazer por alguns segundos.",
-      ]
-        .filter(Boolean)
-        .join(" "),
+      body: deleteConfirmBody(tx),
       confirmLabel: "Excluir",
     });
     if (!confirmed) return;

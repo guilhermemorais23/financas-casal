@@ -34,10 +34,6 @@ export function personColor(memberIndex: number): string {
   return PERSON_SLOTS[memberIndex % PERSON_SLOTS.length];
 }
 
-export function tint(color: string): string {
-  return `color-mix(in srgb, ${color} 16%, var(--surface))`;
-}
-
 export function personTint(color: string): string {
   return `color-mix(in srgb, ${color} 14%, var(--cream))`;
 }

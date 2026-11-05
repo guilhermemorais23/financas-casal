@@ -9,7 +9,7 @@ import {
   updateTransaction,
   writeNewTransaction,
 } from "../transactions/transactions.repository";
-import { splitEvenly } from "../../utils/money";
+import { splitEvenly, toCents } from "../../utils/money";
 import { addMonths, dateForDayInMonth, monthToDate, todayInBrazil } from "../../utils/month";
 import {
   deleteDebt,
@@ -261,7 +261,7 @@ export async function updateInstallmentAmountForUser(
   if (!installment) {
     throw new InstallmentNotFoundError();
   }
-  const amountCents = Math.round(amount * 100);
+  const amountCents = toCents(amount);
   const updated = await updateInstallmentAmount(debtId, installmentId, amountCents);
   if (installment.isPaid && installment.transactionId) {
     await updateTransaction(installment.transactionId, { amount: amountCents / 100 });

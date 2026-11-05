@@ -1,6 +1,7 @@
 import { db } from "../../db/firestore";
 import { memoizeScoped } from "../../utils/readCache";
 import { PAYMENT_METHODS, type PaymentMethod } from "../transactions/transactions.repository";
+import { plainText } from "../../utils/text";
 
 // "Nome do extrato -> categoria", aprendido nas importações. Uma regra por
 // nome, compartilhada pelo grupo (o casal importa o mesmo mercado). Na próxima
@@ -34,10 +35,7 @@ function docId(groupId: string, key: string): string {
 // "PAO DE ACUCAR 1204" e "Pão de Açúcar 0877" viram "pao de acucar": sem
 // acento, sem maiúscula, sem pontuação e sem os números da loja/terminal.
 export function normalizeStatementName(raw: string): string {
-  const base = raw
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+  const base = plainText(raw)
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
   const words = base.split(" ").filter((word) => word && !/\d/.test(word));

@@ -3,6 +3,8 @@
 // por aqui -- só desfazendo lá. Antigos sem linkKind: o pagamento de fatura
 // é o único com divisão "custom"; os demais o backend recusa com a mensagem
 // de onde desfazer.
+import { formatCurrency } from "./format";
+
 export type LinkKind = "card_statement" | "debt_installment" | "settlement" | "shopping";
 
 export function isLinkedTransaction(tx: { linkKind?: LinkKind | null; splitType?: string }): boolean {
@@ -38,4 +40,19 @@ export function deleteLinkedNote(tx: { linkKind?: LinkKind | null; splitType?: s
   if (kind === "debt_installment") return "É uma parcela de dívida: ela volta a ficar em aberto em Dívidas.";
   if (kind === "card_statement") return "É o pagamento de uma fatura: a fatura volta a ficar aberta em Cartões.";
   return null;
+}
+
+// Texto da confirmação de "Excluir" -- o mesmo no Painel, no Par e nos
+// Relatórios. `where` muda só o começo (o Par fala da conta conjunta).
+export function deleteConfirmBody(
+  tx: { amount: string; linkKind?: LinkKind | null; splitType?: string },
+  where = "do extrato e dos totais do mês"
+): string {
+  return [
+    `${formatCurrency(Number(tx.amount))} sai ${where}.`,
+    deleteLinkedNote(tx),
+    "Você ainda vai poder desfazer por alguns segundos.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }

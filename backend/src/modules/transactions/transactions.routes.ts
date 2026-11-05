@@ -26,7 +26,6 @@ import {
   bulkDeleteHandler,
   exportTransactionsHandler,
   getBalanceHandler,
-  getDailySeriesHandler,
   getSummaryHandler,
   getYearlySummaryHandler,
   listTransactionsHandler,
@@ -45,7 +44,6 @@ transactionsRouter.get("/", asyncHandler(listTransactionsHandler));
 transactionsRouter.get("/balance", asyncHandler(getBalanceHandler));
 transactionsRouter.get("/summary", asyncHandler(getSummaryHandler));
 transactionsRouter.get("/summary/year", asyncHandler(getYearlySummaryHandler));
-transactionsRouter.get("/daily-series", asyncHandler(getDailySeriesHandler));
 transactionsRouter.get("/uncategorized", asyncHandler(listUncategorizedHandler));
 transactionsRouter.post("/categorize", asyncHandler(categorizeHandler));
 transactionsRouter.get("/no-payment-method", asyncHandler(listNoPaymentHandler));

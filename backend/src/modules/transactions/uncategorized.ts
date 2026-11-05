@@ -2,6 +2,7 @@ import { categoryIsVisibleTo } from "../categories/categories.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { findRulesByGroup, normalizeStatementName, upsertRules } from "../statements/importRules.repository";
 import { canManageTransaction, listTransactions, updateTransactionForUser } from "./transactions.service";
+import { fromCents, toCents } from "../../utils/money";
 
 // "Sem categoria": gastos do mês sem categoria, agrupados pelo nome (como na
 // importação), pra pessoa dizer o que é cada nome uma vez só. Só entra o que
@@ -27,7 +28,7 @@ export async function listUncategorized(userId: string, month: string): Promise<
     if (!canManageTransaction(userId, tx)) continue;
     const key = normalizeStatementName(tx.description) || tx.description.toLowerCase();
     const entry = byKey.get(key) ?? { label: tx.description, cents: 0, ids: [] };
-    entry.cents += Math.round(Number(tx.amount) * 100);
+    entry.cents += toCents(Number(tx.amount));
     entry.ids.push(tx.id);
     byKey.set(key, entry);
   }
@@ -36,7 +37,7 @@ export async function listUncategorized(userId: string, month: string): Promise<
       key,
       label: e.label,
       count: e.ids.length,
-      total: (e.cents / 100).toFixed(2),
+      total: fromCents(e.cents),
       transactionIds: e.ids,
       suggestedCategoryId: ruleByKey.get(key) ?? null,
     }))
