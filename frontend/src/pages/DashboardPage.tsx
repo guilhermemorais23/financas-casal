@@ -31,7 +31,6 @@ import {
   previousMonthParam,
 } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
-import { isPendingTransaction } from "../utils/optimisticTransactions";
 import { readCache, writeCache } from "../utils/pageCache";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
@@ -40,6 +39,7 @@ import { canDeleteFromStatement, deleteConfirmBody, type LinkKind } from "../uti
 import { BillRemindersCard } from "../components/BillReminders";
 import { BalanceLineChart, InOutMonthsChart } from "../components/PainelCharts";
 import { minimumMonthlySaving } from "../utils/goals";
+import { isPendingTransaction } from "../utils/optimisticTransactions";
 
 // Um ponto por dia do mês, como o GET /dashboard devolve em dailyTrend.
 interface DailyTrendPoint {

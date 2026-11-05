@@ -18,7 +18,6 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay, monthLongName, previousMonthParam } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
-import { isPendingTransaction } from "../utils/optimisticTransactions";
 import { readCache, writeCache } from "../utils/pageCache";
 import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
@@ -26,6 +25,7 @@ import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "
 import { initialOf } from "../utils/initial";
 import { canDeleteFromStatement, deleteConfirmBody, deleteLinkedNote, linkedHint, type LinkKind } from "../utils/linkedTransaction";
 import { NoPaymentModal } from "../components/NoPaymentModal";
+import { isPendingTransaction } from "../utils/optimisticTransactions";
 
 interface CategorySummaryRow {
   categoryId: string | null;
