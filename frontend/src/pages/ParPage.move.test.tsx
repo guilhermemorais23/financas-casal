@@ -52,6 +52,14 @@ describe("Par: passar pra minha conta", () => {
     await expect.element(screen.getByText(/some do Par e do Painel de todo mundo do grupo/)).toBeInTheDocument();
   });
 
+  it("guardado no cartão dá pra excluir (o limite continua), mas não editar", async () => {
+    setup([row("tx-card", "Guardado no cartão Inter", { securedCardId: "card-1" })]);
+    const screen = await renderPage(<ParPage />);
+    await screen.getByRole("button", { name: "Excluir" }).click();
+    await expect.element(screen.getByText(/continua guardado no cartão/)).toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+  });
+
   it("parcela de dívida não passa de conta (só pela tela de Dívidas)", async () => {
     setup([row("tx-1", "Parcela 1/3", { linkKind: "debt_installment" })]);
     const screen = await renderPage(<ParPage />);

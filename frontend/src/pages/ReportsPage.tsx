@@ -23,7 +23,7 @@ import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
-import { canDeleteFromStatement, deleteConfirmBody, deleteLinkedNote, isReadOnlyRow, linkedHint, type LinkKind } from "../utils/linkedTransaction";
+import { canDeleteFromStatement, canDeleteSecuredTransfer, deleteConfirmBody, deleteLinkedNote, isReadOnlyRow, linkedHint, type LinkKind } from "../utils/linkedTransaction";
 import { NoPaymentModal } from "../components/NoPaymentModal";
 
 interface CategorySummaryRow {
@@ -699,6 +699,13 @@ export function ReportsPage() {
             {tx.transactionType === "income" ? "+" : "-"}
             {formatCurrency(Number(tx.amount))}
           </span>
+          {canDeleteSecuredTransfer(tx) && (
+            <div className="transaction-row-actions">
+              <button type="button" className="btn-icon" title="Excluir" onClick={() => handleDelete(tx)}>
+                <Icon name="trash" />
+              </button>
+            </div>
+          )}
           {!isReadOnlyRow(tx) && (
             <div className="transaction-row-actions">
               <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>

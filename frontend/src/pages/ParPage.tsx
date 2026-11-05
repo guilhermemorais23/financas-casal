@@ -19,6 +19,7 @@ import { useToast } from "../components/ToastProvider";
 import { initialOf } from "../utils/initial";
 import {
   canDeleteFromStatement,
+  canDeleteSecuredTransfer,
   canMoveAccount,
   deleteConfirmBody,
   isReadOnlyRow,
@@ -441,7 +442,7 @@ export function ParPage() {
                   {tx.transactionType === "income" ? "+" : "-"}
                   {formatCurrency(Number(tx.amount))}
                 </span>
-                {(!isReadOnlyRow(tx) || canMoveAccount(tx)) && (
+                {(!isReadOnlyRow(tx) || canMoveAccount(tx) || canDeleteSecuredTransfer(tx)) && (
                   <div className="transaction-row-actions">
                     {canMoveAccount(tx) && (
                       <button
@@ -459,7 +460,7 @@ export function ParPage() {
                       <Icon name="pencil" />
                     </button>
                     )}
-                    {!isReadOnlyRow(tx) && canDeleteFromStatement(tx) && (
+                    {((!isReadOnlyRow(tx) && canDeleteFromStatement(tx)) || canDeleteSecuredTransfer(tx)) && (
                       <button
                         type="button"
                         className="btn-icon"

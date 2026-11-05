@@ -37,6 +37,7 @@ import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
 import {
   canDeleteFromStatement,
+  canDeleteSecuredTransfer,
   canMoveAccount,
   deleteConfirmBody,
   isReadOnlyRow,
@@ -1392,7 +1393,7 @@ export function DashboardPage() {
                             {tx.transactionType === "income" ? "+" : "-"}
                             {formatCurrency(Number(tx.amount))}
                           </span>
-                          {(!isReadOnlyRow(tx) || moveActions(tx).length > 0) && (
+                          {(!isReadOnlyRow(tx) || moveActions(tx).length > 0 || canDeleteSecuredTransfer(tx)) && (
                             <div className="transaction-row-actions">
                               {!isReadOnlyRow(tx) && (
                                 <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
@@ -1402,6 +1403,17 @@ export function DashboardPage() {
                               <RowActionsMenu
                                 actions={[
                                   ...moveActions(tx),
+                                  ...(canDeleteSecuredTransfer(tx)
+                                    ? [
+                                        {
+                                          key: "delete",
+                                          label: "Excluir",
+                                          icon: "trash" as const,
+                                          danger: true,
+                                          onClick: () => handleDelete(tx),
+                                        },
+                                      ]
+                                    : []),
                                   ...(isReadOnlyRow(tx) ? [] : [
                                   ...(tx.recurringGroupId
                                     ? [

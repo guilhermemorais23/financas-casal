@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { createTestGroup } from "../../test-helpers";
 import { getGroupForUser } from "../groups/groups.service";
 import {
-  SecuredCardTransferError,
   deleteTransactionForUser,
   getMonthlySummaryForUser,
   getMonthlyTrendForUser,
@@ -370,13 +369,33 @@ describe("cards: limite garantido", () => {
 
     const [transfer] = await listTransactions(userAId, 10);
     expect(transfer.description).toBe("Guardado no cartão Garantido");
-    await expect(deleteTransactionForUser(userAId, transfer.id)).rejects.toBeInstanceOf(SecuredCardTransferError);
-
     await adjustSecuredLimit(userAId, card.id, { direction: "withdraw", amount: 40 });
     expect(await balance()).toBe(-60);
 
     await removeCard(userAId, card.id);
     expect(await balance()).toBe(0);
+  });
+
+  it("excluir o guardado tira do extrato e devolve o saldo, mas o limite continua", async () => {
+    const { userAId, personalAccountId } = await createTestGroup();
+    const balance = async () =>
+      (await getGroupForUser(userAId))!.accounts.find((account) => account.id === personalAccountId)!.balance;
+    const card = await createCard(userAId, {
+      name: "Garantido",
+      closingDay: 31,
+      dueDay: 5,
+      scope: "personal",
+      limit: 170,
+      limitType: "secured",
+    });
+    expect(await balance()).toBe(-170);
+
+    const [transfer] = await listTransactions(userAId, 10);
+    await deleteTransactionForUser(userAId, transfer.id);
+
+    expect(await balance()).toBe(0);
+    expect(await listTransactions(userAId, 10)).toHaveLength(0);
+    expect((await listCards(userAId)).find((c) => c.id === card.id)!.limit).toBe("170.00");
   });
 
   it("dinheiro que já estava guardado fora do app vira limite a mais, sem mexer na conta", async () => {

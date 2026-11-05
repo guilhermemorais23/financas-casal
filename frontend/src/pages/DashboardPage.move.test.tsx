@@ -14,7 +14,7 @@ function row(id: string, description: string, accountType: "personal" | "joint",
   };
 }
 
-function setup(recent: unknown[]) {
+function setup(recent: unknown[], { alone = false } = {}) {
   const totals = { income: 0, expense: 0 };
   onApi("GET", /^\/dashboard\?month=/, {
     group: {
@@ -22,7 +22,7 @@ function setup(recent: unknown[]) {
         { id: "acc-joint", type: "joint", name: "Nossa Conta", balance: 0 },
         { id: "acc-me", type: "personal", name: "Eu", balance: 0 },
       ],
-      members: [{ id: ME, displayName: "Eu" }, { id: PARTNER, displayName: "aisha" }],
+      members: alone ? [{ id: ME, displayName: "Eu" }] : [{ id: ME, displayName: "Eu" }, { id: PARTNER, displayName: "aisha" }],
     },
     recent, debts: [], summary: { total: "0", byCategory: [] }, jointSummary: { byPayer: [] }, balance: { balances: [] },
     budget: { budget: null, spent: 0 }, categoryBudgets: [], dailyTrend: [], personalMonthTotals: totals,
@@ -45,11 +45,21 @@ describe("Painel: passar entre contas", () => {
     await expect.poll(() => callsTo("PATCH", "/transactions/tx-1/account").map((c) => c.body)).toEqual([{ to: "joint" }]);
   });
 
-  it("guardado num cartão do grupo: só tem Passar pra minha conta", async () => {
+  it("guardado num cartão do grupo: passa pra minha conta ou exclui, sem editar", async () => {
     setup([row("tx-2", "Guardado no cartão Inter", "joint", { securedCardId: "card-1" })]);
     const screen = await renderPage(<DashboardPage />);
     await screen.getByRole("button", { name: "Mais ações" }).click();
     await expect.element(screen.getByRole("menuitem", { name: "Passar pra minha conta" })).toBeInTheDocument();
-    await expect.element(screen.getByRole("menuitem", { name: "Excluir" })).not.toBeInTheDocument();
+    await screen.getByRole("menuitem", { name: "Excluir" }).click();
+    await expect.element(screen.getByText(/continua guardado no cartão/)).toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+  });
+
+  it("guardado com a pessoa sozinha no grupo: ainda dá pra excluir", async () => {
+    setup([row("tx-3", "Guardado no cartão Inter", "personal", { securedCardId: "card-1" })], { alone: true });
+    const screen = await renderPage(<DashboardPage />);
+    await screen.getByRole("button", { name: "Mais ações" }).click();
+    await expect.element(screen.getByRole("menuitem", { name: "Excluir" })).toBeInTheDocument();
+    await expect.element(screen.getByRole("menuitem", { name: "Passar pro grupo" })).not.toBeInTheDocument();
   });
 });
