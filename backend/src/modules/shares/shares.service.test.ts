@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { db } from "../../db/firestore";
 import { createTestGroup, todayISO } from "../../test-helpers";
 import { createTransaction } from "../transactions/transactions.service";
-import { ShareNotFoundError, createShare, getPublicShare, revokeShare } from "./shares.service";
+import { ShareNotFoundError, buildShareSnapshot, createShare, getPublicShare, revokeShare } from "./shares.service";
 
 const month = todayISO().slice(0, 7);
 
@@ -63,5 +63,31 @@ describe("shares", () => {
     const { userAId } = await createTestGroup();
     await expect(getPublicShare("nao-existe")).rejects.toBeInstanceOf(ShareNotFoundError);
     await expect(createShare(userAId, "2026-13")).rejects.toThrow();
+  });
+});
+
+describe("buildShareSnapshot", () => {
+  const base = {
+    groupId: "g", accountId: "acc", accountType: "joint" as const, accountOwnerId: null, categoryId: null, categoryName: null,
+    categoryEmoji: null, payerId: "u", createdBy: "u", transactionType: "expense" as const, occurredAt: "2026-11-05",
+    isPrivate: false, splitType: "none" as const, paymentMethod: null, recurringGroupId: null, recurringIndex: null,
+    recurringTotal: null, isSettled: false, settlementTransactionId: null, securedCardId: null, loanId: null,
+    transferKind: null, goalId: null, linkKind: null,
+  };
+
+  it("dinheiro guardado em meta, cartão garantido ou empréstimo não conta como saída", () => {
+    const snapshot = buildShareSnapshot(
+      [
+        { ...base, id: "1", description: "Mercado", amount: "100.00" },
+        { ...base, id: "2", description: "Guardado na meta", amount: "2000.00", transferKind: "goal", goalId: "goal" },
+        { ...base, id: "3", description: "Emprestei", amount: "300.00", loanId: "loan" },
+        { ...base, id: "4", description: "Guardado no cartão", amount: "50.00", securedCardId: "card" },
+      ],
+      "u",
+      "2026-11",
+      "A"
+    );
+    expect(snapshot.totalExpense).toBe("100.00");
+    expect(snapshot.byCategory.map((c) => c.total)).toEqual(["100.00"]);
   });
 });

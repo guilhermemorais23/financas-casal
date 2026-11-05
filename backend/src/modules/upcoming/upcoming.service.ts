@@ -48,19 +48,29 @@ export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_W
   const within = (dueDate: string) => daysBetween(today, dueDate) <= windowDays;
 
   for (const card of cards) {
+    const pushCard = (id: string, amount: number, dueDate: string) =>
+      items.push({
+        id,
+        kind: "card",
+        direction: "pay",
+        title: `Fatura ${card.name}`,
+        detail: "Cartão",
+        amount,
+        dueDate,
+        daysUntil: daysBetween(today, dueDate),
+        link: "/cards",
+      });
     const statement = card.currentStatement;
+    // Faturas anteriores ainda em aberto (atrasadas): a mesma regra do
+    // getBillsOverview -- só dá pra saber em cartão com limite, que guarda a
+    // linha do tempo de cada fatura não paga.
+    for (const release of card.limitReleases) {
+      if (release.month !== statement.month && within(release.dueDate)) {
+        pushCard(`card-${card.id}-${release.month}`, Number(release.amount), release.dueDate);
+      }
+    }
     if (statement.isPaid || Number(statement.total) <= 0 || !within(statement.dueDate)) continue;
-    items.push({
-      id: `card-${card.id}`,
-      kind: "card",
-      direction: "pay",
-      title: `Fatura ${card.name}`,
-      detail: "Cartão",
-      amount: Number(statement.total),
-      dueDate: statement.dueDate,
-      daysUntil: daysBetween(today, statement.dueDate),
-      link: "/cards",
-    });
+    pushCard(`card-${card.id}`, Number(statement.total), statement.dueDate);
   }
 
   for (const debt of debts) {
