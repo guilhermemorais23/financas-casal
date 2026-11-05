@@ -32,7 +32,7 @@ import {
   previousMonthParam,
 } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
@@ -464,6 +464,7 @@ export function DashboardPage() {
   // primeiro -- é pra isso que serve a busca antecipada dos meses vizinhos.
   async function load(selectedMonth: string, options?: { skipCache?: boolean; silent?: boolean }) {
     setError(null);
+    const sameGroup = sameGroupGuard();
     const mKeyLocal = (name: string) => `dashboard:${name}:${selectedMonth}:${user?.id ?? "anon"}`;
     const cached = options?.skipCache ? null : readCache<DashboardResponse>(mKeyLocal("full"));
 
@@ -486,6 +487,7 @@ export function DashboardPage() {
       // resposta de um mês abandonado é descartada, em vez de sobrescrever o que
       // está na tela agora. Ainda vale guardar no cache (ver writeCache abaixo,
       // via applyDashboard), só não desenhar.
+      if (!sameGroup()) return;
       const isStillActive = selectedMonth === activeMonthRef.current;
       applyDashboard(selectedMonth, data, !isStillActive);
 

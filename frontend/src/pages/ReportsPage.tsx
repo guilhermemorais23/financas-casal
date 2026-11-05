@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { apiDownload, apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -18,7 +18,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay, monthLongName, previousMonthParam } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
@@ -184,8 +184,10 @@ export function ReportsPage() {
     const yearCacheKey = `reports:year:${selectedYear}:${user?.id ?? "anon"}`;
     const cached = readCache<YearlySummaryResponse>(yearCacheKey);
     if (cached) setYearSummary(cached);
+    const sameGroup = sameGroupGuard();
     apiRequest<YearlySummaryResponse>(`/transactions/summary/year?year=${selectedYear}&scope=visible`, { token })
       .then((res) => {
+        if (!sameGroup()) return;
         setYearSummary(res);
         writeCache(yearCacheKey, res);
       })
@@ -195,12 +197,27 @@ export function ReportsPage() {
       });
   }, [token, selectedYear, showYearly]);
 
+  // O mês na tela agora. Uma resposta que chega depois de a pessoa ter trocado
+  // de mês só vai pro cache, não pra tela (o mesmo cuidado do Painel).
+  const activeMonthRef = useRef(month);
+  activeMonthRef.current = month;
+
   async function load(selectedMonth: string, options?: { silent?: boolean }) {
-    if (!options?.silent) setIsLoading(true);
+    const sameGroup = sameGroupGuard();
+    const isActive = () => selectedMonth === activeMonthRef.current;
+    if (!options?.silent) {
+      setIsLoading(true);
+      setError(null);
+    }
     const cached = readCache<SummaryResponse>(cacheKey("summary", selectedMonth));
     if (cached) {
       setSummary(cached);
       setTransactions(readCache(cacheKey("transactions", selectedMonth)));
+    } else if (!options?.silent) {
+      // Sem nada guardado deste mês: não deixa o mês anterior na tela com o
+      // nome do mês novo enquanto carrega.
+      setSummary(null);
+      setTransactions(null);
     }
     try {
       await whenWritesSettled();
@@ -208,14 +225,17 @@ export function ReportsPage() {
         apiRequest<SummaryResponse>(`/transactions/summary?month=${selectedMonth}&scope=visible`, { token }),
         apiRequest<TransactionListRow[]>(`/transactions?limit=500&month=${selectedMonth}`, { token }),
       ]);
-      setSummary(summaryRes);
-      setTransactions(txRes.filter((row) => !isDeferredPending(`tx:${row.id}`)));
+      if (!sameGroup()) return;
       writeCache(cacheKey("summary", selectedMonth), summaryRes);
       writeCache(cacheKey("transactions", selectedMonth), txRes);
+      if (!isActive()) return;
+      setSummary(summaryRes);
+      setTransactions(txRes.filter((row) => !isDeferredPending(`tx:${row.id}`)));
+      setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível carregar os relatórios");
+      if (isActive()) setError(err instanceof ApiError ? err.message : "Não foi possível carregar os relatórios");
     } finally {
-      setIsLoading(false);
+      if (isActive()) setIsLoading(false);
     }
   }
 

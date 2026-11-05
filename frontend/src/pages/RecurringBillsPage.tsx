@@ -4,7 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, parseLocalDate, todayISO } from "../utils/format";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
@@ -143,6 +143,7 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
 
   async function load() {
     try {
+      const sameGroup = sameGroupGuard();
       const [groupRes, categoriesRes, billsRes, debtsRes] = await Promise.all([
         apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/groups/me", { token }),
         apiRequest<CategoryRow[]>("/categories", { token }),
@@ -150,6 +151,7 @@ export function RecurringBillsPage({ embedded = false }: { embedded?: boolean })
         // As contas "só esta vez" são extra: se falharem, as fixas aparecem igual.
         apiRequest<SingleBillRow[]>("/debts", { token }).catch(() => null),
       ]);
+      if (!sameGroup()) return;
       setAccounts(groupRes.accounts);
       setMembers(groupRes.members);
       setCategories(categoriesRes);
