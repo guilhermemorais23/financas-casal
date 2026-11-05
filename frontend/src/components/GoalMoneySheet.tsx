@@ -22,9 +22,6 @@ interface AccountRow {
   ownerUserId: string | null;
 }
 
-
-const asInput = (value: number) => toMoneyInput(value);
-
 // Guardar na meta (ou retirar dela). "Tirar da conta" (ligado por padrão):
 // o valor sai da conta escolhida e aparece no extrato como transferência --
 // mexe no saldo, não conta como gasto. Desligado, só soma na meta (dinheiro
@@ -44,7 +41,7 @@ export function GoalMoneySheet({
   const { showToast } = useToast();
   const deposit = direction === "deposit";
   const pickable = deposit ? goal.items.filter((item) => item.missing > 0) : goal.items.filter((item) => item.saved > 0);
-  const [amount, setAmount] = useState(deposit && goal.monthlyMinimum ? asInput(goal.monthlyMinimum) : "");
+  const [amount, setAmount] = useState(deposit && goal.monthlyMinimum ? toMoneyInput(goal.monthlyMinimum) : "");
   const [itemId, setItemId] = useState(pickable[0]?.id ?? "");
   const [useAccount, setUseAccount] = useState(true);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
@@ -121,7 +118,7 @@ export function GoalMoneySheet({
         </div>
         <div className="chip-row">
           {quick.map((option) => (
-            <button key={option.label} type="button" className="filter-chip" onClick={() => setAmount(asInput(option.value))}>
+            <button key={option.label} type="button" className="filter-chip" onClick={() => setAmount(toMoneyInput(option.value))}>
               {option.label}
             </button>
           ))}

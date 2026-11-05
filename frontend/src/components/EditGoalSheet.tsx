@@ -14,7 +14,6 @@ export interface EditableGoal {
   items?: unknown[];
 }
 
-
 const toInput = (value: string) => toMoneyInput(Number(value));
 
 // Editar a meta: nome, prazo e -- sem submetas -- o alvo e quanto já tem
