@@ -29,6 +29,8 @@ import {
   updateTransactionForUser,
 } from "./transactions.service";
 import { deleteTransactionsUndoingLinked, deleteTransactionUndoingLinked } from "./linkedUndo";
+import { moveTransactionForUser } from "./moveAccount.service";
+import { CardNotFoundError } from "../cards/cards.service";
 import { PAYMENT_METHODS, type PaymentMethod, type SplitType, type TransactionType } from "./transactions.repository";
 import { isIsoDate, isNonEmptyString, isValidAmount, MAX_DESCRIPTION_LENGTH } from "../../utils/validation";
 
@@ -231,31 +233,42 @@ export async function updateTransactionHandler(req: Request, res: Response) {
     });
     res.status(200).json(transaction);
   } catch (err) {
-    if (err instanceof NoGroupError || err instanceof TransactionNotFoundError) {
-      res.status(404).json({ error: "transaction not found" });
-      return;
-    }
-    if (err instanceof LinkedTransactionError) {
-      res.status(409).json({ error: LINKED_MESSAGES[err.kind], code: "linked_transaction" });
-      return;
-    }
-    if (err instanceof SecuredCardTransferError) {
-      res.status(409).json({ error: transferLockedMessage(err) });
-      return;
-    }
-    if (err instanceof InvalidCategoryError) {
-      res.status(400).json({ error: "InvalidCategoryError" });
-      return;
-    }
-    if (err instanceof InvalidAccountError) {
-      res.status(400).json({ error: "InvalidAccountError" });
-      return;
-    }
-    if (err instanceof InvalidPayerError) {
-      res.status(400).json({ error: "InvalidPayerError" });
-      return;
-    }
-    throw err;
+    if (!respondToEditError(err, res)) throw err;
+  }
+}
+
+// Erros de quem mexe num lançamento (editar ou passar de conta) -> resposta.
+// false = não é um deles; quem chamou relança.
+function respondToEditError(err: unknown, res: Response): boolean {
+  if (err instanceof NoGroupError || err instanceof TransactionNotFoundError || err instanceof CardNotFoundError) {
+    res.status(404).json({ error: "transaction not found" });
+  } else if (err instanceof LinkedTransactionError) {
+    res.status(409).json({ error: LINKED_MESSAGES[err.kind], code: "linked_transaction" });
+  } else if (err instanceof SecuredCardTransferError) {
+    res.status(409).json({ error: transferLockedMessage(err) });
+  } else if (err instanceof InvalidCategoryError) {
+    res.status(400).json({ error: "InvalidCategoryError" });
+  } else if (err instanceof InvalidAccountError) {
+    res.status(400).json({ error: "InvalidAccountError" });
+  } else if (err instanceof InvalidPayerError) {
+    res.status(400).json({ error: "InvalidPayerError" });
+  } else {
+    return false;
+  }
+  return true;
+}
+
+// PATCH /transactions/:id/account { to: "personal" | "joint" }
+export async function moveTransactionHandler(req: Request, res: Response) {
+  const to = req.body?.to;
+  if (to !== "personal" && to !== "joint") {
+    res.status(400).json({ error: "to deve ser personal ou joint" });
+    return;
+  }
+  try {
+    res.status(200).json(await moveTransactionForUser(req.user!.id, req.params.id, to));
+  } catch (err) {
+    if (!respondToEditError(err, res)) throw err;
   }
 }
 

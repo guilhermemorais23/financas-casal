@@ -55,14 +55,58 @@ export function deleteLinkedNote(tx: { linkKind?: LinkKind | null; splitType?: s
   return null;
 }
 
+// "Passar pra minha conta" (Par) / "Passar pro grupo" (Painel): lançamento
+// comum, ou o guardado de um cartão garantido (o cartão muda junto). Fatura,
+// parcela, reembolso, lista de compras, empréstimo, meta e transferência entre
+// contas só mudam pela tela de origem.
+export function canMoveAccount(tx: {
+  id: string;
+  securedCardId?: string | null;
+  loanId?: string | null;
+  goalId?: string | null;
+  transferKind?: string | null;
+  linkKind?: LinkKind | null;
+  splitType?: string;
+}): boolean {
+  if (isPendingTransaction(tx) || tx.loanId || tx.goalId || tx.transferKind) return false;
+  return Boolean(tx.securedCardId) || !isLinkedTransaction(tx);
+}
+
+// Confirmação do "Passar pra ..." -- diz o que muda pro grupo.
+export function moveConfirm(
+  tx: { amount: string; securedCardId?: string | null },
+  to: "personal" | "joint"
+): { title: string; body: string; confirmLabel: string } {
+  const amount = formatCurrency(Number(tx.amount));
+  if (to === "personal") {
+    return {
+      title: "Passar pra sua conta?",
+      body: tx.securedCardId
+        ? "O cartão passa a ser só seu: o dinheiro guardado nele sai da Nossa Conta e passa a sair da sua conta pessoal. Continua no seu Painel; o grupo deixa de ver."
+        : `${amount} sai da Nossa Conta e vai pra sua conta pessoal. Continua no seu Painel; o grupo deixa de ver.`,
+      confirmLabel: "Passar pra minha conta",
+    };
+  }
+  return {
+    title: "Passar pro grupo?",
+    body: tx.securedCardId
+      ? "O cartão passa a ser do grupo: o dinheiro guardado nele sai da sua conta pessoal e passa a sair da Nossa Conta. Todo mundo do grupo passa a ver."
+      : `${amount} sai da sua conta pessoal e vai pra Nossa Conta. Todo mundo do grupo passa a ver, no Par e no Painel.`,
+    confirmLabel: "Passar pro grupo",
+  };
+}
+
 // Texto da confirmação de "Excluir" -- o mesmo no Painel, no Par e nos
 // Relatórios. `where` muda só o começo (o Par fala da conta conjunta).
+// Lançamento da Nossa Conta aparece no Par e no Painel de todo mundo: é o
+// mesmo lançamento, então avisa que some de todos os lugares.
 export function deleteConfirmBody(
-  tx: { amount: string; linkKind?: LinkKind | null; splitType?: string },
+  tx: { amount: string; linkKind?: LinkKind | null; splitType?: string; accountType?: "personal" | "joint" },
   where = "do extrato e dos totais do mês"
 ): string {
   return [
     `${formatCurrency(Number(tx.amount))} sai ${where}.`,
+    tx.accountType === "joint" ? "É da Nossa Conta: some do Par e do Painel de todo mundo do grupo." : null,
     deleteLinkedNote(tx),
     "Você ainda vai poder desfazer por alguns segundos.",
   ]

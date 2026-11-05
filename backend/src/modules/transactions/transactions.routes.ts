@@ -29,6 +29,7 @@ import {
   getSummaryHandler,
   getYearlySummaryHandler,
   listTransactionsHandler,
+  moveTransactionHandler,
   setSplitSettledHandler,
   updateRecurringHandler,
   updateTransactionHandler,
@@ -52,6 +53,7 @@ transactionsRouter.post("/payment-method", asyncHandler(setPaymentMethodsHandler
 transactionsRouter.get("/export", requirePremium, asyncHandler(exportTransactionsHandler));
 transactionsRouter.patch("/:id/settle", asyncHandler(setSplitSettledHandler));
 transactionsRouter.patch("/:id/recurring", asyncHandler(updateRecurringHandler));
+transactionsRouter.patch("/:id/account", asyncHandler(moveTransactionHandler));
 transactionsRouter.patch("/:id", asyncHandler(updateTransactionHandler));
 transactionsRouter.delete("/:id/recurring", asyncHandler(cancelRecurringHandler));
 transactionsRouter.post("/bulk-delete", asyncHandler(bulkDeleteHandler));
