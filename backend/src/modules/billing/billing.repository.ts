@@ -66,6 +66,10 @@ export function findSubscription(groupId: string): Promise<SubscriptionRow | nul
   });
 }
 
+export async function deleteSubscriptionDoc(groupId: string): Promise<void> {
+  await col.doc(groupId).delete();
+}
+
 export async function findSubscriptionByAsaasId(asaasSubscriptionId: string): Promise<SubscriptionRow | null> {
   const snap = await col.where("asaasSubscriptionId", "==", asaasSubscriptionId).limit(1).get();
   return snap.empty ? null : toRow(snap.docs[0]);

@@ -170,12 +170,21 @@ export async function markBankSynced(userId: string, email: string, itemId: stri
 export async function removeBankConnection(userId: string, email: string, itemId: string) {
   requireAccess(email);
   await requireOwnItem(userId, itemId);
-  try {
-    await pluggy.deleteItem(itemId);
-  } catch {
-    // já apagado no Pluggy: segue e apaga aqui
-  }
+  await disconnectItem(itemId);
+}
+
+// Desfaz a conexão no Pluggy (senão ele segue lendo o banco e mandando
+// avisos) e apaga aqui. Já apagada no Pluggy, ou o Pluggy fora do ar: segue
+// e apaga aqui do mesmo jeito.
+async function disconnectItem(itemId: string): Promise<void> {
+  if (pluggyConfigured()) await pluggy.deleteItem(itemId).catch(() => undefined);
   await deleteItem(itemId);
+}
+
+// Excluir a conta: todas as conexões da pessoa.
+export async function disconnectAllBanks(userId: string): Promise<void> {
+  const items = await findItemsByUser(userId);
+  await Promise.all(items.map((item) => disconnectItem(item.itemId)));
 }
 
 // ---------------------------------------------------------------------------

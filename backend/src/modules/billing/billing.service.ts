@@ -11,6 +11,7 @@ import { billingConfig, priceFor, TERMS_VERSION, type Plan } from "./billing.con
 import {
   claimCheckoutLock,
   createTrialIfMissing,
+  deleteSubscriptionDoc,
   forgetEvent,
   findSubscription,
   findSubscriptionByAsaasId,
@@ -233,6 +234,21 @@ export async function cancelSubscription(userId: string, input: { refund?: unkno
     `Assinatura cancelada${wantsRefund ? " com reembolso" : ""} no PAR.`,
     `<p>${escapeHtml(user.displayName || user.email)} cancelou o Premium${wantsRefund ? " e pediu reembolso (direito de arrependimento)" : ""}.</p>`
   );
+}
+
+// O último membro excluiu a conta: o grupo some, então a assinatura dele tem
+// que parar de cobrar no Asaas antes de o documento (o único vínculo com ela)
+// ser apagado. Já cancelada lá (404) conta como feito; qualquer outra falha
+// interrompe a exclusão, que pode ser tentada de novo -- melhor do que seguir
+// cobrando alguém que não tem mais conta.
+export async function endSubscriptionOfDeletedGroup(groupId: string): Promise<void> {
+  const sub = await findSubscription(groupId);
+  if (sub?.asaasSubscriptionId && sub.status !== "canceled") {
+    await asaas.deleteSubscription(sub.asaasSubscriptionId).catch((err) => {
+      if (!(err instanceof asaas.AsaasError && err.status === 404)) throw err;
+    });
+  }
+  await deleteSubscriptionDoc(groupId);
 }
 
 // ---------------------------------------------------------------------------

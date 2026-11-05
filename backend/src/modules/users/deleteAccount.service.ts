@@ -1,6 +1,8 @@
 import { auth, db } from "../../db/firestore";
 import { findMembersByGroupId } from "../groups/groups.repository";
 import { invalidateTransactionReads } from "../../utils/readCache";
+import { endSubscriptionOfDeletedGroup } from "../billing/billing.service";
+import { disconnectAllBanks } from "../openFinance/openFinance.service";
 import { findUserById } from "./users.repository";
 
 // Coleções cujos documentos pertencem ao grupo inteiro (campo groupId).
@@ -19,6 +21,7 @@ const GROUP_COLLECTIONS = [
   "invites",
   "categories",
   "loans",
+  "importRules",
 ] as const;
 
 async function deleteDocs(query: FirebaseFirestore.Query): Promise<void> {
@@ -32,6 +35,7 @@ async function deleteWholeGroup(groupId: string): Promise<void> {
   await Promise.all(
     GROUP_COLLECTIONS.map((name) => deleteDocs(db.collection(name).where("groupId", "==", groupId)))
   );
+  await endSubscriptionOfDeletedGroup(groupId);
   await db.recursiveDelete(db.collection("groups").doc(groupId));
 }
 
@@ -66,6 +70,8 @@ export async function deleteAccountForUser(userId: string): Promise<void> {
   if (user?.groupIds.length) invalidateTransactionReads();
 
   await Promise.all([
+    disconnectAllBanks(userId),
+    deleteDocs(db.collection("pushSubscriptions").where("userId", "==", userId)),
     deleteDocs(db.collection("shares").where("ownerId", "==", userId)),
     deleteDocs(db.collection("telegramLinks").where("userId", "==", userId)),
     deleteDocs(db.collection("whatsappLinks").where("userId", "==", userId)),

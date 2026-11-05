@@ -6,6 +6,7 @@ import { isShoppingTransaction } from "../shopping/shopping.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { addMonths, addMonthsToDate, parseMonthRange, todayInBrazil } from "../../utils/month";
 import { fromCents, splitEvenly, toCents } from "../../utils/money";
+import { PartnerPersonalEntryError } from "../../utils/errors";
 import {
   deleteTransaction,
   deleteTransactionsBatch,
@@ -304,6 +305,21 @@ export async function getMonthlyTrendForUser(
 // criou.
 export function canManageTransaction(userId: string, transaction: { accountType: string; createdBy: string }): boolean {
   return transaction.accountType === "joint" || transaction.createdBy === userId;
+}
+
+// A mesma regra pra um lançamento ligado (item da lista de compras,
+// contribuição de meta) mexido dentro de uma transação do Firestore. Lê antes
+// de qualquer escrita, como o Firestore exige.
+export async function assertCanManageLinked(
+  t: FirebaseFirestore.Transaction,
+  userId: string,
+  transactionId: string | null
+): Promise<void> {
+  if (!transactionId) return;
+  const doc = await t.get(transactionDocRef(transactionId));
+  if (doc.exists && !canManageTransaction(userId, doc.data() as { accountType: string; createdBy: string })) {
+    throw new PartnerPersonalEntryError();
+  }
 }
 
 export async function deleteTransactionForUser(userId: string, transactionId: string) {
