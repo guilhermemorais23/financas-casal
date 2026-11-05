@@ -18,6 +18,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, groupByDay, monthLongName, previousMonthParam } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
+import { isPendingTransaction } from "../utils/optimisticTransactions";
 import { readCache, writeCache } from "../utils/pageCache";
 import { printMonthReport } from "../utils/printReport";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
@@ -679,7 +680,7 @@ export function ReportsPage() {
             {tx.transactionType === "income" ? "+" : "-"}
             {formatCurrency(Number(tx.amount))}
           </span>
-          {!tx.securedCardId && !tx.loanId && !tx.goalId && (
+          {!tx.securedCardId && !tx.loanId && !tx.goalId && !isPendingTransaction(tx) && (
             <div className="transaction-row-actions">
               <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                 <Icon name="pencil" />

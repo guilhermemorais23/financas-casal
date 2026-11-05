@@ -5,7 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Icon } from "../components/Icon";
 import { useSwipeDownToClose } from "../hooks/useSwipeDownToClose";
 import { useToast } from "../components/ToastProvider";
-import { saveTransactionInBackground } from "../utils/optimisticTransactions";
+import { PENDING_ID_PREFIX, saveTransactionInBackground } from "../utils/optimisticTransactions";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, todayISO } from "../utils/format";
 import {
@@ -330,7 +330,7 @@ export function NewTransactionPage() {
       payload,
       showToast,
       optimistic: {
-        id: `pending-${Date.now()}`,
+        id: `${PENDING_ID_PREFIX}${Date.now()}`,
         description: payload.description,
         amount: String(parsedAmount),
         transactionType,

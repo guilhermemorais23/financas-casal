@@ -3,7 +3,7 @@ import { listCards } from "../cards/cards.service";
 import { listDebts } from "../debts/debts.service";
 import { requireGroupId } from "../groups/groups.service";
 import { getMonthlySummaryForUser } from "../transactions/transactions.service";
-import { addMonths, daysBetween } from "../../utils/month";
+import { addMonths, daysBetween, todayInBrazil } from "../../utils/month";
 import { formatBRL } from "../../utils/money";
 
 export type AlertSeverity = "info" | "warning" | "critical";
@@ -41,8 +41,8 @@ function dueLabel(daysUntil: number): string {
 // passar do teto do orçamento antes do mês acabar -- e, se sim, em quantos
 // dias, mais ou menos. Só faz sentido no mês ATUAL (não há o que "projetar"
 // num mês que já acabou).
-function budgetPaceAlert(capAmount: number, spent: number, month: string, today: Date): AlertItem | null {
-  const dayOfMonth = today.getUTCDate();
+function budgetPaceAlert(capAmount: number, spent: number, month: string, todayISO: string): AlertItem | null {
+  const dayOfMonth = Number(todayISO.slice(8, 10));
   if (capAmount <= 0 || dayOfMonth <= 0) return null;
 
   if (spent >= capAmount) {
@@ -119,8 +119,10 @@ export async function getAlertsForUser(userId: string, options: { includeDue?: b
   // chamadas em paralelo terminar primeiro.
   await requireGroupId(userId);
 
-  const today = new Date();
-  const month = today.toISOString().slice(0, 7);
+  // "Hoje" no Brasil: em UTC, depois das 21h já é amanhã (e, no último dia,
+  // o mês seguinte).
+  const todayISO = todayInBrazil();
+  const month = todayISO.slice(0, 7);
   const previousMonths = [1, 2, 3].map((count) => addMonths(month, -count));
 
   const [budgetInfo, cards, debts, currentSummary, previousSummaries] = await Promise.all([
@@ -134,13 +136,12 @@ export async function getAlertsForUser(userId: string, options: { includeDue?: b
   const alerts: AlertItem[] = [];
 
   if (budgetInfo.budget) {
-    const paceAlert = budgetPaceAlert(Number(budgetInfo.budget.capAmount), budgetInfo.spent, month, today);
+    const paceAlert = budgetPaceAlert(Number(budgetInfo.budget.capAmount), budgetInfo.spent, month, todayISO);
     if (paceAlert) alerts.push(paceAlert);
   }
 
   alerts.push(...categorySpikeAlerts(currentSummary.byCategory, previousSummaries.map((s) => s.byCategory)));
 
-  const todayISO = today.toISOString().slice(0, 10);
 
   for (const card of includeDue ? cards : []) {
     if (card.currentStatement.isPaid || Number(card.currentStatement.total) <= 0) continue;

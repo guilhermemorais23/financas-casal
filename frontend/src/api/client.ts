@@ -80,7 +80,9 @@ export async function apiRequest<T>(
     });
   };
 
-  let response = await doFetch(options.token);
+  // O token que de fato vale agora (pode ser renovado logo abaixo).
+  let token = options.token;
+  let response = await doFetch(token);
 
   // Um 401 num pedido que FOI com token normalmente quer dizer que o token
   // estava velho, e não que a pessoa saiu -- quase sempre porque a aba ficou
@@ -90,14 +92,15 @@ export async function apiRequest<T>(
   if (response.status === 401 && options.token && refreshToken) {
     const freshToken = await refreshToken().catch(() => null);
     if (freshToken && freshToken !== options.token) {
-      response = await doFetch(freshToken);
+      token = freshToken;
+      response = await doFetch(token);
     }
   }
 
   let data = await response.json().catch(() => null);
 
   if (isGroupLost(response.status, data)) {
-    response = await doFetch(options.token);
+    response = await doFetch(token);
     data = await response.json().catch(() => null);
   }
 
@@ -145,7 +148,9 @@ export async function apiDownload(path: string, token: string | null, filename: 
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // O Safari (iPhone) ainda está lendo o arquivo logo depois do click():
+  // liberar na hora quebrava o download.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // O backend roda no plano grátis do Render, que põe o servidor pra dormir

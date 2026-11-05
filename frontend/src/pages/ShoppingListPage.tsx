@@ -62,13 +62,17 @@ export function ShoppingListPage() {
   }
 
   useEffect(() => {
-    loadItems();
-    apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/groups/me", { token }).then((res) => {
-      setAccounts(res.accounts);
-      setMembers(res.members);
-      setCheckAccountId((current) => current || res.accounts[0]?.id || "");
-    });
-    apiRequest<CategoryRow[]>("/categories", { token }).then(setCategories);
+    const failed = (err: unknown) => setError(err instanceof ApiError ? err.message : "Não foi possível carregar a lista");
+    loadItems().catch(failed);
+    apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/groups/me", { token })
+      .then((res) => {
+        setAccounts(res.accounts);
+        setMembers(res.members);
+        setCheckAccountId((current) => current || res.accounts[0]?.id || "");
+      })
+      .catch(failed);
+    // Categoria é opcional ao marcar comprado: sem a lista, segue sem.
+    apiRequest<CategoryRow[]>("/categories", { token }).then(setCategories).catch(() => setCategories([]));
   }, [token]);
 
   async function handleAddItem(event: FormEvent) {

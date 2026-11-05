@@ -30,6 +30,7 @@ import {
 export class DebtNotFoundError extends Error {}
 export class InstallmentNotFoundError extends Error {}
 export class ForbiddenError extends Error {}
+export class InvalidInstallmentsError extends Error {}
 
 export type DebtScope = "personal" | "joint";
 
@@ -63,7 +64,15 @@ export interface DebtWithInstallments {
   remainingCount: number;
 }
 
+// 30 anos de parcelas mensais (um financiamento de casa). Acima disso é erro
+// de digitação, e o lote de gravação das parcelas ficava grande demais.
+export const MAX_DEBT_INSTALLMENTS = 360;
+
 export async function createDebt(userId: string, input: CreateDebtInput) {
+  // Toda parcela tem pelo menos 1 centavo.
+  if (input.installmentsCount > MAX_DEBT_INSTALLMENTS || toCents(input.totalAmount) < input.installmentsCount) {
+    throw new InvalidInstallmentsError();
+  }
   const groupId = await requireGroupId(userId);
   const ownerUserId = input.scope === "joint" ? null : userId;
   if (input.categoryId && !(await categoryIsVisibleTo(input.categoryId, groupId))) {

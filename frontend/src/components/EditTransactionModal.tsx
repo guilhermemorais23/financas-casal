@@ -73,11 +73,14 @@ export function EditTransactionModal({
   const locked = isLinkedTransaction(transaction);
 
   useEffect(() => {
-    apiRequest<CategoryRow[]>("/categories", { token }).then(setCategories);
-    apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/groups/me", { token }).then((res) => {
-      setAccounts(res.accounts);
-      setMembers(res.members);
-    });
+    const failed = () => setError("Não deu pra carregar as contas e categorias. Feche e abra de novo.");
+    apiRequest<CategoryRow[]>("/categories", { token }).then(setCategories).catch(failed);
+    apiRequest<{ accounts: AccountRow[]; members: MemberRow[] }>("/groups/me", { token })
+      .then((res) => {
+        setAccounts(res.accounts);
+        setMembers(res.members);
+      })
+      .catch(failed);
   }, [token]);
 
   async function handleSubmit(event: FormEvent) {

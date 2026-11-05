@@ -364,14 +364,16 @@ export async function addPurchase(userId: string, cardId: string, input: AddPurc
   }
 
   const firstStatementMonth = statementMonthFor(input.purchaseDate, card.closingDay);
-  const statement = await findStatement(cardId, firstStatementMonth);
-  if (statement?.isPaid) {
-    throw new StatementAlreadyPaidError();
-  }
-
   const statementMonths = Array.from({ length: input.installments }, (_, index) =>
     addMonths(firstStatementMonth, index)
   );
+  // Nenhuma parcela pode cair numa fatura já paga -- numa compra retroativa,
+  // não só a primeira (o total da fatura paga deixaria de bater com o
+  // pagamento lançado).
+  const statements = await Promise.all(statementMonths.map((month) => findStatement(cardId, month)));
+  if (statements.some((statement) => statement?.isPaid)) {
+    throw new StatementAlreadyPaidError();
+  }
 
   const purchases = await insertPurchaseSeries(
     cardId,

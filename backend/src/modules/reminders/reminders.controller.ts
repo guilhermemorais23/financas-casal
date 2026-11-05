@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { env } from "../../config/env";
+import { safeEqual } from "../../utils/safeEqual";
 import { generateDueRecurringBills } from "../recurringBills/recurringBills.service";
 import { runDueReminders } from "./reminders.service";
 
@@ -14,7 +15,7 @@ import { runDueReminders } from "./reminders.service";
 // dia, sem usuário", e esta é a chamada externa que já existe e já está
 // configurada em produção.
 export async function runRemindersHandler(req: Request, res: Response) {
-  if (!env.cronSecret || req.header("x-cron-secret") !== env.cronSecret) {
+  if (!env.cronSecret || !safeEqual(req.header("x-cron-secret") ?? "", env.cronSecret)) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }

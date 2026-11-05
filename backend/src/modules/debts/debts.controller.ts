@@ -6,7 +6,9 @@ import {
   DebtNotFoundError,
   ForbiddenError,
   InstallmentNotFoundError,
+  InvalidInstallmentsError,
   InvalidPayoffError,
+  MAX_DEBT_INSTALLMENTS,
   createDebt,
   listDebts,
   payOffDebtForUser,
@@ -58,6 +60,10 @@ export async function createDebtHandler(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof InvalidCategoryError) {
       res.status(400).json({ error: "Categoria inválida." });
+      return;
+    }
+    if (err instanceof InvalidInstallmentsError) {
+      res.status(400).json({ error: `Use de 1 a ${MAX_DEBT_INSTALLMENTS} parcelas, de pelo menos R$ 0,01 cada.` });
       return;
     }
     throw err;
