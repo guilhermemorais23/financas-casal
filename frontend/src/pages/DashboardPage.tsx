@@ -483,11 +483,12 @@ export function DashboardPage() {
       // já mostrava.
       await whenWritesSettled();
       const data = await apiRequest<DashboardResponse>(`/dashboard?month=${selectedMonth}`, { token });
+      // Trocou de grupo no meio do caminho: nem tela nem cache (ver sameGroupGuard).
+      if (!sameGroup()) return;
       // A pessoa pode ter trocado de mês enquanto isto estava a caminho -- a
       // resposta de um mês abandonado é descartada, em vez de sobrescrever o que
       // está na tela agora. Ainda vale guardar no cache (ver writeCache abaixo,
       // via applyDashboard), só não desenhar.
-      if (!sameGroup()) return;
       const isStillActive = selectedMonth === activeMonthRef.current;
       applyDashboard(selectedMonth, data, !isStillActive);
 
