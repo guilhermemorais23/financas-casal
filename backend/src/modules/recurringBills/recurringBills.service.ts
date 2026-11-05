@@ -23,6 +23,7 @@ import {
   type SplitType,
   type TransactionType,
 } from "../transactions/transactions.repository";
+import { runWithActiveGroup } from "../../utils/activeGroup";
 import { fromCents, splitEvenly, toCents } from "../../utils/money";
 import { addMonths, dateForDayInMonth, daysBetween, todayInBrazil } from "../../utils/month";
 import {
@@ -34,7 +35,7 @@ import {
   findRecurringBillById,
   findRecurringBillsByGroupId,
   insertRecurringBill,
-  markRecurringBillGenerated,
+  claimRecurringBillMonth,
   recurringBillRef,
   setRecurringBillSnooze,
   toRecurringBillRow,
@@ -439,29 +440,36 @@ export async function generateDueRecurringBills(): Promise<{ billsChecked: numbe
     const dueDate = dateForDayInMonth(currentMonth, bill.dayOfMonth);
     if (today < dueDate) continue;
 
+    // Reserva o mês antes de lançar (atômico): se outra execução do cron já
+    // pegou esta conta neste mês, pula -- é o que impede o lançamento em dobro.
+    // A reserva vale mesmo se o lançamento falhar abaixo, pra uma conta
+    // quebrada de vez não tentar (e falhar) todo santo dia.
+    if (!(await claimRecurringBillMonth(bill.id, currentMonth))) continue;
+
     try {
-      await createTransaction(bill.createdBy, {
-        accountId: bill.accountId,
-        categoryId: bill.categoryId,
-        payerId: bill.payerId,
-        description: bill.description,
-        amount: Number(bill.amount),
-        transactionType: bill.transactionType,
-        occurredAt: dueDate,
-        isPrivate: bill.isPrivate,
-        splitType: bill.splitType,
-      });
+      // Sem pedido HTTP não há grupo aberto: sem isto, createTransaction usaria
+      // o grupo padrão de quem criou a conta, que pode ser outro grupo.
+      await runWithActiveGroup(bill.groupId, () =>
+        createTransaction(bill.createdBy, {
+          accountId: bill.accountId,
+          categoryId: bill.categoryId,
+          payerId: bill.payerId,
+          description: bill.description,
+          amount: Number(bill.amount),
+          transactionType: bill.transactionType,
+          occurredAt: dueDate,
+          isPrivate: bill.isPrivate,
+          splitType: bill.splitType,
+        })
+      );
       transactionsCreated++;
     } catch (err) {
       // Uma conta cuja conta bancária, pagador ou categoria não existe mais (o
       // membro saiu do grupo, a categoria foi apagada) não pode derrubar o cron
       // inteiro pras outras contas -- registra no log e segue, o mesmo "melhor
-      // esforço" do job de lembretes. Ainda marca o lastGeneratedMonth abaixo, pra
-      // uma conta quebrada de vez não tentar (e falhar) todo santo dia.
+      // esforço" do job de lembretes.
       console.error(`generateDueRecurringBills: failed for bill ${bill.id}`, err);
     }
-
-    await markRecurringBillGenerated(bill.id, currentMonth);
   }
 
   return { billsChecked: bills.length, transactionsCreated };

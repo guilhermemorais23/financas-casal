@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createTestGroup } from "../../test-helpers";
 import { db } from "../../db/firestore";
 import { todayInBrazil } from "../../utils/month";
+import { createGroupForUser } from "../groups/groups.service";
 import {
   createRecurringBillForUser,
   generateDueRecurringBills,
@@ -90,5 +91,48 @@ describe("recurringBills", () => {
 
     const transactions = await db.collection("transactions").where("groupId", "==", groupId).get();
     expect(transactions.size).toBe(0);
+  });
+
+  it("lança no grupo da conta fixa, mesmo quando o grupo padrão da pessoa é outro", async () => {
+    const { groupId, userAId, personalAccountId } = await createTestGroup();
+    await createRecurringBillForUser(userAId, {
+      accountId: personalAccountId,
+      categoryId: null,
+      payerId: userAId,
+      description: "Aluguel",
+      amount: 1500,
+      transactionType: "expense",
+      isPrivate: false,
+      splitType: "none",
+      dayOfMonth: Number(todayInBrazil().slice(8, 10)),
+    });
+    // Criar outro grupo deixa ele como o padrão da pessoa.
+    await createGroupForUser(userAId, { name: "Casa da família" });
+
+    await generateDueRecurringBills();
+
+    const transactions = await db.collection("transactions").where("groupId", "==", groupId).get();
+    expect(transactions.size).toBe(1);
+    expect(transactions.docs[0].data().description).toBe("Aluguel");
+  });
+
+  it("duas execuções ao mesmo tempo (cron + rede de segurança) lançam uma vez só", async () => {
+    const { groupId, userAId, personalAccountId } = await createTestGroup();
+    await createRecurringBillForUser(userAId, {
+      accountId: personalAccountId,
+      categoryId: null,
+      payerId: userAId,
+      description: "Internet",
+      amount: 100,
+      transactionType: "expense",
+      isPrivate: false,
+      splitType: "none",
+      dayOfMonth: Number(todayInBrazil().slice(8, 10)),
+    });
+
+    await Promise.all([generateDueRecurringBills(), generateDueRecurringBills()]);
+
+    const transactions = await db.collection("transactions").where("groupId", "==", groupId).get();
+    expect(transactions.size).toBe(1);
   });
 });
