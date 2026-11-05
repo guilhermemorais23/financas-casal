@@ -17,7 +17,7 @@ import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { initialOf } from "../utils/initial";
-import { canDeleteFromStatement, deleteConfirmBody, type LinkKind } from "../utils/linkedTransaction";
+import { canDeleteFromStatement, deleteConfirmBody, isReadOnlyRow, type LinkKind } from "../utils/linkedTransaction";
 
 interface AccountRow {
   id: string;
@@ -417,7 +417,7 @@ export function ParPage() {
                   {tx.transactionType === "income" ? "+" : "-"}
                   {formatCurrency(Number(tx.amount))}
                 </span>
-                {!tx.securedCardId && !tx.loanId && !tx.goalId && (
+                {!isReadOnlyRow(tx) && (
                   <div className="transaction-row-actions">
                     <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                       <Icon name="pencil" />

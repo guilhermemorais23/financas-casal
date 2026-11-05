@@ -14,3 +14,11 @@ describe("mês atual à noite no Brasil", () => {
     expect(parseMonthRange().periodMonth).toBe("2026-11-01");
   });
 });
+
+describe("mês vazio", () => {
+  it("?month= vazio vale o mês atual (não é erro)", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-30T23:30:00-03:00"));
+    expect(parseMonthRange("").periodMonth).toBe("2026-11-01");
+  });
+});

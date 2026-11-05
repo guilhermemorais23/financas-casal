@@ -28,7 +28,7 @@ import { hasAiLeft, recordAiTokens, reserveAi } from "../aiUsage/aiUsage";
 import { geminiModel, tokensOf } from "../../utils/gemini";
 import { answerFromSnapshot, buildMonthSnapshot, parseQuickEntry, snapshotAsText, type MonthSnapshot } from "./monthSnapshot";
 import { formatBRL } from "../../utils/money";
-import { MAX_AMOUNT, isValidAmount } from "../../utils/validation";
+import { isValidAmount } from "../../utils/validation";
 import { paymentFromSpeech } from "../../utils/paymentDetect";
 import { PAYMENT_METHODS, type PaymentMethod } from "../transactions/transactions.repository";
 
@@ -148,7 +148,8 @@ export function parseAssistantReply(raw: string): AssistantReply | null {
   // O valor vem da IA: negativo viraria gasto negativo (aumentando o saldo),
   // texto quebraria depois de gravar. Fica só número de 0 até o máximo.
   const amount = reply.amount as unknown;
-  if (amount !== undefined && !(typeof amount === "number" && Number.isFinite(amount) && amount >= 0 && amount <= MAX_AMOUNT)) {
+  // (0 vale: "não tenho nada guardado".)
+  if (amount !== undefined && amount !== 0 && !isValidAmount(amount)) {
     delete reply.amount;
   }
   return reply;

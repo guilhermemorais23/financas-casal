@@ -35,11 +35,10 @@ import { readCache, writeCache } from "../utils/pageCache";
 import { DATA_CHANGED_EVENT, whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { initialOf } from "../utils/initial";
-import { canDeleteFromStatement, deleteConfirmBody, type LinkKind } from "../utils/linkedTransaction";
+import { canDeleteFromStatement, deleteConfirmBody, isReadOnlyRow, type LinkKind } from "../utils/linkedTransaction";
 import { BillRemindersCard } from "../components/BillReminders";
 import { BalanceLineChart, InOutMonthsChart } from "../components/PainelCharts";
 import { minimumMonthlySaving } from "../utils/goals";
-import { isPendingTransaction } from "../utils/optimisticTransactions";
 
 // Um ponto por dia do mês, como o GET /dashboard devolve em dailyTrend.
 interface DailyTrendPoint {
@@ -1353,7 +1352,7 @@ export function DashboardPage() {
                             {tx.transactionType === "income" ? "+" : "-"}
                             {formatCurrency(Number(tx.amount))}
                           </span>
-                          {!tx.securedCardId && !tx.loanId && !tx.goalId && !isPendingTransaction(tx) && (
+                          {!isReadOnlyRow(tx) && (
                             <div className="transaction-row-actions">
                               <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
                                 <Icon name="pencil" />

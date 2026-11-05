@@ -34,5 +34,10 @@ describe("linha ainda sendo salva", () => {
     const rowOf = (text: string) => [...document.querySelectorAll("li")].find((li) => li.textContent?.includes(text))!;
     expect(rowOf("Mercado").querySelector('[title="Editar"]')).not.toBeNull();
     expect(rowOf("Padaria").querySelector('[title="Editar"]')).toBeNull();
+
+    // Excluir vários: ela também não pode ser marcada.
+    await screen.getByRole("button", { name: "Selecionar", exact: true }).click();
+    await expect.element(screen.getByLabelText("Selecionar Padaria")).toBeDisabled();
+    await expect.element(screen.getByLabelText("Selecionar Mercado")).toBeEnabled();
   });
 });

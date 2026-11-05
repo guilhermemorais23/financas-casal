@@ -81,7 +81,7 @@ export interface MonthRange {
 export function parseMonthRange(monthParam?: string): MonthRange {
   // Sem mês: o mês de agora no Brasil (em UTC, à noite do último dia já seria
   // o mês seguinte).
-  const reference = new Date(`${monthParam ?? currentMonthParam()}-01T00:00:00Z`);
+  const reference = new Date(`${monthParam || currentMonthParam()}-01T00:00:00Z`);
   if (Number.isNaN(reference.getTime())) {
     throw new InvalidMonthError();
   }
