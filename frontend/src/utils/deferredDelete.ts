@@ -9,6 +9,8 @@
 // apagar pendente (o aviso, que fica na raiz do app, continua na tela e
 // continua oferecendo Desfazer). Fechar a aba manda o que ainda estiver
 // pendente.
+import { runWithKeepalive } from "../api/client";
+
 const pending = new Map<string, { timer: number; run: () => Promise<void> }>();
 
 export const UNDO_WINDOW_MS = 6000;
@@ -39,14 +41,21 @@ export function isDeferredPending(key: string): boolean {
   return pending.has(key);
 }
 
+// Manda já o que está pendente, com keepalive: a página pode estar fechando, e
+// sem isso o navegador cancela o pedido -- o lançamento "excluído" voltava.
 export function flushDeferred(): void {
   for (const [key, entry] of Array.from(pending.entries())) {
     window.clearTimeout(entry.timer);
     pending.delete(key);
-    void entry.run();
+    runWithKeepalive(() => void entry.run());
   }
 }
 
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", flushDeferred);
+  // No iPhone (app na tela inicial) o pagehide nem sempre chega: ir pro
+  // segundo plano já pode ser o fim da página.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushDeferred();
+  });
 }

@@ -113,3 +113,30 @@ describe("editar compra", () => {
     expect(isInside(screen.getByRole("button", { name: "Remover doce penaforte" }).element(), row)).toBe(true);
   });
 });
+
+describe("trocando de fatura rápido", () => {
+  it("a resposta atrasada da fatura anterior não toma o lugar da que está na tela", async () => {
+    let releaseNovember: () => void = () => {};
+    const novemberArrived = new Promise<void>((resolve) => (releaseNovember = resolve));
+    const statementOf = (month: string, description: string) => ({
+      month,
+      dueDate: `${month}-15`,
+      total: "10.00",
+      isPaid: false,
+      purchases: [purchase({ id: `p-${month}`, description, amount: "10.00" })],
+    });
+    onApi("GET", /^\/cards\/card-1\/statement\?month=2026-11/, async () => {
+      await novemberArrived;
+      return statementOf("2026-11", "Compra de novembro");
+    });
+    onApi("GET", /^\/cards\/card-1\/statement\?month=2026-10/, statementOf("2026-10", "Compra de outubro"));
+
+    const screen = await openStatement();
+    await screen.getByRole("button", { name: "Fatura anterior" }).click();
+    await expect.element(screen.getByText("Compra de outubro")).toBeInTheDocument();
+
+    releaseNovember();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(document.body.textContent).not.toContain("Compra de novembro");
+  });
+});

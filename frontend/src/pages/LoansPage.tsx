@@ -7,7 +7,7 @@ import { Icon } from "../components/Icon";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, parseLocalDate, todayISO } from "../utils/format";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { Sheet } from "../components/Sheet";
 import { parseMoney } from "../utils/money";
 
@@ -124,10 +124,12 @@ export function LoansPage() {
 
   async function load() {
     try {
+      const sameGroup = sameGroupGuard();
       const [loans, group] = await Promise.all([
         apiRequest<LoansResponse>("/loans", { token }),
         apiRequest<{ accounts: AccountRow[]; members: { id: string; displayName: string }[] }>("/groups/me", { token }),
       ]);
+      if (!sameGroup()) return;
       setData(loans);
       setAccounts(group.accounts);
       setMembers(group.members);

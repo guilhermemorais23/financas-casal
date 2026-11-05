@@ -5,7 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, monthYearLabel, parseLocalDate } from "../utils/format";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
 import { BillsTabs } from "../components/BillsTabs";
@@ -86,7 +86,9 @@ export function CardsPage() {
 
   async function loadCards() {
     try {
+      const sameGroup = sameGroupGuard();
       const result = await apiRequest<CardRow[]>("/cards", { token });
+      if (!sameGroup()) return;
       setCards(result);
       writeCache(cacheKey, result);
     } catch (err) {

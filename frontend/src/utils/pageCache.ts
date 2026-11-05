@@ -36,6 +36,16 @@ try {
   // Armazenamento indisponível: o cache é melhor esforço de qualquer jeito.
 }
 
+// Uma busca que começou num grupo e terminou depois de a pessoa trocar de
+// grupo não pode ir pra tela nem pro cache: a chave pega o grupo da hora da
+// gravação, e os números do grupo antigo iriam parar no grupo novo. Chame no
+// começo do load e confira depois do await:
+//   const sameGroup = sameGroupGuard(); ... await ...; if (!sameGroup()) return;
+export function sameGroupGuard(): () => boolean {
+  const startedIn = getActiveGroupId();
+  return () => getActiveGroupId() === startedIn;
+}
+
 function scopedKey(key: string): string {
   return `${getActiveGroupId() ?? "-"}:${key}`;
 }

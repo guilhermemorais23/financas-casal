@@ -64,10 +64,25 @@ export function setTokenRefresher(fn: (() => Promise<string | null>) | null): vo
   refreshToken = fn;
 }
 
+// Pedidos que precisam sobreviver à página fechando (a exclusão adiada, ver
+// utils/deferredDelete.ts): sem keepalive, o navegador cancela o pedido junto
+// com a página. Vale pros pedidos que começam durante `fn` -- o fetch sai
+// antes do primeiro await do apiRequest.
+let keepaliveDepth = 0;
+export function runWithKeepalive(fn: () => void): void {
+  keepaliveDepth++;
+  try {
+    fn();
+  } finally {
+    keepaliveDepth--;
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: { method?: string; body?: unknown; token?: string | null } = {}
 ): Promise<T> {
+  const keepalive = keepaliveDepth > 0;
   const doFetch = async (token?: string | null) => {
     const headers: Record<string, string> = { "Content-Type": "application/json", ...groupHeader() };
     if (token) {
@@ -77,6 +92,7 @@ export async function apiRequest<T>(
       method: options.method ?? "GET",
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
+      ...(keepalive ? { keepalive: true } : {}),
     });
   };
 

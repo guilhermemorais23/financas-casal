@@ -7,7 +7,7 @@ import { Icon, type IconName } from "../components/Icon";
 import { PageSkeleton } from "../components/Skeleton";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { formatCurrency, parseLocalDate } from "../utils/format";
 import { PayBillSheet, type BillReminder } from "../components/BillReminders";
 
@@ -120,7 +120,9 @@ export function BillsPage() {
 
   const load = useCallback(async () => {
     try {
+      const sameGroup = sameGroupGuard();
       const fresh = await apiRequest<BillsOverview>("/bills", { token });
+      if (!sameGroup()) return;
       setData(fresh);
       writeCache(cacheKey, fresh);
       setError(null);

@@ -7,7 +7,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PayOffDebtSheet } from "../components/PayOffDebtSheet";
 import { AppLayout } from "../layouts/AppLayout";
 import { currentMonthParam, formatCurrency, monthYearLabel } from "../utils/format";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
@@ -77,11 +77,13 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
 
   async function load() {
     try {
+      const sameGroup = sameGroupGuard();
       const [result, categoriesRes] = await Promise.all([
         apiRequest<DebtRow[]>("/debts", { token }),
         // Categorias são extra: se falharem, as dívidas aparecem igual (sem o nome da categoria).
         apiRequest<CategoryRow[]>("/categories", { token }).catch(() => null),
       ]);
+      if (!sameGroup()) return;
       setDebts(result);
       if (categoriesRes) setCategories(categoriesRes);
       writeCache(cacheKey, result);

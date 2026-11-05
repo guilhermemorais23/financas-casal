@@ -7,7 +7,7 @@
 //   - PATCH /api/cards/:id/statements/:mes -> marcar como paga / reabrir
 //   - GET /api/cards/:id/statements        -> todas as faturas, mês a mês (faixa de meses)
 //   - POST/PATCH/DELETE /api/cards/:id/purchases -> lançar / editar / remover compra
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -109,15 +109,23 @@ export function CardStatementPage() {
     return found;
   }, [cardId, token]);
 
+  // A fatura na tela agora: a resposta de uma fatura que a pessoa já deixou
+  // pra trás (tocou as setas rápido) é descartada.
+  const activeMonthRef = useRef(month);
+  activeMonthRef.current = month;
+
   const loadStatement = useCallback(
     async (target: string) => {
+      const isActive = () => target === activeMonthRef.current;
       setIsLoading(true);
+      setError(null);
       try {
-        setStatement(await apiRequest<StatementDetail>(`/cards/${encodeURIComponent(cardId)}/statement?month=${encodeURIComponent(target)}`, { token }));
+        const detail = await apiRequest<StatementDetail>(`/cards/${encodeURIComponent(cardId)}/statement?month=${encodeURIComponent(target)}`, { token });
+        if (isActive()) setStatement(detail);
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Não foi possível carregar a fatura");
+        if (isActive()) setError(err instanceof ApiError ? err.message : "Não foi possível carregar a fatura");
       } finally {
-        setIsLoading(false);
+        if (isActive()) setIsLoading(false);
       }
     },
     [cardId, token]

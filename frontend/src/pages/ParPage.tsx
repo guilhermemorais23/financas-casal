@@ -10,7 +10,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { categoryColor, personColor, personTint } from "../utils/categoryColor";
 import { currentMonthParam, formatCurrency, parseLocalDate } from "../utils/format";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { whenWritesSettled } from "../utils/pendingWrites";
 import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { Icon } from "../components/Icon";
@@ -120,6 +120,7 @@ export function ParPage() {
     // esperar uma ida e volta nova ao /groups/me antes. Esse "espera o grupo,
     // depois busca o extrato" era exatamente o motivo de um lançamento recém
     // feito na "Nossa conta" demorar um pouco pra aparecer aqui.
+    const sameGroup = sameGroupGuard();
     const knownJointAccountId = group?.accounts.find((a) => a.type === "joint")?.id;
 
     await whenWritesSettled();
@@ -142,6 +143,7 @@ export function ParPage() {
       jointTransactions(),
     ]);
 
+    if (!sameGroup()) return;
     setGroup(groupRes);
     setSummary(summaryRes);
     setBalance(balanceRes);

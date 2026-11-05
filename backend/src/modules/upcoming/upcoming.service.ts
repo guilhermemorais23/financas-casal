@@ -1,4 +1,4 @@
-import { listCards } from "../cards/cards.service";
+import { listCards, type CardWithSummary } from "../cards/cards.service";
 import { listDebts } from "../debts/debts.service";
 import { listLoans, todayInBrazil } from "../loans/loans.service";
 import { listRecurringBillsForUser, pendingMonthFor } from "../recurringBills/recurringBills.service";
@@ -34,6 +34,14 @@ function billDetail(mode: AmountMode): string {
   return mode === "fixed" ? "Conta fixa" : mode === "estimate" ? "Conta fixa · valor estimado" : "Conta fixa · sem valor";
 }
 
+// Faturas do cartão ainda em aberto além da atual (as atrasadas, quase
+// sempre) que caem na janela -- só dá pra saber em cartão com limite, que
+// guarda a linha do tempo de cada fatura não paga. O "Vence logo" e Contas
+// usam a mesma regra.
+function otherOpenStatements(card: CardWithSummary, inWindow: (dueDate: string) => boolean) {
+  return card.limitReleases.filter((release) => release.month !== card.currentStatement.month && inWindow(release.dueDate));
+}
+
 export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_WINDOW_DAYS): Promise<UpcomingItem[]> {
   const today = todayInBrazil();
   const thisMonth = today.slice(0, 7);
@@ -48,19 +56,24 @@ export async function getUpcomingForUser(userId: string, windowDays = UPCOMING_W
   const within = (dueDate: string) => daysBetween(today, dueDate) <= windowDays;
 
   for (const card of cards) {
+    const pushCard = (id: string, amount: number, dueDate: string) =>
+      items.push({
+        id,
+        kind: "card",
+        direction: "pay",
+        title: `Fatura ${card.name}`,
+        detail: "Cartão",
+        amount,
+        dueDate,
+        daysUntil: daysBetween(today, dueDate),
+        link: "/cards",
+      });
     const statement = card.currentStatement;
+    for (const release of otherOpenStatements(card, within)) {
+      pushCard(`card-${card.id}-${release.month}`, Number(release.amount), release.dueDate);
+    }
     if (statement.isPaid || Number(statement.total) <= 0 || !within(statement.dueDate)) continue;
-    items.push({
-      id: `card-${card.id}`,
-      kind: "card",
-      direction: "pay",
-      title: `Fatura ${card.name}`,
-      detail: "Cartão",
-      amount: Number(statement.total),
-      dueDate: statement.dueDate,
-      daysUntil: daysBetween(today, statement.dueDate),
-      link: "/cards",
-    });
+    pushCard(`card-${card.id}`, Number(statement.total), statement.dueDate);
   }
 
   for (const debt of debts) {
@@ -259,10 +272,8 @@ export async function getBillsOverview(userId: string): Promise<BillsOverview> {
         card: { closingDay: card.closingDay, limitFree },
       });
     const statement = card.currentStatement;
-    // Faturas anteriores ainda em aberto (só dá pra saber em cartão com
-    // limite, que guarda a linha do tempo de cada fatura não paga).
-    for (const release of card.limitReleases) {
-      if (release.month !== statement.month && inWindow(release.dueDate)) push(release.month, release.dueDate, Number(release.amount), false);
+    for (const release of otherOpenStatements(card, inWindow)) {
+      push(release.month, release.dueDate, Number(release.amount), false);
     }
     if (Number(statement.total) <= 0) continue;
     if (statement.isPaid ? paidThisMonth(statement.dueDate) : inWindow(statement.dueDate)) {

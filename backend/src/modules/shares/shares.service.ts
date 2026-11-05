@@ -4,7 +4,7 @@ import { isValidMonthParam, InvalidMonthError } from "../../utils/month";
 import { requireGroupId } from "../groups/groups.service";
 import { findUserById } from "../users/users.repository";
 import { listTransactions } from "../transactions/transactions.service";
-import type { TransactionListRow } from "../transactions/transactions.repository";
+import { isTransferData, type TransactionListRow } from "../transactions/transactions.repository";
 import {
   findShareByToken,
   insertShare,
@@ -42,6 +42,10 @@ export function buildShareSnapshot(
   const categoryCents = new Map<string, { name: string | null; emoji: string | null; cents: number }>();
 
   for (const row of shareable) {
+    // Transferência (meta, cartão garantido, empréstimo, entre contas) mexe no
+    // saldo mas não é entrada nem saída -- a mesma regra do Painel e dos
+    // Relatórios.
+    if (isTransferData(row)) continue;
     const cents = toCents(Number(row.amount));
     if (row.transactionType === "income") {
       incomeCents += cents;

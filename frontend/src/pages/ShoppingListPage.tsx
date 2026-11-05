@@ -3,7 +3,7 @@ import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/ToastProvider";
 import { AppLayout } from "../layouts/AppLayout";
-import { readCache, writeCache } from "../utils/pageCache";
+import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { categoriesFor, type CategoryType } from "../utils/categories";
@@ -57,7 +57,9 @@ export function ShoppingListPage() {
   const [isSubmittingCheck, setIsSubmittingCheck] = useState(false);
 
   async function loadItems() {
+    const sameGroup = sameGroupGuard();
     const result = await apiRequest<ShoppingItemRow[]>("/shopping", { token });
+    if (!sameGroup()) return;
     setItems(result);
     writeCache(cacheKey, result);
   }
