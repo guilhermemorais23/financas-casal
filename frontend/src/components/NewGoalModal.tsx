@@ -28,10 +28,8 @@ export function NewGoalModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [useItems, setUseItems] = useState(false);
   const [items, setItems] = useState<{ name: string; price: string }[]>([{ name: "", price: "" }, { name: "", price: "" }]);
 
-  const parsePrice = (value: string) => {
-    const clean = value.trim().replace(/\s|R\$/g, "");
-    return parseMoney(clean) || 0;
-  };
+  // Campo vazio ou texto que não é valor conta como 0 no total.
+  const parsePrice = (value: string) => parseMoney(value) || 0;
   const filledItems = items.filter((item) => item.name.trim() && parsePrice(item.price) > 0);
   const itemsTotal = filledItems.reduce((sum, item) => sum + parsePrice(item.price), 0);
   const effectiveTarget = useItems ? itemsTotal : parsePrice(targetAmount);

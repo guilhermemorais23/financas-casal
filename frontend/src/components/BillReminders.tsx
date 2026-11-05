@@ -23,7 +23,6 @@ export interface BillReminder {
   snoozed?: boolean;
 }
 
-
 function moneyInput(value: number | null): string {
   return value === null ? "" : toMoneyInput(value);
 }

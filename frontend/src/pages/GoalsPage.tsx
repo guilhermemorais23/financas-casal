@@ -49,7 +49,6 @@ interface MemberRow {
   displayName: string;
 }
 
-
 export function GoalsPage() {
   const { user, token } = useAuth();
   const { showToast } = useToast();
