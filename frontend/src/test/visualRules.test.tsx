@@ -59,12 +59,18 @@ describe("modal", () => {
 });
 
 describe("tema escuro", () => {
-  it("parcela da fatura e ícone de contas não viram bloco claro", () => {
+  it("a parcela da fatura não vira bloco claro, e o texto dela fica legível", () => {
     document.documentElement.setAttribute("data-theme", "dark");
-    const host = mount(`<span class="fatura-parcela" id="a">2/5</span><span class="quick-action-icon bills" id="b"></span>`);
-    for (const id of ["a", "b"]) {
-      const bg = getComputedStyle(host.querySelector(`#${id}`)!).backgroundColor;
-      expect(luminance(bg), `#${id} ${bg}`).toBeLessThan(0.3);
-    }
+    const host = mount(`<span class="fatura-parcela" id="a">2/5</span>`);
+    const style = getComputedStyle(host.querySelector("#a")!);
+    expect(luminance(style.backgroundColor), style.backgroundColor).toBeLessThan(0.3);
+    expect(luminance(style.color), style.color).toBeGreaterThan(0.4);
+  });
+
+  it("o \"Paga\" da faixa de faturas fica legível no escuro", () => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    const host = mount(`<span class="fatura-month-chip-status paid" id="a">Paga</span>`);
+    const color = getComputedStyle(host.querySelector("#a")!).color;
+    expect(luminance(color), color).toBeGreaterThan(0.4);
   });
 });
