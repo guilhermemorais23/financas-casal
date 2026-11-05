@@ -85,6 +85,7 @@ export function RegisterPage() {
             <input
               id="register-email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -94,6 +95,7 @@ export function RegisterPage() {
             <label htmlFor="register-password">Senha</label>
             <PasswordInput
               id="register-password"
+              autoComplete="new-password"
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}

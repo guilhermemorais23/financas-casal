@@ -1,18 +1,41 @@
 import { FirebaseError } from "firebase/app";
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { authErrorMessage } from "../auth/firebaseErrors";
 import { useAuth } from "../auth/AuthContext";
 import { AuthShell } from "../components/AuthShell";
 import { SocialLoginButtons } from "../components/SocialLoginButtons";
 import { PasswordInput } from "../components/PasswordInput";
-import { SlowServerHint, Spinner } from "../components/Spinner";
+import { LoadingScreen, SlowServerHint, Spinner } from "../components/Spinner";
 import { PENDING_INVITE_STORAGE_KEY } from "./AcceptInvitePage";
 
+// Só o email fica no aparelho. A senha quem guarda é o próprio celular (Chaves
+// do iCloud / Gerenciador de senhas do Google), que oferece salvar e preencher
+// com Face ID porque os campos dizem o que são (autoComplete).
+const REMEMBERED_EMAIL_KEY = "par:remembered-email";
+
+function readRememberedEmail(): string {
+  try {
+    return localStorage.getItem(REMEMBERED_EMAIL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveRememberedEmail(email: string | null): void {
+  try {
+    if (email) localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+  } catch {
+    // ignora -- só deixa de lembrar
+  }
+}
+
 export function LoginPage() {
-  const { login, resetPassword } = useAuth();
+  const { user, isLoading, login, resetPassword } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(readRememberedEmail);
+  const [rememberEmail, setRememberEmail] = useState(true);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,6 +59,7 @@ export function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
+      saveRememberedEmail(rememberEmail ? email.trim() : null);
       goAfterAuth();
     } catch (err) {
       setError(authErrorMessage(err, "Não foi possível entrar"));
@@ -68,6 +92,13 @@ export function LoginPage() {
     }
     setResetMessage("Se esse email tiver uma conta aqui, enviamos um link pra redefinir a senha.");
     setIsResetting(false);
+  }
+
+  // O ícone da tela de início abre em "/" -> /login. Com a sessão ainda
+  // valendo, entra direto (convite pendente segue o caminho do goAfterAuth).
+  if (isLoading) return <LoadingScreen />;
+  if (user && !isSubmitting && !sessionStorage.getItem(PENDING_INVITE_STORAGE_KEY)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   if (isResetMode) {
@@ -132,6 +163,7 @@ export function LoginPage() {
             <input
               id="login-email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -154,11 +186,16 @@ export function LoginPage() {
             </div>
             <PasswordInput
               id="login-password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={rememberEmail} onChange={(e) => setRememberEmail(e.target.checked)} />
+            Lembrar meu email
+          </label>
           {error && <p className="alert" role="alert">{error}</p>}
           <button type="submit" className="btn btn-primary" disabled={isSubmitting} aria-busy={isSubmitting}>
             {isSubmitting ? (

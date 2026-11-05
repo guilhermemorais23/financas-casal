@@ -804,7 +804,7 @@ export function DashboardPage() {
               </div>
             </div>
           )}
-          {month === currentMonthParam() && user && <MonthCloseCard userId={user.id} token={token} />}
+          {month === currentMonthParam() && user && <MonthCloseCard token={token} />}
 
           {/* 1. O mês: faixa verde com o saldo, o gráfico e Entrou/Saiu/Guardado */}
           <section className="painel-band" aria-label="Resumo do mês">
