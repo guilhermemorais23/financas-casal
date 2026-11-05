@@ -98,10 +98,6 @@ function dueLabel(loan: Loan): { text: string; tone: "bad" | "warn" | "muted" | 
   return { text: `Vence ${shortDate(loan.dueDate)}`, tone: "muted" };
 }
 
-function parseAmount(raw: string): number {
-  return parseMoney(raw);
-}
-
 export function LoansPage() {
   const { user, token } = useAuth();
   const { showToast } = useToast();
@@ -576,7 +572,7 @@ function CreateLoanModal({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const parsed = parseAmount(amount);
+    const parsed = parseMoney(amount);
     const rate = hasInterest ? parseMoney(interestRate) : null;
     const owe = direction === "borrowed";
     if (!personName.trim()) return setError(owe ? "Quem te emprestou?" : "Pra quem você emprestou?");
@@ -724,7 +720,7 @@ function ReceiveModal({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const parsed = isPartial ? parseAmount(amount) : remaining;
+    const parsed = isPartial ? parseMoney(amount) : remaining;
     if (!(parsed > 0)) return setError("Informe um valor válido.");
     if (parsed > remaining) return setError(`Falta só ${formatCurrency(remaining)}.`);
     setError(null);
