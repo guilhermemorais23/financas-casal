@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestGroup } from "../../test-helpers";
 import { createTransaction } from "../transactions/transactions.service";
-import { getMonthCloseForUser, previousMonthInBrazil } from "./monthClose.service";
+import { getMonthCloseForUser, isMonthCloseSeen, markMonthCloseSeen, previousMonthInBrazil } from "./monthClose.service";
 
 describe("fechamento do mês", () => {
   it("resume entrou, saiu, sobrou e compara com o mês anterior", async () => {
@@ -42,5 +42,32 @@ describe("fechamento do mês", () => {
     // 1º de outubro às 02h UTC ainda é 30 de setembro em Brasília.
     expect(previousMonthInBrazil(new Date("2026-10-01T02:00:00Z"))).toBe("2026-08");
     expect(previousMonthInBrazil(new Date("2026-10-01T12:00:00Z"))).toBe("2026-09");
+  });
+});
+
+describe('fechamento do mês: "Entendi"', () => {
+  // Fica na conta (servidor), não no aparelho: o app da tela de início do
+  // iPhone e o Safari têm armazenamentos separados, e sair da conta não pode
+  // fazer o card voltar.
+  it("depois do Entendi não aparece mais naquele mês, só no próximo", async () => {
+    const { userAId } = await createTestGroup();
+    expect(await isMonthCloseSeen(userAId, "2026-10")).toBe(false);
+
+    await markMonthCloseSeen(userAId, "2026-10");
+    expect(await isMonthCloseSeen(userAId, "2026-10")).toBe(true);
+    expect(await isMonthCloseSeen(userAId, "2026-11")).toBe(false);
+  });
+
+  it("marcar um mês antigo não faz o mais novo voltar a aparecer", async () => {
+    const { userAId } = await createTestGroup();
+    await markMonthCloseSeen(userAId, "2026-10");
+    await markMonthCloseSeen(userAId, "2026-08");
+    expect(await isMonthCloseSeen(userAId, "2026-10")).toBe(true);
+  });
+
+  it("vale só pra própria pessoa", async () => {
+    const { userAId, userBId } = await createTestGroup();
+    await markMonthCloseSeen(userAId, "2026-10");
+    expect(await isMonthCloseSeen(userBId, "2026-10")).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import { todayInBrazil } from "../loans/loans.service";
 import { getMonthlySummaryForUser, getMonthlyTrendForUser } from "../transactions/transactions.service";
 import { addMonths } from "../../utils/month";
+import { findMonthCloseSeen, saveMonthCloseSeen } from "../users/users.repository";
 
 // Fechamento do mês: o resumo que a pessoa recebe no dia 1 (email) e vê no
 // topo do Painel na primeira semana. Mesmas contas do Painel -- entrou menos
@@ -44,4 +45,15 @@ export async function getMonthCloseForUser(userId: string, month = previousMonth
     })),
     hasActivity: current.income > 0 || current.expense > 0,
   };
+}
+
+// "Entendi" no card do Painel: fica na conta, então vale em todo aparelho e
+// não volta depois de sair e entrar de novo. O card reaparece só no mês seguinte.
+export async function isMonthCloseSeen(userId: string, month: string): Promise<boolean> {
+  const seen = await findMonthCloseSeen(userId);
+  return seen !== null && seen >= month;
+}
+
+export function markMonthCloseSeen(userId: string, month: string): Promise<void> {
+  return saveMonthCloseSeen(userId, month);
 }

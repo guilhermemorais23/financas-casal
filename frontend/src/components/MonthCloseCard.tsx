@@ -14,23 +14,17 @@ interface MonthClose {
   previousLeft: number;
   topCategories: { name: string; total: number }[];
   hasActivity: boolean;
+  // "Entendi" já tocado nesse mês (fica na conta, vale em todo aparelho).
+  seen: boolean;
 }
 
 // Na primeira semana do mês o Painel mostra como o mês passado fechou -- o
-// mesmo resumo do email do dia 1. Some depois do "Entendi" (por mês, neste
-// aparelho) ou sozinho no dia 8.
+// mesmo resumo do email do dia 1. Depois do "Entendi" só volta no mês
+// seguinte (o servidor guarda, então vale depois de sair e entrar e em
+// qualquer aparelho); sem o "Entendi", some sozinho no dia 8.
 const SHOW_UNTIL_DAY = 7;
-const seenKey = (userId: string, month: string) => `par:month-close-seen:${userId}:${month}`;
 
-function wasSeen(userId: string, month: string): boolean {
-  try {
-    return localStorage.getItem(seenKey(userId, month)) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function MonthCloseCard({ userId, token }: { userId: string; token: string | null }) {
+export function MonthCloseCard({ token }: { token: string | null }) {
   const [close, setClose] = useState<MonthClose | null>(null);
   const [hidden, setHidden] = useState(false);
 
@@ -39,19 +33,15 @@ export function MonthCloseCard({ userId, token }: { userId: string; token: strin
     // O mês vem daqui (relógio do aparelho), o mesmo que decidiu mostrar o card.
     apiRequest<MonthClose>(`/month-close?month=${previousMonthParam(currentMonthParam())}`, { token })
       .then((data) => {
-        if (data.hasActivity && !wasSeen(userId, data.month)) setClose(data);
+        if (data.hasActivity && !data.seen) setClose(data);
       })
       .catch(() => setClose(null));
-  }, [token, userId]);
+  }, [token]);
 
   if (!close || hidden) return null;
 
   function dismiss() {
-    try {
-      localStorage.setItem(seenKey(userId, close!.month), "1");
-    } catch {
-      // ignora
-    }
+    void apiRequest("/month-close/seen", { method: "POST", token, body: { month: close!.month } }).catch(() => {});
     setHidden(true);
   }
 

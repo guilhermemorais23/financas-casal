@@ -103,6 +103,23 @@ export async function markWelcomeSeen(userId: string): Promise<void> {
   await usersCol.doc(userId).update({ welcomePending: false, welcomeSeenAt: FieldValue.serverTimestamp() });
 }
 
+// Fechamento do mês: o último mês em que a pessoa tocou "Entendi". Guarda só
+// o mais novo -- marcar um mês antigo não faz um mais novo voltar.
+export async function findMonthCloseSeen(userId: string): Promise<string | null> {
+  const doc = await usersCol.doc(userId).get();
+  const seen = doc.data()?.monthCloseSeen;
+  return typeof seen === "string" ? seen : null;
+}
+
+export async function saveMonthCloseSeen(userId: string, month: string): Promise<void> {
+  const ref = usersCol.doc(userId);
+  await db.runTransaction(async (tx) => {
+    const seen = (await tx.get(ref)).data()?.monthCloseSeen;
+    if (typeof seen === "string" && seen >= month) return;
+    tx.set(ref, { monthCloseSeen: month }, { merge: true });
+  });
+}
+
 // Quem está no grupo: perfis novos têm o grupo em groupIds; os de antes dos
 // vários grupos só em groupId. As duas consultas juntas pegam todo mundo.
 export async function findUserDocsInGroup(groupId: string): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
