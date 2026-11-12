@@ -1,6 +1,6 @@
-// Painel simples: "Pode gastar hoje" no topo, Últimos 7 dias e Precisa de
-// atenção logo abaixo, Primeiros passos, e o resto do mês recolhido em "Ver
-// mais do mês". Funções desligadas não aparecem.
+// Painel simples: saldo do mês no topo com "Pode gastar hoje" logo abaixo,
+// depois Últimos 7 dias e Precisa de atenção, Primeiros passos, e o resto do
+// mês recolhido em "Ver mais do mês". Funções desligadas não aparecem.
 import { describe, expect, it } from "vitest";
 import { callsTo, onApi } from "../test/fakeApi";
 import { fakeAuth, ME } from "../test/fakeAuth";

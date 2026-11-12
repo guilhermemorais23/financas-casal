@@ -890,33 +890,31 @@ export function DashboardPage() {
         </div>
 
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
-          {/* 1. O mês: "Pode gastar hoje" em destaque, o saldo do mês menor,
+          {/* 1. O mês: o saldo em destaque, "Pode gastar hoje" logo abaixo,
               o gráfico e Entrou/Saiu/Guardado */}
           <section className="painel-band" aria-label="Resumo do mês">
             <div className="painel-band-top">
               <div className="painel-band-text">
-                {/* No mês que está sendo vivido, o número grande é quanto dá
-                    pra gastar por dia até o fim do mês. Olhando um mês que
-                    passou, "hoje" não quer dizer nada: aí o grande é o saldo
-                    do mês (entrou - saiu). Nunca o saldo acumulado das
-                    contas -- esse fica em "Onde está seu dinheiro". */}
-                <p className="painel-band-kicker">{dailyAllowance !== null ? "Pode gastar hoje" : `Saldo de ${monthLongName(month)}`}</p>
+                {/* O número grande é o saldo do mês (entrou - saiu): quanto
+                    você tem. Nunca o saldo acumulado das contas -- esse fica
+                    em "Onde está seu dinheiro". */}
+                <p className="painel-band-kicker">Saldo de {monthLongName(month)}</p>
                 <p className="painel-band-big">
-                  <AnimatedNumber value={dailyAllowance !== null ? Math.max(0, dailyAllowance) : monthLeft} countUp />
+                  <AnimatedNumber value={monthLeft} countUp />
                 </p>
-                {dailyAllowance !== null && dailyAllowance > 0 && (
-                  <p className="painel-band-line">Por dia, até o dia {lastDayOfMonth}.</p>
+                {/* No mês que está sendo vivido, logo abaixo: quanto dá pra
+                    gastar por dia até o fim do mês. */}
+                {dailyAllowance !== null && (
+                  <p className="painel-band-daily">
+                    <span>Pode gastar hoje</span>
+                    <strong>
+                      <AnimatedNumber value={Math.max(0, dailyAllowance)} countUp />
+                    </strong>
+                    {dailyAllowance > 0 && <small>por dia, até o dia {lastDayOfMonth}</small>}
+                  </p>
                 )}
                 {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
                   <p className="painel-band-line">Você já gastou mais do que entrou este mês.</p>
-                )}
-                {dailyAllowance !== null && (
-                  <p className="painel-band-line painel-band-month">
-                    Saldo de {monthLongName(month)}:{" "}
-                    <strong>
-                      <AnimatedNumber value={monthLeft} countUp />
-                    </strong>
-                  </p>
                 )}
                 {/* Com dívidas, o saldo do mês sozinho engana: mostra junto
                     quanto sobra depois de pagar o que deve (a mesma conta do
