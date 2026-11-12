@@ -71,6 +71,13 @@ export function daysBetween(fromDate: string, toDate: string): number {
   return Math.round((to - from) / 86_400_000);
 }
 
+// "YYYY-MM-DD" mais (ou menos) `count` dias.
+export function addDays(dateParam: string, count: number): string {
+  const date = new Date(`${dateParam}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + count);
+  return date.toISOString().slice(0, 10);
+}
+
 export interface MonthRange {
   periodMonth: string;
   monthStart: string;

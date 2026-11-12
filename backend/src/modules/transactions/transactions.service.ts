@@ -4,7 +4,7 @@ import { findDebtsByGroupId, findInstallmentsByDebtIds } from "../debts/debts.re
 import { findMembersByGroupId, findUsableAccount, type MemberRow } from "../groups/groups.repository";
 import { isShoppingTransaction } from "../shopping/shopping.repository";
 import { requireGroupId } from "../groups/groups.service";
-import { addMonths, addMonthsToDate, parseMonthRange, todayInBrazil } from "../../utils/month";
+import { addDays, addMonths, addMonthsToDate, parseMonthRange, todayInBrazil } from "../../utils/month";
 import { fromCents, splitEvenly, toCents } from "../../utils/money";
 import { PartnerPersonalEntryError } from "../../utils/errors";
 import {
@@ -215,6 +215,20 @@ export async function getMonthlySummaryForUser(userId: string, monthParam?: stri
   const { periodMonth, monthStart, monthEnd } = parseMonthRange(monthParam);
   const summary = await getMonthlySummary(groupId, userId, monthStart, monthEnd, scope);
   return { periodMonth, ...summary };
+}
+
+// "Últimos 7 dias" do Painel: o que saiu hoje e nos 6 dias antes, por
+// categoria. A janela anda sozinha -- um gasto de 7 dias atrás some no dia
+// seguinte, e categoria sem nada na janela não aparece. Só leitura: é a
+// mesma base do "onde foi" do mês (escopo "visible"), sem transferências.
+export const RECENT_DAYS = 7;
+
+export async function getRecentDaysSummaryForUser(userId: string, now: Date = new Date()) {
+  const groupId = await requireGroupId(userId);
+  const to = todayInBrazil(now);
+  const from = addDays(to, -(RECENT_DAYS - 1));
+  const { byCategory, total } = await getMonthlySummary(groupId, userId, from, addDays(to, 1), "visible");
+  return { from, to, byCategory, total };
 }
 
 export async function getDailySeriesForUser(userId: string, monthParam?: string, scope?: SummaryScope) {

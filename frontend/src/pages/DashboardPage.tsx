@@ -16,6 +16,7 @@ import { UncategorizedModal } from "../components/UncategorizedModal";
 import { MonthPicker } from "../components/MonthPicker";
 import { MonthCloseCard } from "../components/MonthCloseCard";
 import { RowActionsMenu } from "../components/RowActionsMenu";
+import { RecentDaysCard, type RecentDaysSummary } from "../components/RecentDaysCard";
 import { repeatHref } from "../utils/quickEntry";
 import { SplitStatusPill } from "../components/SplitStatusPill";
 import { SplitSummary } from "../components/SplitSummary";
@@ -209,6 +210,8 @@ interface DashboardResponse {
   owedSummary?: { outstanding: string; overdue: string; overdueCount: number };
   // Opcional: respostas em cache de uma versão antiga não têm.
   upcoming?: UpcomingItem[];
+  // "Últimos 7 dias" -- null fora do mês atual (opcional: cache antigo não tem).
+  recentDays?: RecentDaysSummary | null;
   trend6m: MonthlyTrendPoint[];
   alerts: AlertRow[];
   // Painel novo (opcional: cache de versão antiga não tem).
@@ -371,6 +374,7 @@ export function DashboardPage() {
     () => readCache(staticKey("loansOutstanding")) ?? 0
   );
   const [alerts, setAlerts] = useState<AlertRow[]>(() => readCache(monthKey("alerts")) ?? []);
+  const [recentDays, setRecentDays] = useState<RecentDaysSummary | null>(() => readCache(monthKey("recentDays")));
   const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
@@ -424,6 +428,7 @@ export function DashboardPage() {
       // ?? []: uma resposta guardada por uma versão antiga do app não tem
       // `alerts`.
       setAlerts(data.alerts ?? []);
+      setRecentDays(data.recentDays ?? null);
     }
 
     writeCache(sKey("group"), data.group);
@@ -445,6 +450,7 @@ export function DashboardPage() {
     writeCache(mKey("categoryBudgets"), data.categoryBudgets);
     writeCache(mKey("dailyTrend"), data.dailyTrend);
     writeCache(mKey("alerts"), data.alerts ?? []);
+    writeCache(mKey("recentDays"), data.recentDays ?? null);
     writeCache(mKey("painel"), painelFrom(data));
     // A resposta inteira, numa chave só -- deixa o load() abaixo conferir "já
     // temos este mês?" com um readCache só, em vez de adivinhar por um campo. É
@@ -1222,6 +1228,12 @@ export function DashboardPage() {
             </section>
             </div>
           </div>
+
+          {recentDays && (
+            <div className="painel-grid">
+              <RecentDaysCard data={recentDays} />
+            </div>
+          )}
 
           {/* 3. Pra onde foi o dinheiro */}
           <div className="painel-grid painel-2">
