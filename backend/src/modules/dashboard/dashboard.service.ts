@@ -17,6 +17,7 @@ import { findOwnDocsForRange } from "../transactions/transactions.repository";
 import { requireGroupId } from "../groups/groups.service";
 import { listLoans } from "../loans/loans.service";
 import { getUpcomingForUser } from "../upcoming/upcoming.service";
+import { getChecklistForUser } from "../onboarding/checklist.service";
 import { toCents } from "../../utils/money";
 
 export interface GoalHighlight {
@@ -135,7 +136,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
   // `month` é o mês atual de verdade.
   const isCurrentMonth = month === currentMonthParam();
 
-  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts, loans, upcoming, recentDays] =
+  const [recent, debts, summary, jointSummary, balance, budget, categoryBudgets, dailyTrend, goals, cards, trend6m, alerts, loans, upcoming, recentDays, checklist] =
     await Promise.all([
       listTransactions(userId, 8, month),
       listDebts(userId),
@@ -165,6 +166,9 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
       getUpcomingForUser(userId),
       // "Últimos 7 dias": como os alertas, é sobre hoje -- só no mês atual.
       isCurrentMonth ? getRecentDaysSummaryForUser(userId) : Promise.resolve(null),
+      // "Primeiros passos": consultas de limit(1), baratas; null quando a
+      // pessoa fechou ou já terminou faz tempo.
+      getChecklistForUser(userId),
     ]);
 
   // A janela do trend6m sempre inclui os dois (monthsBack é 6 por padrão,
@@ -192,6 +196,7 @@ export async function getDashboardForUser(userId: string, monthParam?: string) {
     // "Vence logo": pagar e receber nos próximos 7 dias (e atrasados).
     upcoming,
     recentDays,
+    checklist,
     recent,
     debts,
     summary,

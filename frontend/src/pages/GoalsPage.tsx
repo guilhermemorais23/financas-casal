@@ -14,6 +14,8 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { whenWritesSettled } from "../utils/pendingWrites";
 import { parseMoney, toMoneyInput } from "../utils/money";
+import { useModules } from "../hooks/useModules";
+import { EmptyState } from "../components/EmptyState";
 
 interface GoalItemRow {
   id: string;
@@ -51,6 +53,7 @@ interface MemberRow {
 
 export function GoalsPage() {
   const { user, token } = useAuth();
+  const moduleOn = useModules();
   const { showToast } = useToast();
   const confirm = useConfirm();
   const [goals, setGoals] = useState<GoalRow[] | null>(null);
@@ -371,7 +374,16 @@ export function GoalsPage() {
         )}
 
         {goals && goals.length === 0 && (
-          <p className="empty-state">Nenhuma meta criada ainda. Que tal começar uma?</p>
+          <EmptyState
+            art="target"
+            action={
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsCreating(true)}>
+                Criar meta
+              </button>
+            }
+          >
+            Junte dinheiro pra uma viagem, uma reserva ou o que quiser.
+          </EmptyState>
         )}
 
         {goals?.map((goal) => {
@@ -528,9 +540,11 @@ export function GoalsPage() {
       </div>
 
       {/* Cotações saíram do menu (não é o dinheiro do casal), mas a tela continua. */}
-      <Link to="/investments" className="link goals-quotes-link">
-        <Icon name="trend" /> Ver cotações do mercado (Ibovespa e ações)
-      </Link>
+      {moduleOn("investments") && (
+        <Link to="/investments" className="link goals-quotes-link">
+          <Icon name="trend" /> Ver cotações do mercado
+        </Link>
+      )}
 
       {editingGoal && (
         <EditGoalSheet

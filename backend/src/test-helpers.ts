@@ -45,6 +45,19 @@ export async function createTestGroup(): Promise<TestGroup> {
   };
 }
 
+// Grupo de uma pessoa só (quem acabou de criar a conta, ou usa sozinho),
+// com a conta pessoal dela e a conjunta que todo grupo tem.
+export async function createSoloTestGroup(): Promise<{ groupId: string; userId: string; personalAccountId: string }> {
+  const group = await createGroup();
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const userId = `test-solo-${suffix}`;
+  await usersCol.doc(userId).set({ email: `solo-${suffix}@test.com`, displayName: "Solo", groupId: group.id });
+  await addUserToGroup({ id: userId, groupIds: [] }, group.id);
+  const personalAccount = await createAccount({ groupId: group.id, ownerUserId: userId, type: "personal", name: "Pessoal" });
+  await createAccount({ groupId: group.id, ownerUserId: null, type: "joint", name: "Conjunta" });
+  return { groupId: group.id, userId, personalAccountId: personalAccount.id };
+}
+
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }

@@ -27,7 +27,7 @@ export function RecentDaysCard({ data }: { data: RecentDaysSummary }) {
         <span className="painel-cat-value">{formatCurrency(Number(data.total))}</span>
       </div>
       <p className="card-subtitle">
-        De {shortDate(data.from)} até hoje. O que passa de 7 dias sai daqui sozinho; o extrato não muda.
+        De {shortDate(data.from)} até hoje.
       </p>
       {data.byCategory.length === 0 ? (
         <p className="empty-state">Nenhum gasto nos últimos 7 dias.</p>

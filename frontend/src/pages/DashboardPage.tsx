@@ -48,6 +48,11 @@ import {
 import { BillRemindersCard } from "../components/BillReminders";
 import { BalanceLineChart, InOutMonthsChart } from "../components/PainelCharts";
 import { minimumMonthlySaving } from "../utils/goals";
+import { EmptyState } from "../components/EmptyState";
+import { CategoryIcon } from "../components/CategoryIcon";
+import { FirstStepsCard, type Checklist } from "../components/FirstStepsCard";
+import { useModules } from "../hooks/useModules";
+import type { ModuleKey } from "../utils/preferences";
 
 // Um ponto por dia do mês, como o GET /dashboard devolve em dailyTrend.
 interface DailyTrendPoint {
@@ -219,6 +224,9 @@ interface DashboardResponse {
   cardsSummary?: PainelCard[];
   goalsSummary?: PainelGoal[];
   savedInGoals?: number;
+  // "Primeiros passos" -- null quando a pessoa dispensou ou já acabou faz
+  // tempo (opcional: cache antigo não tem).
+  checklist?: Checklist | null;
 }
 
 interface PainelCard {
@@ -299,6 +307,35 @@ const MONEY_COLORS = ["var(--coffee-500)", "var(--olive-500)", "var(--coffee-300
 
 const MONTH_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
+// De qual função é cada coisa que vence (some com a função desligada).
+const UPCOMING_MODULE: Record<UpcomingItem["kind"], ModuleKey> = {
+  card: "cards",
+  debt: "debts",
+  recurring: "payables",
+  loan: "loans",
+};
+
+// "Ver mais do mês" aberto ou fechado, lembrado por pessoa neste aparelho.
+const moreKey = (userId: string | undefined) => `par:painel-mais:${userId ?? "anon"}`;
+const checklistDismissedKey = (userId: string | undefined) => `par:primeiros-passos-fechado:${userId ?? "anon"}`;
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, on: boolean): void {
+  try {
+    if (on) localStorage.setItem(key, "1");
+    else localStorage.removeItem(key);
+  } catch {
+    // só conveniência
+  }
+}
+
 function upcomingWhen(item: UpcomingItem): string {
   const d = item.daysUntil;
   if (item.direction === "receive") {
@@ -375,6 +412,13 @@ export function DashboardPage() {
   );
   const [alerts, setAlerts] = useState<AlertRow[]>(() => readCache(monthKey("alerts")) ?? []);
   const [recentDays, setRecentDays] = useState<RecentDaysSummary | null>(() => readCache(monthKey("recentDays")));
+  const [checklist, setChecklist] = useState<Checklist | null>(() => readCache(staticKey("checklist")));
+  // Dispensada aqui: some na hora e não volta por um cache antigo enquanto o
+  // servidor não para de mandar.
+  const [checklistDismissed, setChecklistDismissed] = useState(() => readFlag(checklistDismissedKey(user?.id)));
+  const [showMoreOfMonth, setShowMoreOfMonth] = useState(() => readFlag(moreKey(user?.id)));
+  const moduleOn = useModules();
+  const showBills = moduleOn("cards") || moduleOn("payables") || moduleOn("debts") || moduleOn("loans");
   const [isLoading, setIsLoading] = useState(!group);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<TransactionListRow | null>(null);
@@ -429,6 +473,7 @@ export function DashboardPage() {
       // `alerts`.
       setAlerts(data.alerts ?? []);
       setRecentDays(data.recentDays ?? null);
+      setChecklist(data.checklist ?? null);
     }
 
     writeCache(sKey("group"), data.group);
@@ -451,6 +496,7 @@ export function DashboardPage() {
     writeCache(mKey("dailyTrend"), data.dailyTrend);
     writeCache(mKey("alerts"), data.alerts ?? []);
     writeCache(mKey("recentDays"), data.recentDays ?? null);
+    writeCache(sKey("checklist"), data.checklist ?? null);
     writeCache(mKey("painel"), painelFrom(data));
     // A resposta inteira, numa chave só -- deixa o load() abaixo conferir "já
     // temos este mês?" com um readCache só, em vez de adivinhar por um campo. É
@@ -544,6 +590,23 @@ export function DashboardPage() {
     window.addEventListener(DATA_CHANGED_EVENT, refetch);
     return () => window.removeEventListener(DATA_CHANGED_EVENT, refetch);
   }, [token, month]);
+
+  function toggleMoreOfMonth() {
+    setShowMoreOfMonth((open) => {
+      writeFlag(moreKey(user?.id), !open);
+      return !open;
+    });
+  }
+
+  // "Dispensar" (ou "Fechar" depois de tudo feito): some na hora; o servidor
+  // confirma por trás.
+  function handleDismissChecklist() {
+    setChecklistDismissed(true);
+    writeFlag(checklistDismissedKey(user?.id), true);
+    void apiRequest("/onboarding/checklist/dismiss", { method: "POST", token }).catch(() => {
+      // Sem rede: a marca local segura neste aparelho.
+    });
+  }
 
   // Atualização local imediata de uma linha removida: a linha faz a animação
   // de saída, depois sai de `recent`, e os totais do mês e a fatia da
@@ -765,6 +828,7 @@ export function DashboardPage() {
   const budgetSeverity = budgetRawPercent >= 100 ? "over" : budgetRawPercent >= 80 ? "warning" : "";
 
   const recentGroups = useMemo(() => groupByDay(recent), [recent]);
+  const visibleUpcoming = upcoming.filter((item) => moduleOn(UPCOMING_MODULE[item.kind] ?? "payables"));
 
   const jointAccount = group?.accounts.find((account) => account.type === "joint");
   const canMoveBetweenAccounts = Boolean(jointAccount) && (group?.members.length ?? 0) > 1;
@@ -826,50 +890,33 @@ export function DashboardPage() {
         </div>
 
         <div className={`dashboard-content${isLoading ? " is-loading" : ""}`} aria-busy={isLoading}>
-          {firstImport.show && (
-            <div className="card first-import">
-              <span className="first-import-icon" aria-hidden="true">
-                <Icon name="upload" />
-              </span>
-              <div className="first-import-text">
-                <p className="card-title">Comece pelo extrato do banco</p>
-                <p className="card-subtitle">
-                  Mande o PDF do extrato (ou OFX/CSV) e o PAR. monta o mês de vocês em poucos minutos: você só diz o que é cada nome, e
-                  ele lembra nas próximas vezes.
-                </p>
-                <div className="first-import-actions">
-                  <button type="button" className="btn btn-primary" onClick={() => setIsImportOpen(true)}>
-                    Importar extrato
-                  </button>
-                  <button type="button" className="btn btn-outline" onClick={firstImport.dismiss}>
-                    Prefiro lançar na mão
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-          {month === currentMonthParam() && user && <MonthCloseCard token={token} />}
-
-          {/* 1. O mês: faixa verde com o saldo, o gráfico e Entrou/Saiu/Guardado */}
+          {/* 1. O mês: "Pode gastar hoje" em destaque, o saldo do mês menor,
+              o gráfico e Entrou/Saiu/Guardado */}
           <section className="painel-band" aria-label="Resumo do mês">
             <div className="painel-band-top">
               <div className="painel-band-text">
-                {/* O número grande é o saldo do mês (entrou - saiu), não o
-                    saldo acumulado das contas: quem lança só o salário todo
-                    mês e não lança todo gasto veria o saldo crescer mês a mês
-                    sem ter esse dinheiro de verdade. O saldo das contas fica
-                    em "Onde está seu dinheiro". */}
-                <p className="painel-band-kicker">Saldo de {monthLongName(month)}</p>
+                {/* No mês que está sendo vivido, o número grande é quanto dá
+                    pra gastar por dia até o fim do mês. Olhando um mês que
+                    passou, "hoje" não quer dizer nada: aí o grande é o saldo
+                    do mês (entrou - saiu). Nunca o saldo acumulado das
+                    contas -- esse fica em "Onde está seu dinheiro". */}
+                <p className="painel-band-kicker">{dailyAllowance !== null ? "Pode gastar hoje" : `Saldo de ${monthLongName(month)}`}</p>
                 <p className="painel-band-big">
-                  <AnimatedNumber value={monthLeft} />
+                  <AnimatedNumber value={dailyAllowance !== null ? Math.max(0, dailyAllowance) : monthLeft} countUp />
                 </p>
                 {dailyAllowance !== null && dailyAllowance > 0 && (
-                  <p className="painel-band-line">
-                    Dá <strong>{formatCurrency(dailyAllowance)} por dia</strong> até o dia {lastDayOfMonth}.
-                  </p>
+                  <p className="painel-band-line">Por dia, até o dia {lastDayOfMonth}.</p>
                 )}
                 {dailyAllowance !== null && dailyAllowance <= 0 && income > 0 && (
                   <p className="painel-band-line">Você já gastou mais do que entrou este mês.</p>
+                )}
+                {dailyAllowance !== null && (
+                  <p className="painel-band-line painel-band-month">
+                    Saldo de {monthLongName(month)}:{" "}
+                    <strong>
+                      <AnimatedNumber value={monthLeft} countUp />
+                    </strong>
+                  </p>
                 )}
                 {/* Com dívidas, o saldo do mês sozinho engana: mostra junto
                     quanto sobra depois de pagar o que deve (a mesma conta do
@@ -917,13 +964,13 @@ export function DashboardPage() {
               <div className="painel-band-kpi">
                 <span className="painel-band-kpi-label">Guardado</span>
                 <span className="painel-band-kpi-value">{formatCurrency(savedInCards)}</span>
-                <span className="painel-band-kpi-sub">metas e cartão garantido</span>
+                <span className="painel-band-kpi-sub">em metas e cartões</span>
               </div>
             </div>
-            {(loansOutstanding > 0 || lentOut !== 0) && (
+            {moduleOn("loans") && (loansOutstanding > 0 || lentOut !== 0) && (
               <p className="painel-band-line">
                 {lentOut > 0
-                  ? `${formatCurrency(lentOut)} emprestados este mês. Não é gasto, vai voltar pra você.`
+                  ? `${formatCurrency(lentOut)} emprestados este mês. Vai voltar pra você.`
                   : lentOut < 0
                   ? `${formatCurrency(-lentOut)} de empréstimos voltaram pra você este mês.`
                   : `${formatCurrency(loansOutstanding)} emprestados ainda vão voltar pra você.`}
@@ -942,11 +989,268 @@ export function DashboardPage() {
             <ImportStatementModal onClose={() => setIsImportOpen(false)} onImported={() => load(month, { skipCache: true, silent: true })} />
           )}
 
-          {/* 2. Onde está o dinheiro | atenção, cartões e orçamento */}
+          {/* 2. Últimos 7 dias */}
+          {recentDays && (
+            <div className="painel-grid">
+              <RecentDaysCard data={recentDays} />
+            </div>
+          )}
+
+          {/* 3. O que precisa de atenção (vence, banco, sem categoria) */}
+          <section className="card painel-attention" aria-label="Precisa de atenção">
+            <div className="section-header">
+              <p className="card-title">Precisa de atenção</p>
+              {showBills && (
+                <Link to="/contas" className="link">
+                  Ver tudo
+                </Link>
+              )}
+            </div>
+            {month === currentMonthParam() && <BillRemindersCard onChanged={() => load(month, { skipCache: true, silent: true })} />}
+            <ul className="painel-att-list">
+              {nudges.bankTotal > 0 && (
+                <li>
+                  <button type="button" className="painel-att-row" onClick={() => setIsImportOpen(true)}>
+                    <span className="painel-att-badge" aria-hidden="true">
+                      <Icon name="bank" />
+                    </span>
+                    <span className="painel-att-text">
+                      <strong>
+                        {nudges.bankTotal} {nudges.bankTotal === 1 ? "lançamento novo" : "lançamentos novos"} do banco
+                      </strong>
+                      <small>{nudges.banks.join(", ")} · revisar e importar</small>
+                    </span>
+                    <Icon name="chevron" className="icon painel-att-chevron" />
+                  </button>
+                </li>
+              )}
+              {nudges.uncategorized > 0 && (
+                <li>
+                  <button type="button" className="painel-att-row" onClick={() => setIsUncatOpen(true)}>
+                    <span className="painel-att-badge warn" aria-hidden="true">
+                      <Icon name="alert" />
+                    </span>
+                    <span className="painel-att-text">
+                      <strong>
+                        {nudges.uncategorized} {nudges.uncategorized === 1 ? "gasto sem categoria" : "gastos sem categoria"}
+                      </strong>
+                      <small>ficam fora dos relatórios · organizar</small>
+                    </span>
+                    <Icon name="chevron" className="icon painel-att-chevron" />
+                  </button>
+                </li>
+              )}
+              {alerts.map((alert) => (
+                <li key={alert.id}>
+                  <div className={`painel-att-row is-static severity-${alert.severity}`}>
+                    <span className={`painel-att-badge${alert.severity === "critical" ? " bad" : " warn"}`} aria-hidden="true">
+                      <Icon name="alert" />
+                    </span>
+                    <span className="painel-att-text">
+                      <strong>{alert.message}</strong>
+                    </span>
+                  </div>
+                </li>
+              ))}
+              {visibleUpcoming.map((item) => (
+                <li key={item.id}>
+                  <Link to={item.link} className={`painel-att-row${item.daysUntil < 0 ? " overdue" : ""}`}>
+                    <span className={`painel-att-date${item.daysUntil < 0 ? " bad" : item.daysUntil <= 3 ? " warn" : ""}`}>
+                      <strong>{item.dueDate.slice(8, 10)}</strong>
+                      <small>{MONTH_SHORT[Number(item.dueDate.slice(5, 7)) - 1]}</small>
+                    </span>
+                    <span className="painel-att-text">
+                      <strong className="text-truncate">{item.title}</strong>
+                      <small>
+                        {upcomingWhen(item)} · {item.detail}
+                      </small>
+                    </span>
+                    <span className={`painel-att-amount ${item.direction}${item.amountMode ? ` ${item.amountMode}` : ""}`}>
+                      {item.direction === "receive" ? "+" : ""}
+                      {item.amountMode === "unknown" && item.amount === 0
+                        ? "sem valor"
+                        : `${item.amountMode ? "≈ " : ""}${formatCurrency(item.amount)}`}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {nudges.bankTotal === 0 && nudges.uncategorized === 0 && alerts.length === 0 && visibleUpcoming.length === 0 && (
+              <p className="empty-state">Tudo em dia. Nada vence nos próximos 7 dias.</p>
+            )}
+          </section>
+
+          {firstImport.show && (
+            <div className="card first-import">
+              <span className="first-import-icon" aria-hidden="true">
+                <Icon name="upload" />
+              </span>
+              <div className="first-import-text">
+                <p className="card-title">Comece pelo extrato do banco</p>
+                <p className="card-subtitle">Mande o extrato e o PAR. monta o seu mês.</p>
+                <div className="first-import-actions">
+                  <button type="button" className="btn btn-primary" onClick={() => setIsImportOpen(true)}>
+                    Importar extrato
+                  </button>
+                  <button type="button" className="btn btn-outline" onClick={firstImport.dismiss}>
+                    Prefiro lançar na mão
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {month === currentMonthParam() && user && <MonthCloseCard token={token} />}
+
+          {checklist && !checklistDismissed && (
+            <FirstStepsCard checklist={checklist} onDismiss={handleDismissChecklist} />
+          )}
+
+          <section className="card" aria-label="Últimos lançamentos">
+            <div className="section-header">
+              <p className="card-title">Últimos lançamentos</p>
+              {moduleOn("reports") && (
+                <Link to="/reports" className="link">
+                  Extrato
+                </Link>
+              )}
+            </div>
+            {recent.length === 0 ? (
+              <EmptyState
+                art="receipt"
+                action={
+                  <Link to="/transactions/new" className="btn btn-primary btn-sm">
+                    Lançar um gasto
+                  </Link>
+                }
+              >
+                Nada lançado neste mês ainda.
+              </EmptyState>
+            ) : (
+              <ul className="transaction-list">
+                {recentGroups.map((dayGroup) => (
+                  <Fragment key={dayGroup.label}>
+                    <li className="date-group-header">{dayGroup.label}</li>
+                    {dayGroup.items.map((tx) => (
+                      <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
+                        <CategoryIcon categoryId={tx.categoryId} name={tx.categoryName} emoji={tx.categoryEmoji} />
+                        <div className="transaction-info">
+                          <span className="transaction-desc">
+                            <span className="text-truncate">{tx.description}</span>
+                            {tx.recurringGroupId && (
+                              <span className="badge recurring-badge" title="Recorrente">
+                                Mensal
+                              </span>
+                            )}
+                          </span>
+                          <span className="transaction-meta">
+                            <span className="text-truncate">
+                              {tx.categoryName ?? "Sem categoria"}
+                              {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
+                            </span>
+                            {tx.splitType === "equal" && (
+                              <SplitStatusPill
+                                token={token}
+                                transactionId={tx.id}
+                                totalAmount={Number(tx.amount)}
+                                isSettled={tx.isSettled}
+                                onOptimisticChange={(next) => setRecentSettled(tx.id, next)}
+                                onSettled={() => load(month, { skipCache: true })}
+                                onError={(message) => setError(message)}
+                              />
+                            )}
+                          </span>
+                        </div>
+                        <span className={`transaction-amount ${tx.transactionType}`}>
+                          {tx.transactionType === "income" ? "+" : "-"}
+                          {formatCurrency(Number(tx.amount))}
+                        </span>
+                        {(!isReadOnlyRow(tx) || moveActions(tx).length > 0 || canDeleteSecuredTransfer(tx)) && (
+                          <div className="transaction-row-actions">
+                            {!isReadOnlyRow(tx) && (
+                              <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
+                                <Icon name="pencil" />
+                              </button>
+                            )}
+                            <RowActionsMenu
+                              actions={[
+                                ...moveActions(tx),
+                                ...(canDeleteSecuredTransfer(tx)
+                                  ? [
+                                      {
+                                        key: "delete",
+                                        label: "Excluir",
+                                        icon: "trash" as const,
+                                        danger: true,
+                                        onClick: () => handleDelete(tx),
+                                      },
+                                    ]
+                                  : []),
+                                ...(isReadOnlyRow(tx) ? [] : [
+                                ...(tx.recurringGroupId
+                                  ? [
+                                      {
+                                        key: "edit-recurring",
+                                        label: "Editar valor da recorrência",
+                                        icon: "pencil" as const,
+                                        onClick: () => setEditingRecurringTx(tx),
+                                      },
+                                      {
+                                        key: "cancel-recurring",
+                                        label: "Cancelar recorrência",
+                                        icon: "repeatOff" as const,
+                                        onClick: () => handleCancelRecurring(tx),
+                                      },
+                                    ]
+                                  : []),
+                                {
+                                  key: "repeat",
+                                  label: "Repetir (lançar de novo hoje)",
+                                  icon: "repeat" as const,
+                                  onClick: () => navigate(repeatHref(tx)),
+                                },
+                                ...(!canDeleteFromStatement(tx)
+                                  ? []
+                                  : [
+                                      {
+                                        key: "delete",
+                                        label: "Excluir",
+                                        icon: "trash" as const,
+                                        danger: true,
+                                        onClick: () => handleDelete(tx),
+                                      },
+                                    ]),
+                                ]),
+                              ]}
+                            />
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </Fragment>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* O resto do mês fica recolhido: abre e fecha, e o app lembra. */}
+          <button
+            type="button"
+            className="painel-more-toggle"
+            aria-expanded={showMoreOfMonth}
+            onClick={toggleMoreOfMonth}
+          >
+            {showMoreOfMonth ? "Ver menos" : "Ver mais do mês"}
+            <Icon name="chevron" />
+          </button>
+
+          {showMoreOfMonth && (
+            <>
           <div className="painel-grid painel-split">
             <section className="card money-card" aria-label="Onde está seu dinheiro">
               <p className="card-title">Onde está seu dinheiro</p>
-              <p className="money-card-total">{formatCurrency(moneyTotal)}</p>
+              <p className="money-card-total">
+                <AnimatedNumber value={moneyTotal} countUp />
+              </p>
               {sliceTotal > 0 && (
                 <div className="money-bar" role="img" aria-label="Como o dinheiro está dividido">
                   {moneySlices.map((slice) => (
@@ -964,7 +1268,7 @@ export function DashboardPage() {
                     <strong className={account.balance < 0 ? "danger-text" : ""}>{formatCurrency(account.balance)}</strong>
                   </li>
                 ))}
-                {painel.savedInGoals > 0 && (
+                {moduleOn("goals") && painel.savedInGoals > 0 && (
                   <li>
                     <span>
                       <span className="money-dot" style={{ background: sliceColor("goals") }} aria-hidden="true" />
@@ -975,7 +1279,7 @@ export function DashboardPage() {
                     <strong>{formatCurrency(painel.savedInGoals)}</strong>
                   </li>
                 )}
-                {savedInSecuredCards > 0 && (
+                {moduleOn("cards") && savedInSecuredCards > 0 && (
                   <li>
                     <span>
                       <span className="money-dot" style={{ background: sliceColor("cards") }} aria-hidden="true" />
@@ -986,7 +1290,7 @@ export function DashboardPage() {
                     <strong>{formatCurrency(savedInSecuredCards)}</strong>
                   </li>
                 )}
-                {loansOutstanding > 0 && (
+                {moduleOn("loans") && loansOutstanding > 0 && (
                   <li>
                     <span>
                       <span className="money-dot" style={{ background: sliceColor("loans") }} aria-hidden="true" />
@@ -997,7 +1301,7 @@ export function DashboardPage() {
                     <strong>{formatCurrency(loansOutstanding)}</strong>
                   </li>
                 )}
-                {owedToPeople > 0 && (
+                {moduleOn("loans") && owedToPeople > 0 && (
                   <li>
                     <span>
                       <span className="money-dot" style={{ background: sliceColor("owe") }} aria-hidden="true" />
@@ -1008,7 +1312,7 @@ export function DashboardPage() {
                     <strong className="owe-text">−{formatCurrency(owedToPeople)}</strong>
                   </li>
                 )}
-                {totalDebtRemaining > 0 && (
+                {moduleOn("debts") && totalDebtRemaining > 0 && (
                   <li>
                     <span>
                       <span className="money-dot" style={{ background: sliceColor("debts") }} aria-hidden="true" />
@@ -1034,91 +1338,11 @@ export function DashboardPage() {
                   </strong>
                 </p>
               )}
-              <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>
+              <p className="card-subtitle">Tudo o que foi lançado até hoje.</p>
             </section>
 
             <div className="painel-side">
-            <section className="card painel-attention" aria-label="Precisa de atenção">
-              <div className="section-header">
-                <p className="card-title">Precisa de atenção</p>
-                <Link to="/a-pagar" className="link">
-                  Ver tudo
-                </Link>
-              </div>
-              {month === currentMonthParam() && <BillRemindersCard onChanged={() => load(month, { skipCache: true, silent: true })} />}
-              <ul className="painel-att-list">
-                {nudges.bankTotal > 0 && (
-                  <li>
-                    <button type="button" className="painel-att-row" onClick={() => setIsImportOpen(true)}>
-                      <span className="painel-att-badge" aria-hidden="true">
-                        <Icon name="bank" />
-                      </span>
-                      <span className="painel-att-text">
-                        <strong>
-                          {nudges.bankTotal} {nudges.bankTotal === 1 ? "lançamento novo" : "lançamentos novos"} do banco
-                        </strong>
-                        <small>{nudges.banks.join(", ")} · revisar e importar</small>
-                      </span>
-                      <Icon name="chevron" className="icon painel-att-chevron" />
-                    </button>
-                  </li>
-                )}
-                {nudges.uncategorized > 0 && (
-                  <li>
-                    <button type="button" className="painel-att-row" onClick={() => setIsUncatOpen(true)}>
-                      <span className="painel-att-badge warn" aria-hidden="true">
-                        <Icon name="alert" />
-                      </span>
-                      <span className="painel-att-text">
-                        <strong>
-                          {nudges.uncategorized} {nudges.uncategorized === 1 ? "gasto sem categoria" : "gastos sem categoria"}
-                        </strong>
-                        <small>ficam fora dos relatórios · organizar</small>
-                      </span>
-                      <Icon name="chevron" className="icon painel-att-chevron" />
-                    </button>
-                  </li>
-                )}
-                {alerts.map((alert) => (
-                  <li key={alert.id}>
-                    <div className={`painel-att-row is-static severity-${alert.severity}`}>
-                      <span className={`painel-att-badge${alert.severity === "critical" ? " bad" : " warn"}`} aria-hidden="true">
-                        <Icon name="alert" />
-                      </span>
-                      <span className="painel-att-text">
-                        <strong>{alert.message}</strong>
-                      </span>
-                    </div>
-                  </li>
-                ))}
-                {upcoming.map((item) => (
-                  <li key={item.id}>
-                    <Link to={item.link} className={`painel-att-row${item.daysUntil < 0 ? " overdue" : ""}`}>
-                      <span className={`painel-att-date${item.daysUntil < 0 ? " bad" : item.daysUntil <= 3 ? " warn" : ""}`}>
-                        <strong>{item.dueDate.slice(8, 10)}</strong>
-                        <small>{MONTH_SHORT[Number(item.dueDate.slice(5, 7)) - 1]}</small>
-                      </span>
-                      <span className="painel-att-text">
-                        <strong className="text-truncate">{item.title}</strong>
-                        <small>
-                          {upcomingWhen(item)} · {item.detail}
-                        </small>
-                      </span>
-                      <span className={`painel-att-amount ${item.direction}${item.amountMode ? ` ${item.amountMode}` : ""}`}>
-                        {item.direction === "receive" ? "+" : ""}
-                        {item.amountMode === "unknown" && item.amount === 0
-                          ? "sem valor"
-                          : `${item.amountMode ? "≈ " : ""}${formatCurrency(item.amount)}`}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              {nudges.bankTotal === 0 && nudges.uncategorized === 0 && alerts.length === 0 && upcoming.length === 0 && (
-                <p className="empty-state">Tudo em dia: nada vence nos próximos 7 dias.</p>
-              )}
-            </section>
-
+            {moduleOn("cards") && (
             <section className="card painel-cards" aria-label="Cartões">
               <div className="section-header">
                 <p className="card-title">Cartões</p>
@@ -1184,11 +1408,12 @@ export function DashboardPage() {
                 </ul>
               )}
             </section>
+            )}
 
             <section className={`card budget-card${cap ? "" : " is-empty"}`} aria-label="Orçamento do mês">
               <div className="budget-header">
                 <p className="card-title">Orçamento do mês</p>
-                <Link to="/account" className="link">
+                <Link to="/account#orcamento" className="link">
                   {cap ? "Ajustar" : "Definir teto"}
                 </Link>
               </div>
@@ -1223,26 +1448,21 @@ export function DashboardPage() {
                   </div>
                 </div>
               ) : (
-                <p className="empty-state">Defina um teto mensal na Conta pra acompanhar aqui.</p>
+                <p className="empty-state">Diga quanto quer gastar no mês e acompanhe aqui.</p>
               )}
             </section>
             </div>
           </div>
 
-          {recentDays && (
-            <div className="painel-grid">
-              <RecentDaysCard data={recentDays} />
-            </div>
-          )}
-
-          {/* 3. Pra onde foi o dinheiro */}
           <div className="painel-grid painel-2">
             <section className="card" aria-label="Pra onde foi o dinheiro">
               <div className="section-header">
                 <p className="card-title">Pra onde foi o dinheiro</p>
-                <Link to="/reports" className="link">
-                  Relatório
-                </Link>
+                {moduleOn("reports") && (
+                  <Link to="/reports" className="link">
+                    Relatório
+                  </Link>
+                )}
               </div>
               {uncategorizedShare >= 0.5 && (
                 <p className="report-insight">
@@ -1257,7 +1477,7 @@ export function DashboardPage() {
                 </p>
               )}
               {categoryRows.length === 0 ? (
-                <p className="empty-state">Nenhuma despesa neste mês.</p>
+                <p className="empty-state">Nenhum gasto neste mês.</p>
               ) : (
                 <ul className="painel-cat-list">
                   {categoryRows.map((row) => {
@@ -1306,173 +1526,56 @@ export function DashboardPage() {
             </section>
           </div>
 
-          {/* 4. Metas e o extrato */}
-          <div className="painel-grid painel-2">
-            <section className="card" aria-label="Metas">
-              <div className="section-header">
-                <p className="card-title">Metas</p>
+          {moduleOn("goals") && (
+          <section className="card" aria-label="Metas">
+            <div className="section-header">
+              <p className="card-title">Metas</p>
+              <Link to="/goals" className="link">
+                Ver metas
+              </Link>
+            </div>
+            {painel.goals.length === 0 ? (
+              <p className="empty-state">
+                Nenhuma meta em andamento.{" "}
                 <Link to="/goals" className="link">
-                  Ver metas
+                  Criar uma
                 </Link>
-              </div>
-              {painel.goals.length === 0 ? (
-                <p className="empty-state">
-                  Nenhuma meta em andamento.{" "}
-                  <Link to="/goals" className="link">
-                    Criar uma
-                  </Link>
-                </p>
-              ) : (
-                <ul className="painel-goal-list">
-                  {painel.goals.map((goal) => {
-                    const current = Number(goal.currentAmount);
-                    const target = Number(goal.targetAmount);
-                    const monthly = minimumMonthlySaving(target, current, goal.deadline);
-                    return (
-                      <li key={goal.id}>
-                        <Link to="/goals" className="painel-goal">
-                          <span className="painel-goal-icon">{initialOf(goal.name)}</span>
-                          <span className="painel-goal-body">
-                            <span className="painel-goal-top">
-                              <strong>{goal.name}</strong>
-                              <span>
-                                {formatCurrency(current)} de {formatCurrency(target)}
-                              </span>
+              </p>
+            ) : (
+              <ul className="painel-goal-list">
+                {painel.goals.map((goal) => {
+                  const current = Number(goal.currentAmount);
+                  const target = Number(goal.targetAmount);
+                  const monthly = minimumMonthlySaving(target, current, goal.deadline);
+                  return (
+                    <li key={goal.id}>
+                      <Link to="/goals" className="painel-goal">
+                        <span className="painel-goal-icon">{initialOf(goal.name)}</span>
+                        <span className="painel-goal-body">
+                          <span className="painel-goal-top">
+                            <strong>{goal.name}</strong>
+                            <span>
+                              {formatCurrency(current)} de {formatCurrency(target)}
                             </span>
-                            <span className="progress-track thin">
-                              <span className="progress-fill" style={{ width: `${target > 0 ? Math.min(100, (current / target) * 100) : 0}%` }} />
-                            </span>
-                            {monthly && (
-                              <small>
-                                Guarde {formatCurrency(monthly.perMonth)}/mês pra chegar no prazo
-                                {goal.itemsCount > 0 ? ` · ${goal.itemsCount} submetas` : ""}
-                              </small>
-                            )}
                           </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-
-            <section className="card" aria-label="Últimos lançamentos">
-              <div className="section-header">
-                <p className="card-title">Últimos lançamentos</p>
-                <Link to="/reports" className="link">
-                  Extrato
-                </Link>
-              </div>
-              {recent.length === 0 ? (
-                <p className="empty-state">Nenhum lançamento neste mês.</p>
-              ) : (
-                <ul className="transaction-list">
-                  {recentGroups.map((dayGroup) => (
-                    <Fragment key={dayGroup.label}>
-                      <li className="date-group-header">{dayGroup.label}</li>
-                      {dayGroup.items.map((tx) => (
-                        <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
-                          <span className="transaction-icon">{initialOf(tx.categoryName ?? tx.description)}</span>
-                          <div className="transaction-info">
-                            <span className="transaction-desc">
-                              <span className="text-truncate">{tx.description}</span>
-                              {tx.recurringGroupId && (
-                                <span className="badge recurring-badge" title="Recorrente">
-                                  Mensal
-                                </span>
-                              )}
-                            </span>
-                            <span className="transaction-meta">
-                              <span className="text-truncate">
-                                {tx.categoryName ?? "Sem categoria"}
-                                {tx.paymentMethod && ` · ${paymentMethodLabel(tx.paymentMethod)}`}
-                              </span>
-                              {tx.splitType === "equal" && (
-                                <SplitStatusPill
-                                  token={token}
-                                  transactionId={tx.id}
-                                  totalAmount={Number(tx.amount)}
-                                  isSettled={tx.isSettled}
-                                  onOptimisticChange={(next) => setRecentSettled(tx.id, next)}
-                                  onSettled={() => load(month, { skipCache: true })}
-                                  onError={(message) => setError(message)}
-                                />
-                              )}
-                            </span>
-                          </div>
-                          <span className={`transaction-amount ${tx.transactionType}`}>
-                            {tx.transactionType === "income" ? "+" : "-"}
-                            {formatCurrency(Number(tx.amount))}
+                          <span className="progress-track thin">
+                            <span className="progress-fill" style={{ width: `${target > 0 ? Math.min(100, (current / target) * 100) : 0}%` }} />
                           </span>
-                          {(!isReadOnlyRow(tx) || moveActions(tx).length > 0 || canDeleteSecuredTransfer(tx)) && (
-                            <div className="transaction-row-actions">
-                              {!isReadOnlyRow(tx) && (
-                                <button type="button" className="btn-icon" title="Editar" onClick={() => setEditingTx(tx)}>
-                                  <Icon name="pencil" />
-                                </button>
-                              )}
-                              <RowActionsMenu
-                                actions={[
-                                  ...moveActions(tx),
-                                  ...(canDeleteSecuredTransfer(tx)
-                                    ? [
-                                        {
-                                          key: "delete",
-                                          label: "Excluir",
-                                          icon: "trash" as const,
-                                          danger: true,
-                                          onClick: () => handleDelete(tx),
-                                        },
-                                      ]
-                                    : []),
-                                  ...(isReadOnlyRow(tx) ? [] : [
-                                  ...(tx.recurringGroupId
-                                    ? [
-                                        {
-                                          key: "edit-recurring",
-                                          label: "Editar valor da recorrência",
-                                          icon: "pencil" as const,
-                                          onClick: () => setEditingRecurringTx(tx),
-                                        },
-                                        {
-                                          key: "cancel-recurring",
-                                          label: "Cancelar recorrência",
-                                          icon: "repeatOff" as const,
-                                          onClick: () => handleCancelRecurring(tx),
-                                        },
-                                      ]
-                                    : []),
-                                  {
-                                    key: "repeat",
-                                    label: "Repetir (lançar de novo hoje)",
-                                    icon: "repeat" as const,
-                                    onClick: () => navigate(repeatHref(tx)),
-                                  },
-                                  ...(!canDeleteFromStatement(tx)
-                                    ? []
-                                    : [
-                                        {
-                                          key: "delete",
-                                          label: "Excluir",
-                                          icon: "trash" as const,
-                                          danger: true,
-                                          onClick: () => handleDelete(tx),
-                                        },
-                                      ]),
-                                  ]),
-                                ]}
-                              />
-                            </div>
+                          {monthly && (
+                            <small>
+                              Guarde {formatCurrency(monthly.perMonth)}/mês pra chegar no prazo
+                              {goal.itemsCount > 0 ? ` · ${goal.itemsCount} submetas` : ""}
+                            </small>
                           )}
-                        </li>
-                      ))}
-                    </Fragment>
-                  ))}
-                </ul>
-              )}
-            </section>
-          </div>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+          )}
 
           {/* Casal: quem pagou o quê da conta conjunta (detalhe na tela Par). */}
           {jointAccount && orderedMembers.length > 1 && (
@@ -1486,7 +1589,7 @@ export function DashboardPage() {
             />
           )}
 
-          {activeDebts.length > 0 && (
+          {moduleOn("debts") && activeDebts.length > 0 && (
             <section className="card" aria-label="Dívidas">
               <div className="section-header">
                 <p className="card-title">Dívidas</p>
@@ -1511,6 +1614,8 @@ export function DashboardPage() {
                 })}
               </ul>
             </section>
+          )}
+            </>
           )}
         </div>
       </div>

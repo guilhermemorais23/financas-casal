@@ -36,6 +36,7 @@ import { billsRouter } from "./modules/upcoming/upcoming.routes";
 import { debtsRouter } from "./modules/debts/debts.routes";
 import { feedbackRouter } from "./modules/feedback/feedback.routes";
 import { monthCloseRouter } from "./modules/monthClose/monthClose.routes";
+import { onboardingRouter } from "./modules/onboarding/onboarding.routes";
 import { loansRouter } from "./modules/loans/loans.routes";
 import { goalsRouter } from "./modules/goals/goals.routes";
 import { groupsRouter } from "./modules/groups/groups.routes";
@@ -57,6 +58,8 @@ import {
   logLoginEventHandler,
   welcomeSeenHandler,
   meHandler,
+  patchPreferenceModulesHandler,
+  putPreferencesHandler,
   revokeSessionsHandler,
   updateProfileHandler,
 } from "./modules/users/users.controller";
@@ -171,6 +174,8 @@ export function createApp() {
   app.post("/api/me/login-event", requireAuth, asyncHandler(logLoginEventHandler));
   app.post("/api/me/welcome-seen", requireAuth, asyncHandler(welcomeSeenHandler));
   app.patch("/api/me", requireAuth, asyncHandler(updateProfileHandler));
+  app.put("/api/me/preferences", requireAuth, asyncHandler(putPreferencesHandler));
+  app.patch("/api/me/preferences/modules", requireAuth, asyncHandler(patchPreferenceModulesHandler));
   app.delete("/api/me", requireAuth, asyncHandler(deleteAccountHandler));
   app.post("/api/me/revoke-sessions", requireAuth, asyncHandler(revokeSessionsHandler));
   app.use("/api/groups", groupsRouter);
@@ -200,6 +205,7 @@ export function createApp() {
   app.use("/api/billing", billingRouter);
   app.use("/api/loans", loansRouter);
   app.use("/api/month-close", monthCloseRouter);
+  app.use("/api/onboarding", onboardingRouter);
   app.use("/api/public/shares", publicSharesRouter);
 
   app.use(errorHandler);

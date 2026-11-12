@@ -21,11 +21,16 @@ import { BILLS_TABS } from "../components/BillsTabs";
 import { FeedbackChat, useFeedbackUnread } from "../components/FeedbackChat";
 import { useSwipeDownToClose } from "../hooks/useSwipeDownToClose";
 import { useTheme } from "../hooks/useTheme";
+import { useModules } from "../hooks/useModules";
+import type { ModuleKey } from "../utils/preferences";
 
 interface NavItem {
   to: string;
   label: string;
   icon: IconName;
+  // Some do menu quando a função está desligada (Conta e grupo > Funções do
+  // app). "bills" = Contas, que aparece se qualquer uma das abas aparecer.
+  module?: ModuleKey | "bills";
 }
 
 // Menu do PC (barra do topo): uma lista só, na ordem de uso. "Nova despesa"
@@ -36,19 +41,19 @@ interface NavItem {
 const NAV_ITEMS: (NavItem & { couple?: boolean; solo?: boolean })[] = [
   { to: "/dashboard", label: "Painel", icon: "home" },
   { to: "/par", label: "Par", icon: "heart", couple: true },
-  { to: "/reports", label: "Relatórios", icon: "chart" },
-  { to: "/contas", label: "Contas", icon: "receipt" },
-  { to: "/goals", label: "Metas", icon: "target" },
-  { to: "/shopping", label: "Lista de compras", icon: "cart", couple: true },
+  { to: "/reports", label: "Relatórios", icon: "chart", module: "reports" },
+  { to: "/contas", label: "Contas", icon: "receipt", module: "bills" },
+  { to: "/goals", label: "Metas", icon: "target", module: "goals" },
+  { to: "/shopping", label: "Lista de compras", icon: "cart", couple: true, module: "shopping" },
   { to: "/account", label: "Conta e grupo", icon: "sliders" },
 ];
 
 // Celular: Painel · Par · [+] · Contas · Mais. Todo o resto fica na folha
 // "Mais", então qualquer tela está a no máximo dois toques.
 const MORE_TILES: (NavItem & { couple?: boolean })[] = [
-  { to: "/reports", label: "Relatórios", icon: "chart", couple: true },
-  { to: "/goals", label: "Metas", icon: "target" },
-  { to: "/shopping", label: "Compras", icon: "cart", couple: true },
+  { to: "/reports", label: "Relatórios", icon: "chart", couple: true, module: "reports" },
+  { to: "/goals", label: "Metas", icon: "target", module: "goals" },
+  { to: "/shopping", label: "Compras", icon: "cart", couple: true, module: "shopping" },
 ];
 
 const BILLS_PATHS = [...BILLS_TABS.map((tab) => tab.to), "/debts", "/recurring-bills"];
@@ -121,7 +126,18 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
   }, [token, user?.id]);
   // Enquanto não sabe, mostra o menu do casal (a maioria).
   const isSolo = isCouple === false;
-  const showItem = (item: { couple?: boolean; solo?: boolean }) => (item.couple ? !isSolo : item.solo ? isSolo : true);
+  const moduleOn = useModules();
+  const showBills = moduleOn("cards") || moduleOn("payables") || moduleOn("debts") || moduleOn("loans");
+  const showModule = (module?: ModuleKey | "bills") => (!module ? true : module === "bills" ? showBills : moduleOn(module));
+  const showItem = (item: { couple?: boolean; solo?: boolean; module?: ModuleKey | "bills" }) =>
+    showModule(item.module) && (item.couple ? !isSolo : item.solo ? isSolo : true);
+  // Sozinho, o lugar do Par na barra de baixo fica com Relatórios (ou Metas,
+  // se Relatórios estiver desligado).
+  const soloSlot: NavItem | null = moduleOn("reports")
+    ? { to: "/reports", label: "Relatórios", icon: "chart" }
+    : moduleOn("goals")
+      ? { to: "/goals", label: "Metas", icon: "target" }
+      : null;
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
@@ -178,7 +194,7 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
 
   // A fatura (/cards/:id/fatura) também fica dentro de Contas.
   const isOnBills = BILLS_PATHS.includes(location.pathname) || location.pathname.startsWith("/cards/");
-  const isOnMore = MORE_PATHS.includes(location.pathname) && !(isSolo && location.pathname === "/reports");
+  const isOnMore = MORE_PATHS.includes(location.pathname) && !(isSolo && location.pathname === soloSlot?.to);
 
   function fromSheet(action: () => void) {
     setIsMoreOpen(false);
@@ -333,10 +349,12 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
           Painel
         </NavLink>
         {isSolo ? (
-          <NavLink to="/reports" className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>
-            <span className="app-bottom-nav-icon"><Icon name="chart" /></span>
-            Relatórios
-          </NavLink>
+          soloSlot && (
+            <NavLink to={soloSlot.to} className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>
+              <span className="app-bottom-nav-icon"><Icon name={soloSlot.icon} /></span>
+              {soloSlot.label}
+            </NavLink>
+          )
         ) : (
           <NavLink to="/par" className={({ isActive }) => `app-bottom-nav-link${isActive ? " active" : ""}`}>
             <span className="app-bottom-nav-icon"><Icon name="heart" /></span>
@@ -353,10 +371,12 @@ export function AppLayout({ children, wide = false }: { children: ReactNode; wid
         >
           <Icon name="plus" />
         </button>
-        <Link to="/contas" className={`app-bottom-nav-link${isOnBills ? " active" : ""}`}>
-          <span className="app-bottom-nav-icon"><Icon name="receipt" /></span>
-          Contas
-        </Link>
+        {showBills && (
+          <Link to="/contas" className={`app-bottom-nav-link${isOnBills ? " active" : ""}`}>
+            <span className="app-bottom-nav-icon"><Icon name="receipt" /></span>
+            Contas
+          </Link>
+        )}
         <button
           type="button"
           className={`app-bottom-nav-link${isOnMore || isMoreOpen ? " active" : ""}`}

@@ -16,7 +16,8 @@ import { paymentMethodLabel, type PaymentMethod } from "../utils/paymentMethod";
 import { Icon } from "../components/Icon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/ToastProvider";
-import { initialOf } from "../utils/initial";
+import { CategoryIcon } from "../components/CategoryIcon";
+import { EmptyState } from "../components/EmptyState";
 import {
   canDeleteFromStatement,
   canDeleteSecuredTransfer,
@@ -302,10 +303,7 @@ export function ParPage() {
               ))}
             </div>
           </div>
-          <p className="card-subtitle">
-            O que é do grupo: conta conjunta e tudo que vocês lançam nela. Lançamentos em
-            contas pessoais continuam só seus até decidirem mover pra cá.
-          </p>
+          <p className="card-subtitle">O que é de vocês dois. O pessoal continua só seu.</p>
         </div>
 
         <div className="stat-card">
@@ -328,13 +326,10 @@ export function ParPage() {
 
         {orderedMembers.length > 1 && (
           <div className="card">
-            <p className="card-title">Divisões em aberto</p>
-            <p className="card-subtitle">
-              Soma do que ainda está marcado "Em aberto" no extrato (não é só deste mês -- marque cada
-              lançamento como pago assim que acertarem, no Pix ou como for).
-            </p>
+            <p className="card-title">Quem ainda te deve</p>
+            <p className="card-subtitle">Marque como pago quando acertarem.</p>
             {!balance || balance.balances.length === 0 ? (
-              <p className="empty-state">Tudo em dia -- nenhuma divisão em aberto no momento.</p>
+              <p className="empty-state">Tudo acertado. Ninguém deve nada.</p>
             ) : (
               <ul className="settle-list">
                 {balance.balances.map((row) => (
@@ -386,15 +381,15 @@ export function ParPage() {
 
         {orderedMembers.length > 1 && pieSlices.length > 0 && (
           <div className="card">
-            <p className="card-title">Maiores gastos do casal</p>
-            <p className="card-subtitle">Só o que saiu da conta conjunta esse mês.</p>
+            <p className="card-title">Onde vocês mais gastaram</p>
+            <p className="card-subtitle">Da conta de vocês, neste mês.</p>
             <CategoryPieChart slices={pieSlices} />
           </div>
         )}
 
         <div className="card">
           <div className="section-header">
-            <p className="card-title">Extrato da conta conjunta</p>
+            <p className="card-title">Gastos de vocês</p>
             <Link to="/transactions/new" className="link">
               + Lançar aqui
             </Link>
@@ -405,16 +400,21 @@ export function ParPage() {
             </p>
           )}
           {transactions && transactions.length === 0 && (
-            <p className="empty-state">Nada lançado na conta conjunta ainda.</p>
+            <EmptyState
+              art="heart"
+              action={
+                <Link to="/transactions/new" className="btn btn-primary btn-sm">
+                  Lançar um gasto
+                </Link>
+              }
+            >
+              Nada lançado ainda. Lancem o primeiro gasto juntos.
+            </EmptyState>
           )}
           <ul className="transaction-list">
             {transactions?.map((tx) => (
               <li key={tx.id} className={`transaction-row${leavingIds.has(tx.id) ? " is-leaving" : ""}`}>
-                <span
-                  className="transaction-icon"
-                >
-                  {initialOf(tx.categoryName ?? tx.description)}
-                </span>
+                <CategoryIcon categoryId={tx.categoryId} name={tx.categoryName} emoji={tx.categoryEmoji} />
                 <div className="transaction-info">
                   <span className="transaction-desc">
                     <span className="text-truncate">{tx.description}</span>

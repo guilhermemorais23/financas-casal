@@ -10,6 +10,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, todayISO } from "../utils/format";
 import {
   PAYMENT_METHOD_OPTIONS,
+  paymentMethodLabel,
   readLastPaymentMethod,
   saveLastPaymentMethod,
   type PaymentMethod,
@@ -90,13 +91,22 @@ export function NewTransactionPage() {
   const [accountId, setAccountId] = useState(() => prefill.get("a") ?? "");
   const [categoryId, setCategoryId] = useState(() => prefill.get("c") ?? "");
   // Depois que a pessoa escolhe a categoria na mão, a sugestão automática
-  // não mexe mais nela.
-  const [categoryTouched, setCategoryTouched] = useState(isRepeat);
+  // não mexe mais nela. O ref deixa a resposta do servidor (que chega
+  // depois) saber disso na hora em que chega.
+  const [categoryTouched, setCategoryTouchedState] = useState(isRepeat);
+  const categoryTouchedRef = useRef(isRepeat);
+  function setCategoryTouched(touched: boolean) {
+    categoryTouchedRef.current = touched;
+    setCategoryTouchedState(touched);
+  }
+  // A categoria marcada veio de uma sugestão (mostra o selo "sugerida").
+  const [categorySuggested, setCategorySuggested] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [knownDescriptions] = useState(() => recentDescriptions(user?.id ?? ""));
   const [payerId, setPayerId] = useState(user?.id ?? "");
   const [occurredAt, setOccurredAt] = useState(() => todayISO());
-  const [splitType, setSplitType] = useState<"none" | "equal">("none");
+  // "Dividir" dos Primeiros passos abre já com a divisão ligada.
+  const [splitType, setSplitType] = useState<"none" | "equal">(() => (prefill.get("dividir") === "1" ? "equal" : "none"));
   const [isPrivate, setIsPrivate] = useState(false);
   // Vem do "Repetir" (p=) ou é a última forma que a pessoa usou.
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">(
@@ -123,6 +133,7 @@ export function NewTransactionPage() {
       ? "Hoje"
       : new Date(`${occurredAt}T00:00:00`).toLocaleDateString("pt-BR"),
     accounts.find((a) => a.id === accountId)?.name,
+    paymentMethod ? paymentMethodLabel(paymentMethod) : null,
     payerId === user?.id
       ? isIncome
         ? "você recebeu"
@@ -153,6 +164,8 @@ export function NewTransactionPage() {
   // Receita mostra só as categorias de receita (começa com "Receita" marcada);
   // despesa, só as de despesa.
   const typedCategories = useMemo(() => categoriesFor(categories, transactionType), [categories, transactionType]);
+  const typedCategoriesRef = useRef(typedCategories);
+  typedCategoriesRef.current = typedCategories;
   useEffect(() => {
     if (categories.length === 0) return;
     setCategoryId((current) => {
@@ -199,12 +212,42 @@ export function NewTransactionPage() {
       .catch(() => setCards([]));
   }, [token, user?.id]);
 
+  // Sugestão do servidor (histórico do grupo e palavras-chave), ~300 ms
+  // depois que a pessoa para de digitar. Só pré-seleciona: escolheu na mão,
+  // a sugestão não mexe mais.
+  const suggestSeq = useRef(0);
+  useEffect(() => {
+    const text = description.trim();
+    if (categoryTouched || text.length < 2) return;
+    const timer = window.setTimeout(() => {
+      const seq = ++suggestSeq.current;
+      apiRequest<{ categoryId: string | null; source: "history" | "keyword" | null }>(
+        `/categories/suggest?description=${encodeURIComponent(text)}&type=${transactionType}`,
+        { token }
+      )
+        .then((res) => {
+          if (seq !== suggestSeq.current || categoryTouchedRef.current || !res?.categoryId) return;
+          const suggested = res.categoryId;
+          if (!typedCategoriesRef.current.some((c) => c.id === suggested)) return;
+          setCategoryId(suggested);
+          setCategorySuggested(true);
+        })
+        .catch(() => {
+          // Sem sugestão: fica a categoria que já estava.
+        });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [description, transactionType, categoryTouched, token]);
+
   function handleDescriptionChange(value: string) {
     setDescription(value);
     if (categoryTouched) return;
     const suggestion = suggestFor(user?.id ?? "", value);
     if (!suggestion) return;
-    if (suggestion.categoryId && typedCategories.some((c) => c.id === suggestion.categoryId)) setCategoryId(suggestion.categoryId);
+    if (suggestion.categoryId && typedCategories.some((c) => c.id === suggestion.categoryId)) {
+      setCategoryId(suggestion.categoryId);
+      setCategorySuggested(true);
+    }
     if (suggestion.paymentMethod) setPaymentMethod(suggestion.paymentMethod);
     if (suggestion.accountId && accounts.some((a) => a.id === suggestion.accountId)) setAccountId(suggestion.accountId);
   }
@@ -222,6 +265,7 @@ export function NewTransactionPage() {
       await loadCategories();
       setCategoryId(created.id);
       setCategoryTouched(true);
+      setCategorySuggested(false);
       setNewCategoryName("");
       setNewCategoryEmoji("");
       setIsAddingCategory(false);
@@ -367,9 +411,6 @@ export function NewTransactionPage() {
             <Icon name="x" />
           </button>
         </div>
-        <p className="card-subtitle">
-          {isIncome ? "Registre um valor recebido pelo grupo ou pessoal." : "Registre um gasto do grupo ou pessoal."}
-        </p>
 
         <div className="segmented">
           <button
@@ -389,11 +430,13 @@ export function NewTransactionPage() {
         </div>
 
         <form onSubmit={handleSubmit}>
+          {/* Valor primeiro, grande e já com o cursor: o lançamento do dia a
+              dia é valor, o que foi e salvar. */}
           <div className="field">
             <label htmlFor="amount">Valor (R$)</label>
             <input
               id="amount"
-              className="amount-input"
+              className="amount-input amount-input-hero"
               inputMode="decimal"
               placeholder="0,00"
               value={amount}
@@ -404,9 +447,10 @@ export function NewTransactionPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="description">Descrição</label>
+            <label htmlFor="description">{isIncome ? "De onde veio" : "Com o quê"}</label>
             <input
               id="description"
+              placeholder={isIncome ? "Ex.: salário" : "Ex.: mercado"}
               value={description}
               onChange={(e) => handleDescriptionChange(e.target.value)}
               list="known-descriptions"
@@ -422,7 +466,10 @@ export function NewTransactionPage() {
 
           <div className="field">
             <div className="field-label-row">
-              <label htmlFor="category">Categoria</label>
+              <label htmlFor="category">
+                Categoria
+                {categorySuggested && !categoryTouched && <span className="badge suggested-badge">sugerida</span>}
+              </label>
               <button
                 type="button"
                 className="link-button"
@@ -434,6 +481,7 @@ export function NewTransactionPage() {
             <select id="category" value={categoryId} onChange={(e) => {
                 setCategoryId(e.target.value);
                 setCategoryTouched(true);
+                setCategorySuggested(false);
               }}>
               <option value="">Sem categoria</option>
               {typedCategories.map((category) => (
@@ -461,30 +509,29 @@ export function NewTransactionPage() {
             )}
           </div>
 
-          <div className="field">
-            <span className="field-label" id="payment-label">
-              {isIncome ? "Como recebeu" : "Como foi pago"}
-            </span>
-            <div className="chip-row payment-chips" role="group" aria-labelledby="payment-label">
-              {PAYMENT_METHOD_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`filter-chip${paymentMethod === option.value ? " active" : ""}`}
-                  aria-pressed={paymentMethod === option.value}
-                  // Só marca: a tela já abre com a última forma usada marcada, e
-                  // tocar nela de novo desmarcava -- o Crédito sumia e a compra
-                  // era salva sem ir pro cartão. Pra trocar, toca em outra.
-                  onClick={() => setPaymentMethod(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
+          {/* Com mais gente no grupo, dividir é um toque (divisão igual). */}
+          {!isIncome && !selectedCard && members.length > 1 && (
+            <div className="field split-chip-field">
+              <button
+                type="button"
+                className={`filter-chip split-chip${splitType === "equal" ? " active" : ""}`}
+                aria-pressed={splitType === "equal"}
+                onClick={() => setSplitType((current) => (current === "equal" ? "none" : "equal"))}
+              >
+                <Icon name="users" />
+                {members.length === 2
+                  ? `Dividir com ${members.find((m) => m.id !== user?.id)?.displayName ?? "seu par"}`
+                  : "Dividir com o grupo"}
+              </button>
+              {splitType === "equal" && perPersonAmount !== null && (
+                <p className="field-hint">{formatCurrency(perPersonAmount)} pra cada um.</p>
+              )}
             </div>
-          </div>
+          )}
 
-          {/* O resto já vem preenchido (hoje, sua conta, você pagou). Fica
-              escondido pra o lançamento do dia a dia caber numa tela. */}
+          {/* O resto já vem preenchido (hoje, sua conta, você pagou, a última
+              forma de pagamento). Fica escondido pra o lançamento do dia a dia
+              caber numa tela. */}
           <button
             type="button"
             className="more-options-toggle"
@@ -500,6 +547,28 @@ export function NewTransactionPage() {
 
           {showMore && (
             <div className="more-options">
+              <div className="field">
+                <span className="field-label" id="payment-label">
+                  {isIncome ? "Como recebeu" : "Como pagou"}
+                </span>
+                <div className="chip-row payment-chips" role="group" aria-labelledby="payment-label">
+                  {PAYMENT_METHOD_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`filter-chip${paymentMethod === option.value ? " active" : ""}`}
+                      aria-pressed={paymentMethod === option.value}
+                      // Só marca: a tela já abre com a última forma usada marcada, e
+                      // tocar nela de novo desmarcava -- o Crédito sumia e a compra
+                      // era salva sem ir pro cartão. Pra trocar, toca em outra.
+                      onClick={() => setPaymentMethod(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="field">
                 <label htmlFor="occurredAt">Data</label>
                 <input
@@ -555,40 +624,17 @@ export function NewTransactionPage() {
                   onChange={(e) => setRecurringMonths(e.target.value)}
                 />
                 <p className="field-hint">
-                  Lança {description.trim() ? `"${description.trim()}"` : "esse valor"} todo mês, a partir de{" "}
-                  {occurredAt ? new Date(`${occurredAt}T00:00:00`).toLocaleDateString("pt-BR") : "hoje"}, já de uma vez.
+                  Já lança todos os meses, a partir de{" "}
+                  {occurredAt ? new Date(`${occurredAt}T00:00:00`).toLocaleDateString("pt-BR") : "hoje"}.
                 </p>
               </div>
             )}
 
             {!isIncome && !selectedCard && (
-              <>
-                <div className="field">
-                  <label htmlFor="split">Divisão</label>
-                  <select
-                    id="split"
-                    value={splitType}
-                    onChange={(e) => setSplitType(e.target.value as "none" | "equal")}
-                  >
-                    <option value="none">Não dividir</option>
-                    <option value="equal">Dividir igualmente entre o grupo</option>
-                  </select>
-                  {splitType === "equal" && (
-                    <p className="field-hint">
-                      {members.length > 1
-                        ? `${members.length} pessoas no grupo${
-                            perPersonAmount !== null ? ` — ${formatCurrency(perPersonAmount)} cada` : ""
-                          }.`
-                        : "Só tem você no grupo por enquanto — convide alguém pra dividir de verdade."}
-                    </p>
-                  )}
-                </div>
-
-                <label className="checkbox-field">
-                  <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-                  Privada (só você vê o nome)
-                </label>
-              </>
+              <label className="checkbox-field">
+                <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+                Privada (só você vê o nome)
+              </label>
             )}
             </div>
           )}
@@ -608,7 +654,7 @@ export function NewTransactionPage() {
                       Não, só registrar
                     </button>
                   </div>
-                  <p className="field-hint">A gente lembra a resposta pras próximas compras no crédito.</p>
+                  <p className="field-hint">A gente lembra da resposta.</p>
                 </>
               ) : (
                 <>
@@ -650,9 +696,7 @@ export function NewTransactionPage() {
                           </option>
                         ))}
                       </select>
-                      <p className="field-hint">
-                        Entra na fatura do cartão, não no saldo da conta agora: sai da conta quando você pagar a fatura.
-                      </p>
+                      <p className="field-hint">Entra na fatura. Sai da conta quando você pagar a fatura.</p>
                     </div>
                   )}
                 </>

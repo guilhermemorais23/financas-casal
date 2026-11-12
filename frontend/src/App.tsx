@@ -33,6 +33,7 @@ import { ToastProvider } from "./components/ToastProvider";
 import { AnnouncementPopup } from "./components/AnnouncementPopup";
 import { PremiumPrompt } from "./components/PremiumPrompt";
 import { WelcomeTour } from "./components/WelcomeTour";
+import { OnboardingQuestions } from "./components/OnboardingQuestions";
 import { importWithRecovery } from "./utils/appRecovery";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { LoginPage } from "./pages/LoginPage";
@@ -260,6 +261,7 @@ function App() {
           </GroupScoped>
         </Suspense>
         <WelcomeTour />
+        <OnboardingQuestions />
         <AnnouncementPopup />
         <PremiumPrompt />
         </ErrorBoundary>
