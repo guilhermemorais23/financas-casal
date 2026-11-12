@@ -31,8 +31,12 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { initAppRecovery } from './utils/appRecovery'
+import { initServiceWorker } from './utils/swRegister'
 
 initAppRecovery()
+// App instalado no celular: procura versão nova toda vez que volta pra tela
+// (utils/swUpdate.ts).
+initServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

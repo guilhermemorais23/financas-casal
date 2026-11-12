@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/client" />
 
 // Diz ao TypeScript quais variáveis de ambiente o app usa e de que tipo são.
 // Os valores vêm do frontend/.env no seu PC (copiado do .env.example) e dos
