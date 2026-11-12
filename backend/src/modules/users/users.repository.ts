@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../db/firestore";
 import { memoizeScoped } from "../../utils/readCache";
+import { preferencesFromStored, type Preferences } from "./preferences";
 
 export interface UserRow {
   id: string;
@@ -16,6 +17,12 @@ export interface UserRow {
   // Apresentação de boas-vindas: true só pra conta criada agora, até ela
   // aparecer uma vez. Contas antigas (sem o campo) contam como já vista.
   welcomePending: boolean;
+  // Uso e módulos ligados (ver preferences.ts). null = ainda não respondeu.
+  preferences: Preferences | null;
+  // "Primeiros passos" do Painel: fechado de vez pela pessoa, e quando todos
+  // os passos ficaram feitos pela primeira vez (some 3 dias depois).
+  checklistDismissed: boolean;
+  checklistCompletedAt: string | null;
 }
 
 const usersCol = db.collection("users");
@@ -37,6 +44,9 @@ function toUserRow(id: string, data: FirebaseFirestore.DocumentData): UserRow {
     photoDataUrl: data.photoDataUrl ?? null,
     phone: data.phone ?? null,
     welcomePending: data.welcomePending === true,
+    preferences: preferencesFromStored(data.preferences),
+    checklistDismissed: data.checklistDismissed === true,
+    checklistCompletedAt: typeof data.checklistCompletedAt === "string" ? data.checklistCompletedAt : null,
   };
 }
 
@@ -84,6 +94,9 @@ export async function upsertUserProfile(input: {
       photoDataUrl: null,
       phone: null,
       welcomePending: true,
+      preferences: null,
+      checklistDismissed: false,
+      checklistCompletedAt: null,
     },
     isNew: true,
   };
@@ -101,6 +114,42 @@ export async function updateUserProfile(
 
 export async function markWelcomeSeen(userId: string): Promise<void> {
   await usersCol.doc(userId).update({ welcomePending: false, welcomeSeenAt: FieldValue.serverTimestamp() });
+}
+
+export async function savePreferences(userId: string, preferences: Preferences): Promise<void> {
+  await usersCol.doc(userId).set({ preferences, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+
+// Liga/desliga módulos lendo e gravando juntos: dois toques rápidos em
+// módulos diferentes não apagam um ao outro. Sem preferências ainda, parte
+// do padrão de quem não respondeu (tudo ligado).
+export async function updatePreferenceModules(
+  userId: string,
+  patch: Partial<Preferences["modules"]>,
+  fallback: Preferences
+): Promise<Preferences> {
+  const ref = usersCol.doc(userId);
+  return db.runTransaction(async (tx) => {
+    const current = preferencesFromStored((await tx.get(ref)).data()?.preferences) ?? fallback;
+    const next: Preferences = { ...current, modules: { ...current.modules, ...patch } };
+    tx.set(ref, { preferences: next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return next;
+  });
+}
+
+export async function markChecklistDismissed(userId: string): Promise<void> {
+  await usersCol.doc(userId).set({ checklistDismissed: true }, { merge: true });
+}
+
+// Só a primeira vez conta: é dela que saem os 3 dias até o cartão sumir.
+export async function saveChecklistCompletedAt(userId: string, completedAt: string): Promise<string> {
+  const ref = usersCol.doc(userId);
+  return db.runTransaction(async (tx) => {
+    const saved = (await tx.get(ref)).data()?.checklistCompletedAt;
+    if (typeof saved === "string") return saved;
+    tx.set(ref, { checklistCompletedAt: completedAt }, { merge: true });
+    return completedAt;
+  });
 }
 
 // Fechamento do mês: o último mês em que a pessoa tocou "Entendi". Guarda só

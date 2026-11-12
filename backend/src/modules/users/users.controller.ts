@@ -17,14 +17,23 @@ import { logAccess, type AccessEvent } from "../../utils/accessLog";
 import { sendNewSignupEmail, sendWelcomeEmail } from "../../email/mailer";
 import { auth } from "../../db/firestore";
 import { deleteAccountForUser } from "./deleteAccount.service";
-import { findUserById, markWelcomeSeen, updateUserProfile, upsertUserProfile, type UserRow } from "./users.repository";
+import {
+  findUserById,
+  markWelcomeSeen,
+  savePreferences,
+  updatePreferenceModules,
+  updateUserProfile,
+  upsertUserProfile,
+  type UserRow,
+} from "./users.repository";
+import { InvalidPreferencesError, defaultModules, parseModulesPatch, parsePreferencesBody } from "./preferences";
 import { isNonEmptyString } from "../../utils/validation";
 
 // O isAdmin aqui é o que o frontend usa pra decidir se mostra o item Admin no
 // menu -- a rota do backend confere o ADMIN_EMAILS de novo, por conta
 // própria (admin.controller.ts), então isto é só uma trava de tela (quem não
 // pode entrar nunca vê "Admin" no menu), e não a barreira de segurança.
-async function toPublicUser(user: UserRow) {
+export async function toPublicUser(user: UserRow) {
   // Chaves do app que mudam o que a tela mostra: a tela Plano só aparece com
   // a cobrança ligada; o aviso de manutenção aparece pra todo mundo.
   const settings = await getAppSettings().catch(() => null);
@@ -41,6 +50,9 @@ async function toPublicUser(user: UserRow) {
     phone: user.phone,
     isAdmin: isAdminEmail(user.email),
     welcomePending: user.welcomePending,
+    // null = nunca respondeu "pra que você vai usar": o app mostra a pergunta
+    // e, até lá, todos os módulos.
+    preferences: user.preferences,
   };
 }
 
@@ -108,6 +120,42 @@ export async function meHandler(req: Request, res: Response) {
 export async function welcomeSeenHandler(req: Request, res: Response) {
   await markWelcomeSeen(req.user!.id);
   res.status(204).end();
+}
+
+// Respostas do primeiro acesso (uso + objetivos), e os módulos se a pessoa
+// já ajustou algum. Grava tudo de uma vez: é o "Pronto" da tela de perguntas.
+export async function putPreferencesHandler(req: Request, res: Response) {
+  try {
+    const preferences = parsePreferencesBody(req.body);
+    await savePreferences(req.user!.id, preferences);
+    res.status(200).json(preferences);
+  } catch (err) {
+    if (err instanceof InvalidPreferencesError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
+// Liga/desliga um ou mais módulos (tela Conta). Quem nunca respondeu as
+// perguntas parte do "tudo ligado" e só muda o que tocou.
+export async function patchPreferenceModulesHandler(req: Request, res: Response) {
+  try {
+    const patch = parseModulesPatch(req.body);
+    const preferences = await updatePreferenceModules(req.user!.id, patch, {
+      usage: null,
+      goals: [],
+      modules: defaultModules(null, []),
+    });
+    res.status(200).json(preferences);
+  } catch (err) {
+    if (err instanceof InvalidPreferencesError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function updateProfileHandler(req: Request, res: Response) {

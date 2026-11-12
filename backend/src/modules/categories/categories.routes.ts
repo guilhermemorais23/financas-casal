@@ -25,6 +25,7 @@ import {
   updateCategory,
 } from "./categories.repository";
 import { isNonEmptyString } from "../../utils/validation";
+import { suggestCategory } from "./categorySuggest";
 
 export class CategoryNotFoundError extends Error {}
 export class DefaultCategoryError extends Error {}
@@ -55,6 +56,27 @@ categoriesRouter.get(
     const groupId = await requireGroupId(req.user!.id);
     const categories = await findVisibleCategories(groupId);
     res.status(200).json(categories);
+  })
+);
+
+// Palpite de categoria enquanto a pessoa digita a descrição (ver
+// categorySuggest.ts). Fica antes de qualquer rota com /:id.
+categoriesRouter.get(
+  "/suggest",
+  asyncHandler(async (req, res) => {
+    const { description, type } = req.query;
+    if (type !== undefined && type !== "expense" && type !== "income") {
+      res.status(400).json({ error: "type precisa ser expense ou income" });
+      return;
+    }
+    const groupId = await requireGroupId(req.user!.id);
+    const suggestion = await suggestCategory(
+      groupId,
+      req.user!.id,
+      typeof description === "string" ? description : "",
+      type ?? "expense"
+    );
+    res.status(200).json(suggestion);
   })
 );
 
