@@ -8488,3 +8488,250 @@ select {
     transition: none;
   }
 }
+
+/* Painel: "Ver mais do mês" ---------------------------------------------- */
+
+.painel-band-month {
+  margin-top: 0.35rem;
+}
+
+.painel-more-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.painel-more-toggle:hover {
+  background: var(--color-primary-soft);
+}
+
+.painel-more-toggle .icon {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s;
+}
+
+.painel-more-toggle[aria-expanded="true"] .icon {
+  transform: rotate(180deg);
+}
+
+/* Primeiros passos ------------------------------------------------------- */
+
+.first-steps {
+  position: relative;
+  overflow: hidden;
+}
+
+.first-steps-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.first-steps-progress span {
+  white-space: nowrap;
+}
+
+.first-steps-progress .progress-track {
+  flex: 1;
+}
+
+.first-steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.first-steps-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.first-steps-row:last-child {
+  border-bottom: none;
+}
+
+.first-steps-check {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 2px solid var(--baseline);
+  border-radius: 50%;
+  color: #fff;
+}
+
+.first-steps-check .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.first-steps-row.is-done .first-steps-check {
+  border-color: var(--status-good);
+  background: var(--status-good);
+}
+
+.first-steps-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.first-steps-row.is-done .first-steps-label {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.first-steps.is-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.first-steps-done-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--status-good);
+  color: #fff;
+}
+
+.first-steps-done-icon .icon {
+  width: 26px;
+  height: 26px;
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.confetti i {
+  position: absolute;
+  top: -12px;
+  left: var(--x);
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti-fall 1.6s ease-in var(--delay) 1 forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(220px) rotate(var(--spin));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti {
+    display: none;
+  }
+  .painel-more-toggle .icon {
+    transition: none;
+  }
+}
+
+/* Ícone colorido da categoria nas listas --------------------------------- */
+
+.transaction-icon.cat-icon {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cat-color) 16%, var(--color-card));
+  color: color-mix(in srgb, var(--cat-color) 72%, var(--ink-primary));
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.transaction-icon.cat-icon.has-emoji {
+  font-size: 1.05rem;
+}
+
+.transaction-icon.cat-icon.is-none {
+  background: var(--glyph-bg);
+  color: var(--ink-muted);
+}
+
+.transaction-icon.cat-icon .icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Lista vazia que ensina ------------------------------------------------- */
+
+.empty-state-friendly {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.empty-state-friendly p {
+  margin: 0;
+}
+
+.empty-art {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 120px;
+  height: 80px;
+}
+
+.empty-art-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.empty-art-blob {
+  fill: var(--color-primary-soft);
+}
+
+.empty-art-dot {
+  fill: var(--coffee-300);
+  opacity: 0.6;
+}
+
+.empty-art-shadow {
+  fill: var(--color-border);
+}
+
+.empty-art-icon {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  margin-top: -4px;
+  color: var(--color-primary);
+}
+
+.empty-state-action {
+  margin-top: 0.4rem;
+}

@@ -205,10 +205,12 @@ export function AccountPage() {
       .catch(() => setBankReady(false));
   }, [token]);
 
-  // "Convidar meu par" no menu abre aqui já no convite.
+  // "Convidar meu par" no menu abre aqui já no convite; os Primeiros passos
+  // do Painel abrem no convite ou no orçamento.
   useEffect(() => {
-    if (group && window.location.hash === "#convite") {
-      document.getElementById("convite")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const target = window.location.hash.slice(1);
+    if (group && (target === "convite" || target === "orcamento")) {
+      document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [group]);
 
