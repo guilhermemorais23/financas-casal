@@ -8735,3 +8735,32 @@ select {
 .empty-state-action {
   margin-top: 0.4rem;
 }
+
+/* Lançar em 3 toques ----------------------------------------------------- */
+
+.amount-input.amount-input-hero {
+  font-size: 2.1rem;
+}
+
+.suggested-badge {
+  margin-left: 0.45rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.72rem;
+  vertical-align: middle;
+}
+
+.split-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.split-chip .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.split-chip-field .field-hint {
+  margin-top: 0.35rem;
+}
