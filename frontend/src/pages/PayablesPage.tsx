@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { BillsTabs } from "../components/BillsTabs";
 import { AppLayout } from "../layouts/AppLayout";
+import { useModules } from "../hooks/useModules";
 import { DebtsPage } from "./DebtsPage";
 import { RecurringBillsPage } from "./RecurringBillsPage";
 
@@ -9,12 +10,19 @@ import { RecurringBillsPage } from "./RecurringBillsPage";
 // continuam inteiras, só dividem a mesma aba. A aba fica na URL (?aba=).
 export function PayablesPage() {
   const [params, setParams] = useSearchParams();
-  const tab = params.get("aba") === "dividas" ? "dividas" : "fixas";
+  const moduleOn = useModules();
+  // Uma das duas desligada: a outra abre direto, sem a troca de cima (o
+  // endereço com ?aba= continua abrindo qualquer uma).
+  const showFixed = moduleOn("payables");
+  const showDebts = moduleOn("debts");
+  const asked = params.get("aba");
+  const tab = asked === "dividas" || (!asked && !showFixed && showDebts) ? "dividas" : "fixas";
 
   return (
     <AppLayout>
       <div className="page-stack">
         <BillsTabs />
+        {showFixed && showDebts && (
         <div className="segmented payables-switch" role="tablist" aria-label="O que ver">
           {(
             [
@@ -34,6 +42,7 @@ export function PayablesPage() {
             </button>
           ))}
         </div>
+        )}
         {tab === "dividas" ? <DebtsPage embedded /> : <RecurringBillsPage embedded />}
       </div>
     </AppLayout>

@@ -607,7 +607,7 @@ export function CardsPage() {
         )}
 
         <p className="card-subtitle card-closing-note">
-          Fecha dia {card.closingDay} e vence dia {card.dueDay}. Compras depois do fechamento caem na fatura seguinte.{" "}
+          Fecha dia {card.closingDay} e vence dia {card.dueDay}.{" "}
           <button
             type="button"
             className="link-button"
@@ -752,7 +752,7 @@ export function CardsPage() {
                 className={`segmented-option${limitType === "secured" ? " active" : ""}`}
                 onClick={() => setLimitType("secured")}
               >
-                Limite garantido
+                Com limite guardado
               </button>
             </div>
 
@@ -792,11 +792,11 @@ export function CardsPage() {
               <p className="field-hint">
                 {limitType === "secured"
                   ? securedFromAccount === null
-                    ? "Ex.: sobrou do salário e você passou pro cartão = tirei da minha conta. Tinha numa poupança que o app não acompanha = já estava guardado fora."
+                    ? "O dinheiro que você deixou guardado pra virar o limite."
                     : securedFromAccount
-                      ? `Esse valor sai ${scope === "joint" ? "da Nossa Conta (cartão do grupo)" : "da sua conta pessoal"} hoje e vira o limite do cartão. Continua sendo seu: dá pra guardar mais ou resgatar depois.`
-                      : "Vira o limite do cartão sem mexer no saldo da conta. O que você comprar entra na fatura do mês seguinte."
-                  : "Se preencher, a gente acompanha quanto do limite já está comprometido."}
+                      ? `Sai ${scope === "joint" ? "da Nossa Conta" : "da sua conta"} hoje. Continua sendo seu.`
+                      : "Não mexe no saldo da conta."
+                  : "Com o limite, a gente mostra quanto ainda dá pra usar."}
               </p>
             </div>
 
@@ -818,7 +818,7 @@ export function CardsPage() {
             Cartões do grupo
           </p>
           {cards === null ? null : jointCards.length === 0 ? (
-            <EmptyState>Nenhum cartão do casal cadastrado ainda.</EmptyState>
+            <EmptyState art="card">Nenhum cartão do grupo ainda.</EmptyState>
           ) : (
             <div className="page-stack">{jointCards.map(renderCard)}</div>
           )}
@@ -829,7 +829,7 @@ export function CardsPage() {
             Seus cartões pessoais
           </p>
           {cards === null ? null : personalCards.length === 0 ? (
-            <EmptyState>Nenhum cartão pessoal cadastrado ainda.</EmptyState>
+            <EmptyState art="card">Nenhum cartão seu ainda.</EmptyState>
           ) : (
             <div className="page-stack">{personalCards.map(renderCard)}</div>
           )}

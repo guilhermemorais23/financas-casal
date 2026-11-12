@@ -30,6 +30,9 @@ vi.mock("../layouts/AppLayout", () => ({
 
 beforeEach(async () => {
   (await import("./fakeApi")).resetApi();
+  (await import("./fakeAuth")).fakeAuth.user.preferences = null;
   localStorage.clear();
+  // Dados guardados pra abrir rápido (pageCache) não passam de um teste pro outro.
+  (await import("../utils/pageCache")).clearCache();
   sessionStorage.clear();
 });

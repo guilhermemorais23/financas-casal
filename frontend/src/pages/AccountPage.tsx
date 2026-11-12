@@ -16,6 +16,7 @@ import { initialOf } from "../utils/initial";
 import { categoryTypeOf, type CategoryType } from "../utils/categories";
 import { useTheme } from "../hooks/useTheme";
 import { parseMoney } from "../utils/money";
+import { isModuleOn, MODULE_INFO, MODULE_KEYS, reopenOnboarding, type ModuleKey, type Preferences } from "../utils/preferences";
 
 interface AccountRow {
   id: string;
@@ -60,7 +61,7 @@ interface CategoryRow {
 }
 
 export function AccountPage() {
-  const { user, token, logout, refreshUser, revokeAllSessions, deleteAccount } = useAuth();
+  const { user, token, logout, refreshUser, revokeAllSessions, deleteAccount, setPreferences } = useAuth();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -98,6 +99,30 @@ export function AccountPage() {
   const [isGeneratingWhatsappCode, setIsGeneratingWhatsappCode] = useState(false);
 
   const month = currentMonthParam();
+
+  // Funções do app: cada interruptor salva na hora (PATCH) e volta se falhar.
+  const modulesFrom = (preferences: Preferences | null | undefined) =>
+    Object.fromEntries(MODULE_KEYS.map((key) => [key, isModuleOn(preferences, key)])) as Record<ModuleKey, boolean>;
+  const [modules, setModules] = useState(() => modulesFrom(user?.preferences));
+  useEffect(() => {
+    setModules(modulesFrom(user?.preferences));
+  }, [user?.preferences]);
+
+  async function handleToggleModule(key: ModuleKey) {
+    const next = !modules[key];
+    setModules((current) => ({ ...current, [key]: next }));
+    try {
+      const preferences = await apiRequest<Preferences>("/me/preferences/modules", {
+        method: "PATCH",
+        token,
+        body: { [key]: next },
+      });
+      setPreferences(preferences);
+    } catch (err) {
+      setModules((current) => ({ ...current, [key]: !next }));
+      showToast(err instanceof ApiError ? err.message : "Não deu pra salvar agora", { variant: "error" });
+    }
+  }
 
   async function load() {
     const [groupRes, budgetRes, categoryBudgetsRes, categoriesRes] = await Promise.all([
@@ -180,10 +205,12 @@ export function AccountPage() {
       .catch(() => setBankReady(false));
   }, [token]);
 
-  // "Convidar meu par" no menu abre aqui já no convite.
+  // "Convidar meu par" no menu abre aqui já no convite; os Primeiros passos
+  // do Painel abrem no convite ou no orçamento.
   useEffect(() => {
-    if (group && window.location.hash === "#convite") {
-      document.getElementById("convite")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const target = window.location.hash.slice(1);
+    if (group && (target === "convite" || target === "orcamento")) {
+      document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [group]);
 
@@ -415,7 +442,7 @@ export function AccountPage() {
   return (
     <AppLayout>
       <div className="page-stack">
-        <h1>Conta</h1>
+        <h1>Conta e grupo</h1>
 
         {user?.billingEnabled && (
         <Link to="/plano" className="card plan-link">
@@ -547,8 +574,8 @@ export function AccountPage() {
           <p className="card-title">Contas conectadas</p>
           <p className="card-subtitle">
             {bankReady
-              ? "Traga os lançamentos do seu banco sem digitar: pelo arquivo do extrato ou conectando a conta, que avisa quando chegam lançamentos novos."
-              : "Traga os lançamentos do seu banco sem digitar. Hoje pelo arquivo do extrato; conectando a conta, eles entram sozinhos."}
+              ? "Traga os gastos do banco sem digitar."
+              : "Traga os gastos do banco sem digitar, pelo extrato."}
           </p>
           <div className="connect-actions">
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsImportOpen(true)}>
@@ -581,9 +608,9 @@ export function AccountPage() {
           />
         )}
 
-        <div className="card form-card">
+        <div className="card form-card" id="orcamento">
           <p className="card-title">Orçamento do mês</p>
-          <p className="card-subtitle">Um teto por mês, visto no Painel.</p>
+          <p className="card-subtitle">Quanto vocês querem gastar no mês, no máximo.</p>
           <form onSubmit={handleSaveBudget}>
             <div className="field">
               <label htmlFor="budget-cap">Teto (R$)</label>
@@ -607,6 +634,38 @@ export function AccountPage() {
             </button>
           </form>
         </div>
+
+        <section className="card" aria-labelledby="funcoes-title">
+          <div className="section-header">
+            <p className="card-title" id="funcoes-title">
+              Funções do app
+            </p>
+            <button type="button" className="link-button" onClick={reopenOnboarding}>
+              Refazer as perguntas
+            </button>
+          </div>
+          <p className="card-subtitle">Desligue o que você não usa. Sai do menu e do Painel.</p>
+          <ul className="module-list">
+            {MODULE_KEYS.map((key) => (
+              <li key={key} className="module-row">
+                <span className="module-row-text">
+                  <strong id={`modulo-${key}`}>{MODULE_INFO[key].label}</strong>
+                  <small>{MODULE_INFO[key].hint}</small>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={modules[key]}
+                  aria-labelledby={`modulo-${key}`}
+                  className={`pref-switch${modules[key] ? " is-on" : ""}`}
+                  onClick={() => void handleToggleModule(key)}
+                >
+                  <span className="pref-switch-knob" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         <div className="card">
           <p className="card-title">Aparência</p>
@@ -634,10 +693,7 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Categorias</p>
-          <p className="card-subtitle">
-            As padrão valem pra qualquer grupo e não dá pra mudar. As que vocês criaram dá pra renomear ou
-            excluir. As de receita só aparecem ao lançar uma entrada.
-          </p>
+          <p className="card-subtitle">As que vocês criaram dá pra mudar ou excluir.</p>
           {categories?.map((category) => (
             <div key={category.id} className="category-budget-row">
               {editingCategoryId === category.id ? (
@@ -714,14 +770,14 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Orçamento por categoria</p>
-          <p className="card-subtitle">Defina um teto pra cada categoria. Deixe em branco pra não acompanhar.</p>
+          <p className="card-subtitle">Um limite pra cada categoria. Em branco, sem limite.</p>
           {error && (
             <p className="alert" role="alert">
               {error}
             </p>
           )}
           {categoryBudgets && categoryBudgets.length === 0 && (
-            <p className="empty-state">Crie categorias em "Nova despesa" pra poder definir tetos aqui.</p>
+            <p className="empty-state">Crie uma categoria ao lançar um gasto.</p>
           )}
           {categoryBudgets?.map((row) => (
             <div key={row.categoryId} className="category-budget-row">
@@ -755,10 +811,7 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Assistente (WhatsApp)</p>
-          <p className="card-subtitle">
-            Ainda em fase de teste (número de teste da Meta) -- fale seus gastos ou pergunte sobre suas finanças por
-            lá. Gere um código aqui e envie ele pro número de teste que aparece no seu WhatsApp Business.
-          </p>
+          <p className="card-subtitle">Em teste. Gere o código e mande pro nosso número no WhatsApp.</p>
           {whatsappCode && (
             <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.15rem" }}>
               {whatsappCode}
@@ -781,10 +834,7 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Assistente (Telegram)</p>
-          <p className="card-subtitle">
-            Fale seus gastos ou pergunte sobre suas finanças pelo Telegram. Gere um código aqui e envie ele pro bot
-            pra vincular sua conta.
-          </p>
+          <p className="card-subtitle">Lance e pergunte pelo Telegram. Gere o código e mande pro bot.</p>
           {telegramCode && (
             <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.15rem" }}>
               {telegramCode}
@@ -826,8 +876,8 @@ export function AccountPage() {
         <div className="card danger-zone">
           <p className="card-title">Excluir conta</p>
           <p className="card-subtitle">
-            Apaga seu login e seus dados pessoais para sempre. Se você for a última pessoa do grupo, o grupo inteiro é
-            apagado. Veja os detalhes na <Link to="/privacidade">política de privacidade</Link>.
+            Apaga seu login e seus dados pra sempre. Se você for o último do grupo, o grupo some junto.{" "}
+            <Link to="/privacidade">Saiba mais</Link>.
           </p>
           <div className="field">
             <label htmlFor="delete-account-confirm">Digite EXCLUIR para confirmar</label>

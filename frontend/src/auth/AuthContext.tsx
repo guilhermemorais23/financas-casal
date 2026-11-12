@@ -36,6 +36,7 @@ import { getActiveGroupId, setActiveGroupId, subscribeActiveGroup } from "../api
 import { ApiError, apiRequest, setTokenRefresher, warmUpApi } from "../api/client";
 import { firebaseAuth } from "../firebase";
 import { clearCache } from "../utils/pageCache";
+import type { Preferences } from "../utils/preferences";
 
 export interface AuthUser {
   id: string;
@@ -57,6 +58,9 @@ export interface AuthUser {
   maintenance?: string | null;
   // Conta recém-criada que ainda não viu a apresentação de boas-vindas.
   welcomePending?: boolean;
+  // Respostas da pergunta inicial e as funções ligadas (utils/preferences.ts).
+  // null (ou ausente, perfil antigo) = nunca respondeu: tudo aparece.
+  preferences?: Preferences | null;
 }
 
 interface AuthContextValue {
@@ -71,6 +75,9 @@ interface AuthContextValue {
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  // Troca as preferências no perfil já carregado (a resposta do PUT/PATCH
+  // traz o objeto inteiro), sem buscar o /me de novo.
+  setPreferences: (preferences: Preferences) => void;
   resetPassword: (email: string) => Promise<void>;
   revokeAllSessions: () => Promise<void>;
   // Grupo aberto no app (casal, família...). Trocar recarrega as telas com
@@ -276,6 +283,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(profile);
   }, [token]);
 
+  const setPreferences = useCallback((preferences: Preferences) => {
+    setUser((current) => (current ? { ...current, preferences } : current));
+  }, []);
+
   const activeGroupId = useSyncExternalStore(subscribeActiveGroup, getActiveGroupId);
 
   // O grupo guardado no aparelho precisa ser um dos grupos da pessoa (outra
@@ -384,13 +395,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       refreshUser,
+      setPreferences,
       resetPassword,
       revokeAllSessions,
       deleteAccount,
       activeGroupId,
       switchGroup,
     }),
-    [user, token, isLoading, login, loginWithProvider, register, logout, refreshUser, resetPassword, revokeAllSessions, deleteAccount, activeGroupId, switchGroup]
+    [user, token, isLoading, login, loginWithProvider, register, logout, refreshUser, setPreferences, resetPassword, revokeAllSessions, deleteAccount, activeGroupId, switchGroup]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -282,10 +282,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
     <>
         <div className="card form-card">
           <h1>Dívidas</h1>
-          <p className="card-subtitle">
-            Comprou parcelado e tá pagando aos poucos? Registre aqui. Conta que vem uma vez só fica em Contas → Nova
-            conta.
-          </p>
+          <p className="card-subtitle">Comprou parcelado? Anote aqui e acompanhe as parcelas.</p>
           <form onSubmit={handleCreate}>
             <div className="segmented">
               <button
@@ -319,7 +316,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
             </div>
 
             <div className="field">
-              <label htmlFor="debt-total">Valor total (R$) — já com juros, se tiver</label>
+              <label htmlFor="debt-total">Valor total com juros (R$)</label>
               <input
                 id="debt-total"
                 inputMode="decimal"
@@ -358,7 +355,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
                 onChange={(e) => setDueDay(e.target.value)}
               />
               <p className="card-subtitle" style={{ marginBottom: 0 }}>
-                Se preencher, a gente avisa por e-mail quando a parcela estiver perto de vencer.
+                A gente avisa antes de vencer.
               </p>
             </div>
 
@@ -373,7 +370,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
                 ))}
               </select>
               <p className="card-subtitle" style={{ marginBottom: 0 }}>
-                Cada parcela paga entra no extrato com essa categoria.
+                As parcelas pagas entram com ela.
               </p>
             </div>
 
@@ -426,7 +423,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
             Dívidas do grupo
           </p>
           {debts === null ? null : jointDebts.length === 0 ? (
-            <EmptyState>Sem dívidas do casal. Tudo em dia.</EmptyState>
+            <EmptyState art="check">Nenhuma dívida do grupo. Tudo em dia.</EmptyState>
           ) : (
             <div className="page-stack">{jointDebts.map(renderDebtCard)}</div>
           )}
@@ -437,7 +434,7 @@ export function DebtsPage({ embedded = false }: { embedded?: boolean }) {
             Suas dívidas pessoais
           </p>
           {debts === null ? null : personalDebts.length === 0 ? (
-            <EmptyState>Nenhuma dívida pessoal.</EmptyState>
+            <EmptyState art="check">Nenhuma dívida sua. Que bom!</EmptyState>
           ) : (
             <div className="page-stack">{personalDebts.map(renderDebtCard)}</div>
           )}
