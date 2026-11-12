@@ -32,7 +32,11 @@ export default defineConfig({
       // este plugin só precisa gerar e registrar o service worker, não um
       // segundo manifest.
       manifest: false,
-      injectRegister: 'auto',
+      // Registrado à mão (src/utils/swRegister.ts), pra checar versão nova
+      // toda vez que o app volta pra tela -- o registro automático só
+      // checava ao carregar do zero, e o app da tela de início quase nunca
+      // carrega do zero.
+      injectRegister: false,
       workbox: {
         // Guarda de antemão só os arquivos estáticos deste build (JS, CSS,
         // fontes, ícones) -- de propósito sem runtimeCaching, então os
