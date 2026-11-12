@@ -996,7 +996,9 @@ export function DashboardPage() {
             </div>
           )}
 
-          {/* 3. O que precisa de atenção (vence, banco, sem categoria) */}
+          {/* 3. O que precisa de atenção (vence, banco, sem categoria). No PC,
+              "Primeiros passos" fica do lado, pra não sobrar um vazio à direita. */}
+          <div className={`painel-grid${checklist && !checklistDismissed ? " painel-2" : ""}`}>
           <section className="card painel-attention" aria-label="Precisa de atenção">
             <div className="section-header">
               <p className="card-title">Precisa de atenção</p>
@@ -1079,6 +1081,10 @@ export function DashboardPage() {
               <p className="empty-state">Tudo em dia. Nada vence nos próximos 7 dias.</p>
             )}
           </section>
+          {checklist && !checklistDismissed && (
+            <FirstStepsCard checklist={checklist} onDismiss={handleDismissChecklist} />
+          )}
+          </div>
 
           {firstImport.show && (
             <div className="card first-import">
@@ -1100,10 +1106,6 @@ export function DashboardPage() {
             </div>
           )}
           {month === currentMonthParam() && user && <MonthCloseCard token={token} />}
-
-          {checklist && !checklistDismissed && (
-            <FirstStepsCard checklist={checklist} onDismiss={handleDismissChecklist} />
-          )}
 
           <section className="card" aria-label="Últimos lançamentos">
             <div className="section-header">

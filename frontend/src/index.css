@@ -7847,6 +7847,9 @@ select {
    o card do resumo ficava estreito e os números de Entrou/Saiu/Guardado se
    espremiam. */
 .painel-grid > .card { margin: 0; min-width: 0; max-width: none; }
+/* Os outros cards soltos do Painel (Últimos lançamentos, fechar o mês...)
+   também ocupam a largura toda -- no PC, presos em 380px, sobrava um vazio. */
+.painel .dashboard-content > .card { margin: 0; min-width: 0; max-width: none; }
 .painel-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 @media (max-width: 760px) { .painel-2 { grid-template-columns: minmax(0, 1fr); } }
 
