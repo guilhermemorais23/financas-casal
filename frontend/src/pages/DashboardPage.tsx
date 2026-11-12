@@ -1338,7 +1338,7 @@ export function DashboardPage() {
                   </strong>
                 </p>
               )}
-              <p className="card-subtitle">Saldo de tudo o que foi lançado até hoje, não só deste mês.</p>
+              <p className="card-subtitle">Tudo o que foi lançado até hoje.</p>
             </section>
 
             <div className="painel-side">
@@ -1477,7 +1477,7 @@ export function DashboardPage() {
                 </p>
               )}
               {categoryRows.length === 0 ? (
-                <p className="empty-state">Nenhuma despesa neste mês.</p>
+                <p className="empty-state">Nenhum gasto neste mês.</p>
               ) : (
                 <ul className="painel-cat-list">
                   {categoryRows.map((row) => {

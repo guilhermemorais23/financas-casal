@@ -25,6 +25,8 @@ import { PAYMENT_METHOD_OPTIONS, paymentMethodLabel, type PaymentMethod } from "
 import { initialOf } from "../utils/initial";
 import { canDeleteFromStatement, canDeleteSecuredTransfer, deleteConfirmBody, deleteLinkedNote, isReadOnlyRow, linkedHint, type LinkKind } from "../utils/linkedTransaction";
 import { NoPaymentModal } from "../components/NoPaymentModal";
+import { CategoryIcon } from "../components/CategoryIcon";
+import { EmptyState } from "../components/EmptyState";
 
 interface CategorySummaryRow {
   categoryId: string | null;
@@ -666,11 +668,7 @@ export function ReportsPage() {
               aria-label={`Selecionar ${tx.description}`}
             />
           )}
-          <span
-            className="transaction-icon"
-          >
-            {initialOf(tx.categoryName ?? tx.description)}
-          </span>
+          <CategoryIcon categoryId={tx.categoryId} name={tx.categoryName} emoji={tx.categoryEmoji} />
           <div className="transaction-info">
             <span className="transaction-desc">
               <span className="text-truncate">{tx.description}</span>
@@ -965,7 +963,16 @@ export function ReportsPage() {
             <p className="empty-state">Nada encontrado com esses filtros.</p>
           )}
           {transactions && transactions.length === 0 && (
-            <p className="empty-state">Nenhuma transação neste mês.</p>
+            <EmptyState
+              art="chart"
+              action={
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate("/transactions/new")}>
+                  Lançar um gasto
+                </button>
+              }
+            >
+              Nada lançado neste mês.
+            </EmptyState>
           )}
           <ul className="transaction-list">
             {groups.map((group, index) => {

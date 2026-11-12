@@ -15,6 +15,7 @@ import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/de
 import { whenWritesSettled } from "../utils/pendingWrites";
 import { parseMoney, toMoneyInput } from "../utils/money";
 import { useModules } from "../hooks/useModules";
+import { EmptyState } from "../components/EmptyState";
 
 interface GoalItemRow {
   id: string;
@@ -373,7 +374,16 @@ export function GoalsPage() {
         )}
 
         {goals && goals.length === 0 && (
-          <p className="empty-state">Nenhuma meta criada ainda. Que tal começar uma?</p>
+          <EmptyState
+            art="target"
+            action={
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsCreating(true)}>
+                Criar meta
+              </button>
+            }
+          >
+            Junte dinheiro pra uma viagem, uma reserva ou o que quiser.
+          </EmptyState>
         )}
 
         {goals?.map((goal) => {

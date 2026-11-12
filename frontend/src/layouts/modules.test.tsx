@@ -93,7 +93,7 @@ describe("Conta e grupo: Funções do app", () => {
   it("desligar Cartões manda o PATCH só com ele e guarda a resposta", async () => {
     prepareAccount();
     const after = prefsWithout("cards");
-    onApi("PATCH", "/me/preferences/modules", after);
+    onApi("PATCH", "/me/preferences/modules", () => after);
     const screen = await renderPage(<AccountPage />, { route: "/account" });
 
     const cards = screen.getByRole("switch", { name: "Cartões" });
@@ -107,7 +107,7 @@ describe("Conta e grupo: Funções do app", () => {
   it("religar Metas manda true", async () => {
     fakeAuth.user.preferences = prefsWithout("goals");
     prepareAccount();
-    onApi("PATCH", "/me/preferences/modules", prefsWithout());
+    onApi("PATCH", "/me/preferences/modules", () => prefsWithout());
     const screen = await renderPage(<AccountPage />, { route: "/account" });
     const goals = screen.getByRole("switch", { name: "Metas" });
     await expect.element(goals).toHaveAttribute("aria-checked", "false");

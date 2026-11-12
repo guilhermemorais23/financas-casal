@@ -11,6 +11,7 @@ import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { formatCurrency, parseLocalDate } from "../utils/format";
 import { PayBillSheet, type BillReminder } from "../components/BillReminders";
 import { useModules } from "../hooks/useModules";
+import { EmptyState } from "../components/EmptyState";
 import type { ModuleKey } from "../utils/preferences";
 
 type BillKind = "card" | "debt" | "recurring";
@@ -318,8 +319,16 @@ export function BillsPage() {
 
             {nothing && (
               <div className="card bills-empty">
-                <p>Nenhuma conta por aqui ainda.</p>
-                <p className="field-hint">Cadastre um cartão, uma conta fixa (aluguel, internet) ou uma compra parcelada e ela aparece aqui na data certa.</p>
+                <EmptyState
+                  art="receipt"
+                  action={
+                    <Link to="/a-pagar?aba=fixas" className="btn btn-primary btn-sm">
+                      Adicionar uma conta
+                    </Link>
+                  }
+                >
+                  Nada pra pagar por aqui. Adicione o aluguel, a internet ou um cartão.
+                </EmptyState>
               </div>
             )}
 

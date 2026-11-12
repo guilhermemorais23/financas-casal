@@ -442,7 +442,7 @@ export function AccountPage() {
   return (
     <AppLayout>
       <div className="page-stack">
-        <h1>Conta</h1>
+        <h1>Conta e grupo</h1>
 
         {user?.billingEnabled && (
         <Link to="/plano" className="card plan-link">
@@ -574,8 +574,8 @@ export function AccountPage() {
           <p className="card-title">Contas conectadas</p>
           <p className="card-subtitle">
             {bankReady
-              ? "Traga os lançamentos do seu banco sem digitar: pelo arquivo do extrato ou conectando a conta, que avisa quando chegam lançamentos novos."
-              : "Traga os lançamentos do seu banco sem digitar. Hoje pelo arquivo do extrato; conectando a conta, eles entram sozinhos."}
+              ? "Traga os gastos do banco sem digitar."
+              : "Traga os gastos do banco sem digitar, pelo extrato."}
           </p>
           <div className="connect-actions">
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsImportOpen(true)}>
@@ -693,10 +693,7 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Categorias</p>
-          <p className="card-subtitle">
-            As padrão valem pra qualquer grupo e não dá pra mudar. As que vocês criaram dá pra renomear ou
-            excluir. As de receita só aparecem ao lançar uma entrada.
-          </p>
+          <p className="card-subtitle">As que vocês criaram dá pra mudar ou excluir.</p>
           {categories?.map((category) => (
             <div key={category.id} className="category-budget-row">
               {editingCategoryId === category.id ? (
@@ -773,14 +770,14 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Orçamento por categoria</p>
-          <p className="card-subtitle">Defina um teto pra cada categoria. Deixe em branco pra não acompanhar.</p>
+          <p className="card-subtitle">Um limite pra cada categoria. Em branco, sem limite.</p>
           {error && (
             <p className="alert" role="alert">
               {error}
             </p>
           )}
           {categoryBudgets && categoryBudgets.length === 0 && (
-            <p className="empty-state">Crie categorias em "Nova despesa" pra poder definir tetos aqui.</p>
+            <p className="empty-state">Crie uma categoria ao lançar um gasto.</p>
           )}
           {categoryBudgets?.map((row) => (
             <div key={row.categoryId} className="category-budget-row">
@@ -814,10 +811,7 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Assistente (WhatsApp)</p>
-          <p className="card-subtitle">
-            Ainda em fase de teste (número de teste da Meta) -- fale seus gastos ou pergunte sobre suas finanças por
-            lá. Gere um código aqui e envie ele pro número de teste que aparece no seu WhatsApp Business.
-          </p>
+          <p className="card-subtitle">Em teste. Gere o código e mande pro nosso número no WhatsApp.</p>
           {whatsappCode && (
             <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.15rem" }}>
               {whatsappCode}
@@ -840,10 +834,7 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Assistente (Telegram)</p>
-          <p className="card-subtitle">
-            Fale seus gastos ou pergunte sobre suas finanças pelo Telegram. Gere um código aqui e envie ele pro bot
-            pra vincular sua conta.
-          </p>
+          <p className="card-subtitle">Lance e pergunte pelo Telegram. Gere o código e mande pro bot.</p>
           {telegramCode && (
             <p className="card-subtitle" style={{ color: "var(--color-text)", fontWeight: 700, fontSize: "1.15rem" }}>
               {telegramCode}
@@ -885,8 +876,8 @@ export function AccountPage() {
         <div className="card danger-zone">
           <p className="card-title">Excluir conta</p>
           <p className="card-subtitle">
-            Apaga seu login e seus dados pessoais para sempre. Se você for a última pessoa do grupo, o grupo inteiro é
-            apagado. Veja os detalhes na <Link to="/privacidade">política de privacidade</Link>.
+            Apaga seu login e seus dados pra sempre. Se você for o último do grupo, o grupo some junto.{" "}
+            <Link to="/privacidade">Saiba mais</Link>.
           </p>
           <div className="field">
             <label htmlFor="delete-account-confirm">Digite EXCLUIR para confirmar</label>
