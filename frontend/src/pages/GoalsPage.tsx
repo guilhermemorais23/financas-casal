@@ -14,6 +14,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { cancelDeferred, isDeferredPending, scheduleDeferred } from "../utils/deferredDelete";
 import { whenWritesSettled } from "../utils/pendingWrites";
 import { parseMoney, toMoneyInput } from "../utils/money";
+import { useModules } from "../hooks/useModules";
 
 interface GoalItemRow {
   id: string;
@@ -51,6 +52,7 @@ interface MemberRow {
 
 export function GoalsPage() {
   const { user, token } = useAuth();
+  const moduleOn = useModules();
   const { showToast } = useToast();
   const confirm = useConfirm();
   const [goals, setGoals] = useState<GoalRow[] | null>(null);
@@ -528,9 +530,11 @@ export function GoalsPage() {
       </div>
 
       {/* Cotações saíram do menu (não é o dinheiro do casal), mas a tela continua. */}
-      <Link to="/investments" className="link goals-quotes-link">
-        <Icon name="trend" /> Ver cotações do mercado (Ibovespa e ações)
-      </Link>
+      {moduleOn("investments") && (
+        <Link to="/investments" className="link goals-quotes-link">
+          <Icon name="trend" /> Ver cotações do mercado
+        </Link>
+      )}
 
       {editingGoal && (
         <EditGoalSheet

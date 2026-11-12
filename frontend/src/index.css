@@ -8410,3 +8410,81 @@ select {
   width: 20px;
   height: 20px;
 }
+
+/* Funções do app (Conta e grupo) ----------------------------------------- */
+
+.module-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.module-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.module-row:last-child {
+  border-bottom: none;
+}
+
+.module-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.module-row-text small {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.pref-switch {
+  position: relative;
+  width: 46px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--baseline);
+  cursor: pointer;
+  transition: background-color 0.18s;
+}
+
+.pref-switch.is-on {
+  background: var(--color-primary);
+}
+
+.pref-switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.18s;
+}
+
+.pref-switch.is-on .pref-switch-knob {
+  transform: translateX(18px);
+}
+
+.pref-switch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pref-switch,
+  .pref-switch-knob {
+    transition: none;
+  }
+}

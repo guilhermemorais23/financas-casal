@@ -10,6 +10,8 @@ import { AppLayout } from "../layouts/AppLayout";
 import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { formatCurrency, parseLocalDate } from "../utils/format";
 import { PayBillSheet, type BillReminder } from "../components/BillReminders";
+import { useModules } from "../hooks/useModules";
+import type { ModuleKey } from "../utils/preferences";
 
 type BillKind = "card" | "debt" | "recurring";
 
@@ -58,12 +60,13 @@ const KIND: Record<BillKind, { label: string; icon: IconName }> = {
   recurring: { label: "Conta fixa", icon: "repeat" },
 };
 
-const FILTERS: [Filter, string][] = [
-  ["all", "Tudo"],
-  ["card", "Cartões"],
-  ["recurring", "Fixas"],
-  ["debt", "Parceladas"],
-  ["loans", "Empréstimos"],
+// Filtro (e atalho de "Adicionar") de função desligada não aparece.
+const FILTERS: [Filter, string, ModuleKey | null][] = [
+  ["all", "Tudo", null],
+  ["card", "Cartões", "cards"],
+  ["recurring", "Fixas", "payables"],
+  ["debt", "Parceladas", "debts"],
+  ["loans", "Empréstimos", "loans"],
 ];
 
 const shortDate = (iso: string) => parseLocalDate(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
@@ -108,6 +111,7 @@ function amountLabel(item: BillItem): string {
 // de cada tipo continuam (tocar num item abre os detalhes).
 export function BillsPage() {
   const { token, user } = useAuth();
+  const moduleOn = useModules();
   const { showToast } = useToast();
   const cacheKey = `bills:${user?.id}`;
   const [data, setData] = useState<BillsOverview | null>(() => readCache<BillsOverview>(cacheKey));
@@ -296,7 +300,7 @@ export function BillsPage() {
             </div>
 
             <div className="bills-filters" role="group" aria-label="Filtrar">
-              {FILTERS.map(([value, label]) => (
+              {FILTERS.filter(([, , module]) => !module || moduleOn(module)).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
@@ -377,10 +381,10 @@ export function BillsPage() {
 
             <div className="bills-add">
               <span>Adicionar:</span>
-              <Link to="/cards" className="bills-add-link">Cartão</Link>
-              <Link to="/a-pagar?aba=fixas" className="bills-add-link">Conta</Link>
-              <Link to="/a-pagar?aba=dividas" className="bills-add-link">Parcelada</Link>
-              <Link to="/loans" className="bills-add-link">Empréstimo</Link>
+              {moduleOn("cards") && <Link to="/cards" className="bills-add-link">Cartão</Link>}
+              {moduleOn("payables") && <Link to="/a-pagar?aba=fixas" className="bills-add-link">Conta</Link>}
+              {moduleOn("debts") && <Link to="/a-pagar?aba=dividas" className="bills-add-link">Parcelada</Link>}
+              {moduleOn("loans") && <Link to="/loans" className="bills-add-link">Empréstimo</Link>}
             </div>
           </>
         )}
