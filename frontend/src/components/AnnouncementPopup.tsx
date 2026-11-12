@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { isWelcomeTourOpen, isWelcomeTourPending, subscribeWelcomeTour } from "../utils/welcomeTour";
+import { isOnboardingOpen, subscribeOnboarding } from "../utils/preferences";
 import { Icon, type IconName } from "./Icon";
 
 export interface Announcement {
@@ -68,7 +69,9 @@ export function AnnouncementPopup() {
 
   const hiddenHere = HIDDEN_ON.some((prefix) => location.pathname.startsWith(prefix));
   const tourOpen = useSyncExternalStore(subscribeWelcomeTour, () => !!user && isWelcomeTourOpen(user.id));
-  const tourPending = !!user && (tourOpen || isWelcomeTourPending(user));
+  const onboardingOpen = useSyncExternalStore(subscribeOnboarding, isOnboardingOpen);
+  // A pergunta inicial (OnboardingQuestions) também vem antes.
+  const tourPending = !!user && (tourOpen || isWelcomeTourPending(user) || onboardingOpen);
 
   // Busca uma vez por conta, na primeira tela em que o pop-up pode aparecer
   // (e depois que a apresentação de boas-vindas foi fechada).

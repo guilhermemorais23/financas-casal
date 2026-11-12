@@ -30,6 +30,7 @@ vi.mock("../layouts/AppLayout", () => ({
 
 beforeEach(async () => {
   (await import("./fakeApi")).resetApi();
+  (await import("./fakeAuth")).fakeAuth.user.preferences = null;
   localStorage.clear();
   sessionStorage.clear();
 });
