@@ -460,8 +460,8 @@ export function AccountPage() {
   }
 
   return (
-    <AppLayout>
-      <div className="page-stack">
+    <AppLayout wide>
+      <div className="page-stack account-page">
         <h1>Conta e grupo</h1>
 
         {user?.billingEnabled && (
