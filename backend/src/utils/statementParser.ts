@@ -289,9 +289,13 @@ export function cleanStatementDescription(raw: string): string {
     .replace(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g, " ")
     .replace(/\b(ag[eê]ncia|ag|conta|cc|c\/c|doc(?:to)?|documento|n[ºo°]|aut(?:enticac[aã]o)?)\.?\s*:?\s*[\d.\-\/]+/gi, " ")
     .replace(/\(\d{3,4}\)/g, " ")
+    // Itaú gruda a data no nome cortado: "PIX TRANSF JOAO S02/10".
+    .replace(/(\p{L})\d{2}\/\d{2}\b/gu, "$1 ")
     .replace(/\b\d{2}\/\d{2}(?:\/\d{2,4})?\b/g, " ")
     .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, " ")
     .replace(/\b\d{4,}\b/g, " ")
+    // Sobra de agência/banco depois de tirar o número ("TED 341.1234" -> "341.").
+    .replace(/\b\d{1,3}\.(?=\s|$)/g, " ")
     .replace(/(\s*-\s*)+/g, " - ")
     .replace(/\s+/g, " ")
     .replace(/^[\s\-:*]+|[\s\-:*]+$/g, "")

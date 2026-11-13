@@ -9,10 +9,12 @@ import {
   readLinesWithoutAi,
   readBancoDoBrasil,
   readCaixa,
+  readInter,
   readNubank,
   reconcile,
   splitNubankDescription,
 } from "./pdfStatement";
+import { cleanStatementDescription } from "./statementParser";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, "__fixtures__", name)));
 
@@ -255,5 +257,89 @@ describe("readCaixa", () => {
       ["2026-09-03", "Pix recebido", "JOAO SOUZA", 3000],
       ["2026-09-04", "Compra elo", "PADARIA SOL", -1000],
     ]);
+  });
+});
+
+// Modelos montados a partir do layout de cada banco (sem leitor próprio, eles
+// passam pela leitura geral; o Inter tem o seu).
+describe("leitura geral: outros bancos", () => {
+  const clean = (rows: { description: string }[]) => rows.map((row) => cleanStatementDescription(row.description));
+
+  it("Itaú: data grudada no nome sai, saldo final é o último 'saldo do dia'", () => {
+    const read = readLinesWithoutAi([
+      "01/10/2026 SALDO ANTERIOR 1.000,00",
+      "02/10/2026 PIX TRANSF JOAO S02/10 -150,00",
+      "02/10/2026 SALDO DO DIA 850,00",
+      "05/10/2026 TED 341.1234 MARIA SOUZA 2.000,00",
+      "05/10/2026 SALDO DO DIA 2.850,00",
+    ]);
+    expect(read.rows.map((row) => row.amountCents)).toEqual([-15000, 200000]);
+    expect(clean(read.rows)).toEqual(["PIX TRANSF JOAO S", "TED MARIA SOUZA"]);
+    expect(reconcile(read).reconciled).toBe(true);
+  });
+
+  it("Mercado Pago: data com traço e saldo inicial/final na mesma linha", () => {
+    const read = readLinesWithoutAi([
+      "Saldo inicial: R$ 1.000,00 Saldo final: R$ 2.804,10",
+      "02-10-2026 Transferência Pix enviada JOAO DA SILVA 12345678901 R$ -150,00 R$ 850,00",
+      "02-10-2026 Pagamento com QR Pix IFOOD 12345678902 R$ -45,90 R$ 804,10",
+      "05-10-2026 Transferência Pix recebida MARIA SOUZA 12345678903 R$ 2.000,00 R$ 2.804,10",
+    ]);
+    expect(read.rows.map((row) => [row.date, row.amountCents])).toEqual([
+      ["2026-10-02", -15000],
+      ["2026-10-02", -4590],
+      ["2026-10-05", 200000],
+    ]);
+    expect(clean(read.rows)[0]).toBe("Transferência Pix enviada JOAO DA SILVA");
+    expect(reconcile(read).reconciled).toBe(true);
+  });
+
+  it("PicPay: sinal separado do R$ ('- R$ 150,00') não se perde", () => {
+    const read = readLinesWithoutAi([
+      "02/10/2026 14:22 Pix enviado JOAO DA SILVA - R$ 150,00",
+      "05/10/2026 09:10 Pix recebido MARIA SOUZA + R$ 2.000,00",
+    ]);
+    expect(read.rows.map((row) => row.amountCents)).toEqual([-15000, 200000]);
+    expect(clean(read.rows)).toEqual(["Pix enviado JOAO DA SILVA", "Pix recebido MARIA SOUZA"]);
+  });
+
+  it("C6: a segunda data (contábil) não fica no nome", () => {
+    const read = readLinesWithoutAi(["02/10 02/10 Pix enviado para JOAO DA SILVA -150,00", "Período 01/10/2026 a 31/10/2026"]);
+    expect(read.rows[0].date).toBe("2026-10-02");
+    expect(clean(read.rows)).toEqual(["Pix enviado para JOAO DA SILVA"]);
+  });
+});
+
+describe("readInter", () => {
+  it("dia por extenso, tipo separado do nome e saldo de cada linha conferido", () => {
+    const read = readInter([
+      "1 de Outubro de 2026 Saldo do dia: R$ 1.000,00",
+      "2 de Outubro de 2026 Saldo do dia: R$ 804,10",
+      'Pix enviado: "Cp :18236120-JOAO DA SILVA" -R$ 150,00 R$ 850,00',
+      'Compra no debito: "No estabelecimento IFOOD" -R$ 45,90 R$ 804,10',
+      "5 de Outubro de 2026 Saldo do dia: R$ 2.804,10",
+      'Pix recebido: "Cp :00000000-MARIA SOUZA" R$ 2.000,00 R$ 2.804,10',
+    ])!;
+    expect(read.rows.map((row) => [row.date, row.kind, row.description, row.amountCents])).toEqual([
+      ["2026-10-02", "Pix enviado", "JOAO DA SILVA", -15000],
+      ["2026-10-02", "Compra no debito", "IFOOD", -4590],
+      ["2026-10-05", "Pix recebido", "MARIA SOUZA", 200000],
+    ]);
+    expect(read.openingBalanceCents).toBe(100000);
+    expect(read.closingBalanceCents).toBe(280410);
+    expect(read.mismatched).toEqual([]);
+  });
+
+  it("aponta a linha cujo saldo não bate", () => {
+    const read = readInter([
+      "2 de Outubro de 2026 Saldo do dia: R$ 850,00",
+      'Pix enviado: "Cp :1-JOAO" -R$ 150,00 R$ 850,00',
+      'Pix enviado: "Cp :1-ANA" -R$ 50,00 R$ 790,00',
+    ])!;
+    expect(read.mismatched).toEqual(['Pix enviado: "Cp :1-ANA" -R$ 50,00 R$ 790,00']);
+  });
+
+  it("não é Inter sem o dia por extenso", () => {
+    expect(readInter(["02/10/2026 PIX -150,00"])).toBeNull();
   });
 });
