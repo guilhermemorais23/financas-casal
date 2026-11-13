@@ -29,9 +29,11 @@ async function call(
 }
 
 describe("defaultModules", () => {
-  it("sem resposta (usage null): tudo ligado", () => {
-    expect(Object.values(defaultModules(null, [])).every(Boolean)).toBe(true);
-    expect(Object.values(defaultModules(null, ["spending"])).every(Boolean)).toBe(true);
+  it("sem resposta (usage null): tudo ligado, menos a Planilha", () => {
+    const { sheet, ...rest } = defaultModules(null, []);
+    expect(sheet).toBe(false);
+    expect(Object.values(rest).every(Boolean)).toBe(true);
+    expect(Object.values({ ...defaultModules(null, ["spending"]), sheet: true }).every(Boolean)).toBe(true);
   });
 
   it("só controlar gastos, sozinho: só o básico", () => {
@@ -44,6 +46,7 @@ describe("defaultModules", () => {
       debts: false,
       loans: false,
       shopping: false,
+      sheet: false,
     });
   });
 
@@ -67,6 +70,7 @@ describe("defaultModules", () => {
       debts: true,
       loans: true,
       shopping: true,
+      sheet: false,
     });
   });
 });

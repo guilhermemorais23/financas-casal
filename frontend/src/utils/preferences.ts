@@ -8,7 +8,7 @@
 // por link.
 export type Usage = "solo" | "couple" | "friends";
 export type Goal = "spending" | "split" | "debts" | "saving";
-export type ModuleKey = "cards" | "payables" | "debts" | "loans" | "goals" | "investments" | "shopping" | "reports";
+export type ModuleKey = "cards" | "payables" | "debts" | "loans" | "goals" | "investments" | "shopping" | "reports" | "sheet";
 
 export interface Preferences {
   usage: Usage | null;
@@ -16,7 +16,7 @@ export interface Preferences {
   modules: Record<ModuleKey, boolean>;
 }
 
-export const MODULE_KEYS: ModuleKey[] = ["cards", "payables", "debts", "loans", "goals", "investments", "shopping", "reports"];
+export const MODULE_KEYS: ModuleKey[] = ["cards", "payables", "debts", "loans", "goals", "investments", "shopping", "reports", "sheet"];
 
 // Nome e uma linha do que cada função faz (tela Conta e grupo).
 export const MODULE_INFO: Record<ModuleKey, { label: string; hint: string }> = {
@@ -28,12 +28,14 @@ export const MODULE_INFO: Record<ModuleKey, { label: string; hint: string }> = {
   investments: { label: "Investimentos", hint: "Cotações de moedas e ações." },
   shopping: { label: "Lista de compras", hint: "A lista do mercado, junto com o grupo." },
   reports: { label: "Relatórios", hint: "Gráficos e o extrato completo." },
+  sheet: { label: "Planilha", hint: "Meses lado a lado, subcategorias e marcações. Pra quem vinha de planilha." },
 };
 
 // Ligado, a não ser que a pessoa tenha desligado. Sem resposta (null) ou
-// perfil antigo sem o campo: tudo ligado.
+// perfil antigo sem o campo: tudo ligado -- menos a Planilha, que é pra poucos
+// e só aparece pra quem liga.
 export function isModuleOn(preferences: Preferences | null | undefined, key: ModuleKey): boolean {
-  return preferences?.modules?.[key] ?? true;
+  return preferences?.modules?.[key] ?? key !== "sheet";
 }
 
 // "Refazer as perguntas" (Conta e grupo) reabre a pergunta inicial, que fica

@@ -272,6 +272,7 @@ export interface CreateLoanInput {
   note: string | null;
   accountId: string | null;
   interestRateMonthly?: number | null;
+  installmentAmount?: number | null;
 }
 
 export async function createLoan(userId: string, input: CreateLoanInput): Promise<LoanWithTotals> {
@@ -294,6 +295,7 @@ export async function createLoan(userId: string, input: CreateLoanInput): Promis
     accountId: account?.id ?? null,
     transactionId,
     interestRateMonthly: input.interestRateMonthly ?? null,
+    installmentAmount: input.installmentAmount ?? null,
   });
   return withTotals(loan, todayInBrazil());
 }
@@ -374,6 +376,7 @@ export interface UpdateLoanInput {
   // "forgiven" = desistiu de receber o resto; "open" reabre.
   status?: "open" | "forgiven";
   interestRateMonthly?: number | null;
+  installmentAmount?: number | null;
 }
 
 export async function updateLoanForUser(userId: string, loanId: string, input: UpdateLoanInput): Promise<LoanWithTotals> {
@@ -386,6 +389,9 @@ export async function updateLoanForUser(userId: string, loanId: string, input: U
     ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
     ...(input.note !== undefined ? { note: input.note } : {}),
     ...(input.interestRateMonthly !== undefined ? { interestRateMonthly: input.interestRateMonthly } : {}),
+    ...(input.installmentAmount !== undefined
+      ? { installmentCents: input.installmentAmount ? toCents(input.installmentAmount) : null }
+      : {}),
     ...(status ? { status } : {}),
   });
   return withTotals(updated, todayInBrazil());

@@ -19,3 +19,21 @@ export function isIsoDate(value: unknown): value is string {
 }
 
 export const MAX_DESCRIPTION_LENGTH = 200;
+
+// Marcações de um lançamento (função Planilha): lista de textos curtos, sem
+// "#", minúsculas, sem repetir. Até 10, cada uma com até 30 letras.
+// undefined = não enviado; null = inválido.
+export const MAX_TAGS = 10;
+export function parseTags(value: unknown): string[] | null | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_TAGS) return null;
+  const tags: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string") return null;
+    const tag = raw.trim().replace(/^#+/, "").replace(/\s+/g, " ").toLowerCase();
+    if (!tag) continue;
+    if (tag.length > 30) return null;
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
+}

@@ -99,6 +99,7 @@ const AdminPage = namedLazy(() => import("./pages/AdminPage"), "AdminPage");
 const InvestmentsPage = namedLazy(() => import("./pages/InvestmentsPage"), "InvestmentsPage");
 const ShoppingListPage = namedLazy(() => import("./pages/ShoppingListPage"), "ShoppingListPage");
 const LoansPage = namedLazy(() => import("./pages/LoansPage"), "LoansPage");
+const SheetPage = namedLazy(() => import("./pages/SheetPage"), "SheetPage");
 
 // Trocar de grupo remonta todas as telas: cada uma busca de novo os dados
 // do grupo aberto e nada do grupo anterior fica na tela.
@@ -246,6 +247,14 @@ function App() {
               element={
                 <ProtectedRoute requireGroup>
                   <LoansPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/planilha"
+              element={
+                <ProtectedRoute requireGroup>
+                  <SheetPage />
                 </ProtectedRoute>
               }
             />

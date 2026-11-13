@@ -51,6 +51,7 @@ import { webhookHandler as pluggyWebhookHandler } from "./modules/openFinance/op
 import { pushRouter } from "./modules/push/push.routes";
 import { statementsRouter } from "./modules/statements/statements.routes";
 import { shoppingRouter } from "./modules/shopping/shopping.routes";
+import { sheetRouter } from "./modules/sheet/sheet.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
 import {
   bootstrapHandler,
@@ -204,6 +205,7 @@ export function createApp() {
   app.use("/api/announcements", announcementsRouter);
   app.use("/api/billing", billingRouter);
   app.use("/api/loans", loansRouter);
+  app.use("/api/sheet", sheetRouter);
   app.use("/api/month-close", monthCloseRouter);
   app.use("/api/onboarding", onboardingRouter);
   app.use("/api/public/shares", publicSharesRouter);

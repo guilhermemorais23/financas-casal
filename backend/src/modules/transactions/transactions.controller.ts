@@ -32,7 +32,7 @@ import { deleteTransactionsUndoingLinked, deleteTransactionUndoingLinked } from 
 import { moveTransactionForUser } from "./moveAccount.service";
 import { CardNotFoundError } from "../cards/cards.service";
 import { PAYMENT_METHODS, type PaymentMethod, type SplitType, type TransactionType } from "./transactions.repository";
-import { isIsoDate, isNonEmptyString, isValidAmount, MAX_DESCRIPTION_LENGTH } from "../../utils/validation";
+import { isIsoDate, isNonEmptyString, isValidAmount, MAX_DESCRIPTION_LENGTH, parseTags } from "../../utils/validation";
 
 // undefined = não enviado, null = "não informado" (apaga ao editar).
 function isValidPaymentMethod(value: unknown): boolean {
@@ -53,8 +53,10 @@ export async function createTransactionHandler(req: Request, res: Response) {
     recurringMonths,
     paymentMethod,
   } = req.body ?? {};
+  const tags = parseTags(req.body?.tags);
 
   if (
+    tags === null ||
     !isNonEmptyString(accountId) ||
     !isNonEmptyString(payerId) ||
     !isNonEmptyString(description) ||
@@ -84,6 +86,7 @@ export async function createTransactionHandler(req: Request, res: Response) {
       splitType: (splitType as SplitType) ?? "none",
       paymentMethod: (paymentMethod as PaymentMethod | null | undefined) ?? null,
       recurring: typeof recurringMonths === "number" ? { months: recurringMonths } : undefined,
+      tags,
     });
     res.status(201).json(transaction);
   } catch (err) {
@@ -205,8 +208,10 @@ export async function exportTransactionsHandler(req: Request, res: Response) {
 export async function updateTransactionHandler(req: Request, res: Response) {
   const { description, amount, transactionType, categoryId, occurredAt, payerId, accountId, paymentMethod } =
     req.body ?? {};
+  const tags = parseTags(req.body?.tags);
 
   if (
+    tags === null ||
     (description !== undefined && (!isNonEmptyString(description) || description.length > MAX_DESCRIPTION_LENGTH)) ||
     (amount !== undefined && !isValidAmount(amount)) ||
     (transactionType !== undefined && transactionType !== "expense" && transactionType !== "income") ||
@@ -230,6 +235,7 @@ export async function updateTransactionHandler(req: Request, res: Response) {
       payerId,
       accountId,
       paymentMethod: paymentMethod as PaymentMethod | null | undefined,
+      tags,
     });
     res.status(200).json(transaction);
   } catch (err) {

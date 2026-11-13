@@ -42,6 +42,7 @@ const NAV_ITEMS: (NavItem & { couple?: boolean; solo?: boolean })[] = [
   { to: "/dashboard", label: "Painel", icon: "home" },
   { to: "/par", label: "Par", icon: "heart", couple: true },
   { to: "/reports", label: "Relatórios", icon: "chart", module: "reports" },
+  { to: "/planilha", label: "Planilha", icon: "file", module: "sheet" },
   { to: "/contas", label: "Contas", icon: "receipt", module: "bills" },
   { to: "/goals", label: "Metas", icon: "target", module: "goals" },
   { to: "/shopping", label: "Lista de compras", icon: "cart", couple: true, module: "shopping" },
@@ -52,6 +53,7 @@ const NAV_ITEMS: (NavItem & { couple?: boolean; solo?: boolean })[] = [
 // "Mais", então qualquer tela está a no máximo dois toques.
 const MORE_TILES: (NavItem & { couple?: boolean })[] = [
   { to: "/reports", label: "Relatórios", icon: "chart", couple: true, module: "reports" },
+  { to: "/planilha", label: "Planilha", icon: "file", module: "sheet" },
   { to: "/goals", label: "Metas", icon: "target", module: "goals" },
   { to: "/shopping", label: "Compras", icon: "cart", couple: true, module: "shopping" },
 ];

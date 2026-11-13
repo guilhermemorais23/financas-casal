@@ -125,7 +125,7 @@ interface OpenFinanceStatus {
   }[];
 }
 
-type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "c6" | "outro";
+type BankId = "bradesco" | "nubank" | "bb" | "caixa" | "itau" | "santander" | "inter" | "c6" | "mercadopago" | "picpay" | "outro";
 
 // Bancos com leitura própria (conferida com extrato real) primeiro; os
 // outros passam pela leitura geral.
@@ -138,6 +138,8 @@ const BANKS: { id: BankId; name: string; own: boolean; match: RegExp }[] = [
   { id: "santander", name: "Santander", own: false, match: /santander/i },
   { id: "inter", name: "Inter", own: false, match: /\binter\b/i },
   { id: "c6", name: "C6 Bank", own: false, match: /\bc6\b/i },
+  { id: "mercadopago", name: "Mercado Pago", own: false, match: /mercado ?pago/i },
+  { id: "picpay", name: "PicPay", own: false, match: /picpay/i },
   { id: "outro", name: "Outro", own: false, match: /$^/ },
 ];
 const bankName = (id: BankId | null | undefined) => BANKS.find((bank) => bank.id === id)?.name ?? null;

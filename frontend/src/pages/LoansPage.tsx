@@ -9,7 +9,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { formatCurrency, parseLocalDate, todayISO } from "../utils/format";
 import { readCache, sameGroupGuard, writeCache } from "../utils/pageCache";
 import { Sheet } from "../components/Sheet";
-import { parseMoney } from "../utils/money";
+import { parseMoney, toMoneyInput } from "../utils/money";
 
 interface Repayment {
   id: string;
@@ -34,6 +34,8 @@ interface Loan {
   interest: string;
   totalOwed: string;
   interestRateMonthly: number | null;
+  // Parcela combinada (opcional): já vem preenchida no "Recebi".
+  installmentAmount?: string | null;
   remaining: string;
   remainingAtDue: string | null;
   isOverdue: boolean;
@@ -333,6 +335,12 @@ export function LoansPage() {
                 ({iOwe ? "pegou" : "emprestou"} {formatCurrency(Number(loan.amount))}).
               </p>
             )}
+            {loan.installmentAmount && (
+              <p className="loan-detail-line">
+                Parcela combinada de {formatCurrency(Number(loan.installmentAmount))}
+                {` · ${loan.repayments.length} de ${Math.ceil(Number(loan.totalOwed ?? loan.amount) / Number(loan.installmentAmount))} pagas`}
+              </p>
+            )}
             {loan.note && <p className="loan-detail-line">{loan.note}</p>}
             {loan.repayments.length > 0 && (
               <ul className="loan-repayments">
@@ -569,6 +577,8 @@ function CreateLoanModal({
   const [note, setNote] = useState("");
   const [hasInterest, setHasInterest] = useState(false);
   const [interestRate, setInterestRate] = useState("");
+  const [hasInstallment, setHasInstallment] = useState(false);
+  const [installment, setInstallment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -581,6 +591,10 @@ function CreateLoanModal({
     if (rate !== null && !(rate > 0 && rate <= 20)) return setError("Juros entre 0,1% e 20% ao mês.");
     if (!(parsed > 0)) return setError("Informe um valor válido.");
     if (hasDueDate && !dueDate) return setError("Escolha o prazo ou desmarque \"Tem prazo\".");
+    const installmentValue = hasInstallment ? parseMoney(installment) : null;
+    if (installmentValue !== null && !(installmentValue > 0 && installmentValue <= parsed)) {
+      return setError("A parcela precisa ser maior que zero e até o valor emprestado.");
+    }
     setError(null);
     setIsSubmitting(true);
     try {
@@ -596,6 +610,7 @@ function CreateLoanModal({
           note: note.trim() || null,
           accountId: accountId || null,
           interestRateMonthly: rate,
+          installmentAmount: installmentValue,
         },
       });
       showToast("Empréstimo registrado", {
@@ -668,6 +683,23 @@ function CreateLoanModal({
             <p className="field-hint">Juros simples, contados a cada mês cheio desde o empréstimo.</p>
           </div>
         )}
+        <label className="checkbox-field">
+          <input type="checkbox" checked={hasInstallment} onChange={(e) => setHasInstallment(e.target.checked)} />
+          <span>Tem parcela combinada</span>
+        </label>
+        {hasInstallment && (
+          <div className="field">
+            <label htmlFor="loan-installment">Valor da parcela (R$)</label>
+            <input
+              id="loan-installment"
+              inputMode="decimal"
+              value={installment}
+              onChange={(e) => setInstallment(e.target.value)}
+              placeholder="500,00"
+            />
+            <p className="field-hint">Sem parcela, {owe ? "você paga" : "a pessoa paga"} quando puder e quanto puder.</p>
+          </div>
+        )}
         <div className="field">
           <label htmlFor="loan-account">{owe ? "Entrou em qual conta" : "Saiu de qual conta"}</label>
           <AccountSelect
@@ -713,8 +745,11 @@ function ReceiveModal({
   const { showToast } = useToast();
   const remaining = Number(loan.remaining);
   // "Recebeu tudo" é o caso comum; "Só uma parte" abre o campo de valor.
-  const [isPartial, setIsPartial] = useState(false);
-  const [amount, setAmount] = useState("");
+  // Com parcela combinada, já abre em "Só uma parte" com o valor da parcela.
+  const installment = loan.installmentAmount ? Number(loan.installmentAmount) : null;
+  const startsWithInstallment = installment !== null && installment < remaining;
+  const [isPartial, setIsPartial] = useState(startsWithInstallment);
+  const [amount, setAmount] = useState(startsWithInstallment ? toMoneyInput(installment!) : "");
   const [receivedAt, setReceivedAt] = useState(todayISO());
   const [accountId, setAccountId] = useState(defaultAccountId);
   const [error, setError] = useState<string | null>(null);

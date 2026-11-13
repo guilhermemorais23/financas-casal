@@ -99,18 +99,22 @@ export interface PdfStatement {
 
 // Bancos com leitura própria. Os outros (Itaú, Santander, Inter...) passam
 // pela leitura geral (data ... valor) ou pela IA.
-export const BANKS = ["bradesco", "nubank", "bb", "caixa", "itau", "santander", "inter", "outro"] as const;
+export const BANKS = ["bradesco", "nubank", "bb", "caixa", "itau", "santander", "inter", "c6", "mercadopago", "picpay", "outro"] as const;
 export type Bank = (typeof BANKS)[number];
 
 type PdfRead = Omit<PdfStatement, "reconciled" | "differenceCents" | "readBy" | "unreadLines" | "bank">;
 
 // ---- leitura sem IA: "dd/mm[/aaaa] descrição ... -1.234,56" -------------
 
-const AMOUNT = String.raw`-?\(?(?:R\$\s?)?-?\d{1,3}(?:\.\d{3})*,\d{2}\)?(?:\s?[-DC])?`;
-const LINE_RE = new RegExp(String.raw`^(\d{2}\/\d{2}(?:\/\d{2,4})?)\s+(.+?)\s+(${AMOUNT})(?:\s+(${AMOUNT}))?$`);
+// O sinal pode vir grudado ou separado do R$: "-150,00", "-R$ 150,00",
+// "R$ -150,00", "- R$ 150,00" (PicPay), "+ R$ 2.000,00".
+const AMOUNT = String.raw`(?:[-+]\s?)?\(?(?:R\$\s?)?-?\d{1,3}(?:\.\d{3})*,\d{2}\)?(?:\s?[-DC])?`;
+// Data DD/MM, DD/MM/AAAA ou DD-MM-AAAA (Mercado Pago).
+const DATE = String.raw`\d{2}\/\d{2}(?:\/\d{2,4})?|\d{2}-\d{2}-\d{4}`;
+const LINE_RE = new RegExp(String.raw`^(${DATE})\s+(.+?)\s+(${AMOUNT})(?:\s+(${AMOUNT}))?$`);
 
 function amountWithSuffix(raw: string): number | null {
-  const trimmed = raw.trim();
+  const trimmed = raw.trim().replace(/^([-+])\s+/, "$1");
   const debit = /\s?D$/.test(trimmed);
   const credit = /\s?C$/.test(trimmed);
   const cents = parseAmountToCents(trimmed.replace(/\s?[DC]$/, ""));
@@ -122,18 +126,23 @@ function amountWithSuffix(raw: string): number | null {
 
 function guessYear(lines: string[]): number {
   for (const line of lines.slice(0, 40)) {
-    const m = line.match(/\b\d{2}\/\d{2}\/(\d{4})\b/) ?? line.match(/\b(20\d{2})\b/);
+    const m = line.match(/\b\d{2}[/-]\d{2}[/-](\d{4})\b/) ?? line.match(/\b(20\d{2})\b/);
     if (m) return Number(m[1]);
   }
   return new Date().getFullYear();
 }
 
-function balanceFrom(lines: string[], words: RegExp): number | null {
-  for (const line of lines) {
-    if (!words.test(line.toLowerCase())) continue;
-    const amounts = line.match(new RegExp(AMOUNT, "g"));
-    if (amounts?.length) {
-      const cents = amountWithSuffix(amounts[amounts.length - 1]);
+// Saldo escrito no extrato: o primeiro valor depois das palavras (uma linha
+// pode ter "Saldo inicial: R$ 1.000,00 Saldo final: R$ 2.804,10"). Com
+// `last`, procura de baixo pra cima ("Saldo do dia" se repete todo dia e o
+// final é o último).
+function balanceFrom(lines: string[], words: RegExp, last = false): number | null {
+  for (const line of last ? [...lines].reverse() : lines) {
+    const found = words.exec(line.toLowerCase());
+    if (!found) continue;
+    const amount = line.slice(found.index + found[0].length).match(new RegExp(AMOUNT));
+    if (amount) {
+      const cents = amountWithSuffix(amount[0]);
       if (cents !== null) return cents;
     }
   }
@@ -141,7 +150,7 @@ function balanceFrom(lines: string[], words: RegExp): number | null {
 }
 
 const UNDATED_RE = new RegExp(String.raw`^(.+?)\s+(${AMOUNT})(?:\s+(${AMOUNT}))?$`);
-const LEADING_DATE_TIME = /^\d{2}\/\d{2}(?:\/\d{2,4})?\s*(?:\d{2}:\d{2}(?::\d{2})?)?\s*/;
+const LEADING_DATE_TIME = /^(?:\d{2}\/\d{2}(?:\/\d{2,4})?|\d{2}-\d{2}-\d{4})\s*(?:\d{2}:\d{2}(?::\d{2})?)?\s*/;
 // Cabeçalho, rodapé e totais: nunca são lançamento nem pedaço de nome.
 const NOT_A_ROW = /saldo|total|limite|p[aá]gina|extrato|per[ií]odo|cliente|ouvidoria|sac\b|central de|^data\b|lan[cç]amentos? futuros/i;
 
@@ -197,7 +206,7 @@ export function readLinesWithoutAi(lines: string[]): PdfRead {
   return {
     rows,
     openingBalanceCents: balanceFrom(lines, /saldo (anterior|inicial)/),
-    closingBalanceCents: balanceFrom(lines, /saldo (final|atual|do dia)/),
+    closingBalanceCents: balanceFrom(lines, /saldo (final|atual|do dia)/, true),
   };
 }
 
@@ -558,6 +567,73 @@ export function readCaixa(lines: string[]): SectionRead | null {
   return { rows, openingBalanceCents: opening, closingBalanceCents: closing, mismatched: [] };
 }
 
+// ---- extrato do Inter -----------------------------------------------------
+//
+// O dia vem por extenso, e cada lançamento traz o valor e o saldo depois dele:
+//   2 de Outubro de 2026 Saldo do dia: R$ 804,10
+//   Pix enviado: "Cp :18236120-JOAO DA SILVA" -R$ 150,00 R$ 850,00
+//   Compra no debito: "No estabelecimento IFOOD" -R$ 45,90 R$ 804,10
+// O saldo de cada linha confere a anterior (linha que não bate vai pro "não
+// conciliado").
+
+const MONTH_NAMES: Record<string, string> = {
+  janeiro: "01", fevereiro: "02", marco: "03", abril: "04", maio: "05", junho: "06",
+  julho: "07", agosto: "08", setembro: "09", outubro: "10", novembro: "11", dezembro: "12",
+};
+const INTER_DAY = /^(\d{1,2}) de ([a-zç]+) de (\d{4})\b/i;
+const INTER_MONEY = String.raw`-?\s?R\$\s?-?\d{1,3}(?:\.\d{3})*,\d{2}`;
+const INTER_ROW = new RegExp(String.raw`^(.+?)\s+(${INTER_MONEY})\s+(${INTER_MONEY})$`);
+
+export function splitInterDescription(text: string): { kind: string | null; name: string } {
+  const m = text.match(/^([^:"]{3,40}):\s*(.*)$/);
+  if (!m) return { kind: null, name: text.replace(/"/g, "").trim() };
+  const name = m[2]
+    .replace(/"/g, "")
+    .replace(/^cp\s*:\s*[\d.\-/]*-?\s*/i, "")
+    .replace(/^no estabelecimento\s+/i, "")
+    .trim();
+  return { kind: sentenceCase(m[1].trim()), name: name || m[1].trim() };
+}
+
+export function readInter(lines: string[]): SectionRead | null {
+  const rows: (ParsedStatementRow & { balance: number; line: string })[] = [];
+  let date: string | null = null;
+  let days = 0;
+  for (const line of lines) {
+    const day = line.match(INTER_DAY);
+    if (day) {
+      const month = MONTH_NAMES[day[2].toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")];
+      if (month) {
+        date = `${day[3]}-${month}-${day[1].padStart(2, "0")}`;
+        days++;
+      }
+      continue;
+    }
+    const m = date ? line.match(INTER_ROW) : null;
+    if (!m || /saldo/i.test(m[1])) continue;
+    const cents = parseAmountToCents(m[2].replace(/\s/g, ""));
+    const balance = parseAmountToCents(m[3].replace(/\s/g, ""));
+    if (!cents || balance === null) continue;
+    const { kind, name } = splitInterDescription(m[1].trim());
+    rows.push({ date: date!, description: name, kind, amountCents: cents, externalId: null, balance, line });
+  }
+  if (days === 0 || rows.length === 0) return null;
+  // O Inter pode listar do mais novo pro mais antigo: confere na ordem dos dias.
+  const chronological = rows[0].date <= rows[rows.length - 1].date ? rows : [...rows].reverse();
+  const mismatched: string[] = [];
+  for (let i = 1; i < chronological.length; i++) {
+    if (chronological[i - 1].balance + chronological[i].amountCents !== chronological[i].balance) mismatched.push(chronological[i].line);
+  }
+  const first = chronological[0];
+  const last = chronological[chronological.length - 1];
+  return {
+    rows: chronological.map(({ balance: _b, line: _l, ...row }) => row),
+    openingBalanceCents: first.balance - first.amountCents,
+    closingBalanceCents: last.balance,
+    mismatched,
+  };
+}
+
 function fromCentsBr(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\s/g, " ");
 }
@@ -660,6 +736,7 @@ export async function parsePdfStatement(
     { bank: "bb", read: () => readBancoDoBrasil(lines) },
     { bank: "nubank", read: () => readNubank(lines) },
     { bank: "caixa", read: () => readCaixa(lines) },
+    { bank: "inter", read: () => readInter(lines) },
   ];
   readers.sort((a, b) => Number(b.bank === chosen) - Number(a.bank === chosen));
   for (const reader of readers) {
@@ -670,12 +747,12 @@ export async function parsePdfStatement(
     // Leitura por coluna de saldo que não bate e não apontou a linha: deixa
     // pros outros leitores.
     if (reader.bank === "bradesco" && check.reconciled === false && mismatched.length === 0) continue;
-    const reconciled = check.reconciled ?? (reader.bank === "nubank" ? mismatched.length === 0 : null);
+    const reconciled = reader.bank === "inter" ? mismatched.length === 0 : (check.reconciled ?? (reader.bank === "nubank" ? mismatched.length === 0 : null));
     const bank = reader.bank === "bradesco" && !lines.some((line) => /bradesco/i.test(line)) ? null : reader.bank;
     return { ...read, ...check, reconciled, readBy: "text", unreadLines: mismatched.slice(0, 30), bank };
   }
 
-  // Itaú, Santander, Inter e o resto: "data descrição valor". No Itaú a
+  // Itaú, Santander, C6, Mercado Pago, PicPay e o resto: "data descrição valor". No Itaú a
   // aplicação automática do dia (Aplic Aut Mais) não é gasto.
   const general = lines.filter((line) => !/aplic aut mais/i.test(line));
   const apiKey = process.env.GEMINI_API_KEY;

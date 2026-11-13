@@ -106,6 +106,7 @@ export interface CreateTransactionInput {
   // mês, no mesmo dia do mês, ajustado nos meses mais curtos) de uma vez, em
   // vez de só este lançamento.
   recurring?: { months: number };
+  tags?: string[];
 }
 
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
@@ -155,6 +156,7 @@ export async function createTransaction(userId: string, input: CreateTransaction
       isPrivate: input.isPrivate,
       splitType: input.splitType,
       paymentMethod: input.paymentMethod ?? null,
+      tags: input.tags ?? [],
     },
     occurredAtDates,
     // As divisões registram quem deve quem num gasto compartilhado; receita não
@@ -547,6 +549,7 @@ export interface UpdateTransactionInput {
   payerId?: string;
   accountId?: string;
   paymentMethod?: PaymentMethod | null;
+  tags?: string[];
 }
 
 export async function updateTransactionForUser(
@@ -627,6 +630,7 @@ export async function updateTransactionForUser(
       occurredAt: input.occurredAt,
       payerId: input.payerId,
       paymentMethod: input.paymentMethod,
+      tags: input.tags,
       ...accountFields,
     },
     splits

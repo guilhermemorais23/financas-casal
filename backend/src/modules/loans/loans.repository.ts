@@ -37,6 +37,9 @@ export interface LoanRow {
   // Juros simples opcionais, % por mês cheio desde lentAt (2 = 2% a.m.). null
   // = sem juros, o normal entre família.
   interestRateMonthly: number | null;
+  // Parcela combinada (opcional): o valor que já vem preenchido ao registrar
+  // um pagamento. null = paga quando pode e quanto pode.
+  installmentAmount: string | null;
 }
 
 const loansCol = db.collection("loans");
@@ -73,6 +76,7 @@ function toLoanRow(doc: FirebaseFirestore.DocumentSnapshot): LoanRow {
     repayments,
     status: data.status ?? "open",
     interestRateMonthly: typeof data.interestRateMonthly === "number" ? data.interestRateMonthly : null,
+    installmentAmount: typeof data.installmentCents === "number" ? fromCents(data.installmentCents) : null,
   };
 }
 
@@ -82,7 +86,7 @@ export function newLoanId(): string {
 
 export async function insertLoan(
   id: string,
-  input: Omit<LoanRow, "id" | "repayments" | "status" | "amount"> & { amount: number }
+  input: Omit<LoanRow, "id" | "repayments" | "status" | "amount" | "installmentAmount"> & { amount: number; installmentAmount?: number | null }
 ): Promise<LoanRow> {
   const ref = loansCol.doc(id);
   await ref.set({
@@ -97,6 +101,7 @@ export async function insertLoan(
     accountId: input.accountId,
     transactionId: input.transactionId,
     interestRateMonthly: input.interestRateMonthly,
+    installmentCents: input.installmentAmount ? toCents(input.installmentAmount) : null,
     repayments: [],
     status: "open",
     createdAt: FieldValue.serverTimestamp(),
@@ -122,6 +127,7 @@ export type LoanPatch = Partial<{
   status: LoanStatus;
   repayments: RepaymentRow[];
   interestRateMonthly: number | null;
+  installmentCents: number | null;
 }>;
 
 export function loanRef(id: string): FirebaseFirestore.DocumentReference {

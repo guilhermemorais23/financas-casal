@@ -5,7 +5,8 @@ import { PAYMENT_METHOD_OPTIONS, type PaymentMethod } from "../utils/paymentMeth
 import { useToast } from "./ToastProvider";
 import { Sheet } from "./Sheet";
 import { isLinkedTransaction, linkedHint, type LinkKind } from "../utils/linkedTransaction";
-import { categoriesFor, type CategoryType } from "../utils/categories";
+import { categoriesFor, parseTagsInput, withSubcategories, type CategoryType } from "../utils/categories";
+import { useModules } from "../hooks/useModules";
 import { parseMoney, toMoneyInput } from "../utils/money";
 
 interface CategoryRow {
@@ -13,6 +14,7 @@ interface CategoryRow {
   name: string;
   emoji: string | null;
   type?: CategoryType;
+  parentId?: string | null;
 }
 
 interface AccountRow {
@@ -39,6 +41,7 @@ export interface EditableTransaction {
   paymentMethod: PaymentMethod | null;
   splitType?: string;
   linkKind?: LinkKind | null;
+  tags?: string[];
 }
 
 export function EditTransactionModal({
@@ -57,6 +60,9 @@ export function EditTransactionModal({
   const [members, setMembers] = useState<MemberRow[]>([]);
 
   const [description, setDescription] = useState(transaction.description);
+  const sheetOn = useModules()("sheet");
+  const [tagsText, setTagsText] = useState((transaction.tags ?? []).join(", "));
+  const tagsBody = sheetOn ? { tags: parseTagsInput(tagsText) } : {};
   const [amount, setAmount] = useState(() => toMoneyInput(Number(transaction.amount)));
   const [transactionType, setTransactionType] = useState<"expense" | "income">(
     transaction.transactionType
@@ -100,7 +106,7 @@ export function EditTransactionModal({
         method: "PATCH",
         token,
         body: locked
-          ? { description: description.trim(), categoryId: categoryId || null, paymentMethod: paymentMethod || null }
+          ? { description: description.trim(), categoryId: categoryId || null, paymentMethod: paymentMethod || null, ...tagsBody }
           : {
               description: description.trim(),
               amount: parsedAmount,
@@ -110,6 +116,7 @@ export function EditTransactionModal({
               accountId,
               payerId,
               paymentMethod: paymentMethod || null,
+              ...tagsBody,
             },
       });
       showToast("Lançamento atualizado");
@@ -187,18 +194,25 @@ export function EditTransactionModal({
           <label htmlFor="edit-category">Categoria</label>
           <select id="edit-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">Sem categoria</option>
-            {categoriesFor(categories, transactionType)
-              .concat(
+            {withSubcategories(
+              categoriesFor(categories, transactionType).concat(
                 // Lançamento antigo com categoria do outro tipo: continua aparecendo pra não sumir.
                 categories.filter((c) => c.id === transaction.categoryId && categoriesFor([c], transactionType).length === 0)
               )
-              .map((category) => (
+            ).map((category) => (
               <option key={category.id} value={category.id}>
-                {category.name}
+                {category.label}
               </option>
             ))}
           </select>
         </div>
+
+        {sheetOn && (
+          <div className="field">
+            <label htmlFor="edit-tags">Marcações</label>
+            <input id="edit-tags" placeholder="Ex.: remédio, mãe" value={tagsText} onChange={(e) => setTagsText(e.target.value)} />
+          </div>
+        )}
 
         <div className="field-row">
           <div className="field">
