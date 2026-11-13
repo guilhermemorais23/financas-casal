@@ -8842,3 +8842,16 @@ select {
 .sheet-page > .card { max-width: none; margin: 0; min-width: 0; }
 .sheet-page .page-title-row { flex-wrap: wrap; gap: 0.5rem; }
 .sheet-section th > span { position: sticky; left: 0.55rem; }
+
+/* ---- Conta e grupo no PC: os cards em duas colunas, na largura toda ----
+   Antes cada card ficava preso em 380px numa coluna só, e a página ficava
+   comprida e estreita. Colunas (em vez de grid) deixam cada card com a altura
+   dele, sem buraco embaixo dos curtos. */
+@media (min-width: 900px) {
+  .account-page { display: block; columns: 2; column-gap: 1rem; }
+  .account-page > h1 { column-span: all; margin-bottom: 1rem; }
+  .account-page > * { break-inside: avoid; margin: 0 0 1rem; max-width: none; width: 100%; }
+}
+@media (min-width: 1400px) {
+  .account-page { columns: 3; }
+}
