@@ -83,20 +83,36 @@ categoriesRouter.get(
 categoriesRouter.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { name, emoji, type } = req.body ?? {};
-    if (!isNonEmptyString(name) || (type !== undefined && type !== "expense" && type !== "income")) {
+    const { name, emoji, type, parentId } = req.body ?? {};
+    if (
+      !isNonEmptyString(name) ||
+      (type !== undefined && type !== "expense" && type !== "income") ||
+      (parentId !== undefined && parentId !== null && !isNonEmptyString(parentId))
+    ) {
       res.status(400).json({ error: "name is required; type (if set) must be expense or income" });
       return;
     }
 
     const groupId = await requireGroupId(req.user!.id);
 
+    // Subcategoria: a de cima tem que ser deste grupo (ou padrão) e não pode
+    // ser ela mesma uma subcategoria. O tipo (gasto/receita) vem dela.
+    let parent = null;
+    if (isNonEmptyString(parentId)) {
+      parent = (await findVisibleCategories(groupId)).find((category) => category.id === parentId) ?? null;
+      if (!parent || parent.parentId) {
+        res.status(400).json({ error: "Categoria de cima não encontrada (ou já é uma subcategoria)." });
+        return;
+      }
+    }
+
     try {
       const category = await insertCategory({
         groupId,
         name: name.trim(),
         emoji: isNonEmptyString(emoji) ? emoji.trim() : null,
-        type: type ?? "expense",
+        type: parent?.type ?? type ?? "expense",
+        parentId: parent?.id ?? null,
       });
       res.status(201).json(category);
     } catch (err) {
@@ -147,7 +163,12 @@ categoriesRouter.delete(
   asyncHandler(async (req, res) => {
     try {
       const category = await requireOwnCategory(req.user!.id, req.params.id);
-      await deleteCategory({ id: category.id, groupId: category.groupId!, type: category.type });
+      const children = (await findVisibleCategories(category.groupId)).filter((other) => other.parentId === category.id);
+      if (children.length > 0) {
+        res.status(409).json({ error: "Essa categoria tem subcategorias. Apague as subcategorias antes." });
+        return;
+      }
+      await deleteCategory({ id: category.id, groupId: category.groupId!, type: category.type, parentId: category.parentId });
       res.status(204).send();
     } catch (err) {
       if (err instanceof NoGroupError || err instanceof CategoryNotFoundError) {

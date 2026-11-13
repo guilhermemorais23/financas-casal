@@ -13,6 +13,9 @@ export interface CategoryRow {
   emoji: string | null;
   isDefault: boolean;
   type: CategoryType;
+  // Subcategoria (função Planilha): "Hipoteca" dentro de "Casa". Um nível só.
+  // Nos totais do Painel, Relatórios e Orçamento ela soma na categoria de cima.
+  parentId: string | null;
 }
 
 // A categoria de receita que todo grupo tem (e não dá pra apagar). Quem tem
@@ -44,6 +47,7 @@ function toCategoryRow(doc: FirebaseFirestore.DocumentSnapshot): CategoryRow {
     emoji: data.emoji ?? null,
     isDefault: data.isDefault ?? false,
     type: data.type === "income" ? "income" : "expense",
+    parentId: data.parentId ?? null,
   };
 }
 
@@ -56,7 +60,7 @@ async function ensureDefaultCategory(
   type: CategoryType
 ): Promise<CategoryRow[]> {
   if (rows.some((row) => row.id === base.id)) return rows;
-  const created: CategoryRow = { ...base, groupId: null, isDefault: true, type };
+  const created: CategoryRow = { ...base, groupId: null, isDefault: true, type, parentId: null };
   try {
     await categoriesCol.doc(base.id).create({
       groupId: null,
@@ -96,9 +100,15 @@ export async function insertCategory(input: {
   name: string;
   emoji: string | null;
   type?: CategoryType;
+  parentId?: string | null;
 }): Promise<CategoryRow> {
   const type = input.type ?? "expense";
-  const id = categoryDocId(input.groupId, input.name);
+  const parentId = input.parentId ?? null;
+  // "Manutenção" pode existir em Casa e em Transporte: o id da subcategoria
+  // leva o nome da de cima.
+  const id = parentId
+    ? `${input.groupId}__${parentId.split("__").pop()}__${normalize(input.name)}`
+    : categoryDocId(input.groupId, input.name);
   try {
     await categoriesCol.doc(id).create({
       groupId: input.groupId,
@@ -106,6 +116,7 @@ export async function insertCategory(input: {
       emoji: input.emoji,
       isDefault: false,
       type,
+      parentId,
       createdAt: FieldValue.serverTimestamp(),
     });
   } catch (err) {
@@ -114,7 +125,7 @@ export async function insertCategory(input: {
     }
     throw err;
   }
-  return { id, groupId: input.groupId, name: input.name, emoji: input.emoji, isDefault: false, type };
+  return { id, groupId: input.groupId, name: input.name, emoji: input.emoji, isDefault: false, type, parentId };
 }
 
 export async function categoryIsVisibleTo(categoryId: string, groupId: string): Promise<boolean> {
@@ -177,8 +188,9 @@ async function setCategoryIn(docs: FirebaseFirestore.QueryDocumentSnapshot[], ca
 // collectionGroup (o projeto evita, ver transactions.repository.ts).
 // As regras de importação ficam VAZIAS (não viram "Outros"): senão toda
 // importação futura daquele nome cairia em Outros sem a pessoa escolher.
-export async function deleteCategory(category: { id: string; groupId: string; type: CategoryType }): Promise<void> {
-  const replacement = replacementCategoryId(category.type);
+// Subcategoria apagada: o que era dela volta pra categoria de cima.
+export async function deleteCategory(category: { id: string; groupId: string; type: CategoryType; parentId?: string | null }): Promise<void> {
+  const replacement = category.parentId ?? replacementCategoryId(category.type);
   for (const name of COLLECTIONS_MOVED_TO_REPLACEMENT) {
     const snapshot = await db.collection(name).where("categoryId", "==", category.id).get();
     await setCategoryIn(snapshot.docs, replacement);

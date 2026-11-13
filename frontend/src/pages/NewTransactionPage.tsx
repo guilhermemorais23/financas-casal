@@ -21,7 +21,8 @@ import {
   resolveCreditCardPreference,
   saveCreditCardPreference,
 } from "../utils/creditCardPreference";
-import { categoriesFor, defaultCategoryFor, type CategoryType } from "../utils/categories";
+import { categoriesFor, defaultCategoryFor, parseTagsInput, withSubcategories, type CategoryType } from "../utils/categories";
+import { useModules } from "../hooks/useModules";
 import { parseMoney, toMoneyInput } from "../utils/money";
 
 interface AccountRow {
@@ -50,10 +51,14 @@ interface CategoryRow {
   name: string;
   emoji: string | null;
   type?: CategoryType;
+  parentId?: string | null;
 }
 
 export function NewTransactionPage() {
   const { user, token } = useAuth();
+  // Função Planilha ligada: marcações no lançamento (e subcategorias na lista).
+  const sheetOn = useModules()("sheet");
+  const [tagsText, setTagsText] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToast();
@@ -368,6 +373,7 @@ export function NewTransactionPage() {
       isPrivate: isIncome ? false : isPrivate,
       paymentMethod: paymentMethod || null,
       recurringMonths: isRecurring ? parsedMonths : null,
+      ...(sheetOn && tagsText.trim() ? { tags: parseTagsInput(tagsText) } : {}),
     };
     saveTransactionInBackground({
       token,
@@ -484,9 +490,9 @@ export function NewTransactionPage() {
                 setCategorySuggested(false);
               }}>
               <option value="">Sem categoria</option>
-              {typedCategories.map((category) => (
+              {withSubcategories(typedCategories).map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {category.label}
                 </option>
               ))}
             </select>
@@ -508,6 +514,19 @@ export function NewTransactionPage() {
               </div>
             )}
           </div>
+
+          {sheetOn && !selectedCard && (
+            <div className="field">
+              <label htmlFor="tags">Marcações</label>
+              <input
+                id="tags"
+                placeholder="Ex.: remédio, mãe"
+                value={tagsText}
+                onChange={(e) => setTagsText(e.target.value)}
+              />
+              <p className="field-hint">Separe por vírgula. Aparecem na Planilha, somadas.</p>
+            </div>
+          )}
 
           {/* Com mais gente no grupo, dividir é um toque (divisão igual). */}
           {!isIncome && !selectedCard && members.length > 1 && (

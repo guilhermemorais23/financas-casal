@@ -15,7 +15,7 @@ export type Usage = (typeof USAGES)[number];
 export const GOALS = ["spending", "split", "debts", "saving"] as const;
 export type Goal = (typeof GOALS)[number];
 
-export const MODULE_KEYS = ["cards", "payables", "debts", "loans", "goals", "investments", "shopping", "reports"] as const;
+export const MODULE_KEYS = ["cards", "payables", "debts", "loans", "goals", "investments", "shopping", "reports", "sheet"] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 export type Modules = Record<ModuleKey, boolean>;
@@ -29,10 +29,12 @@ export interface Preferences {
 // Quais módulos ligar a partir das respostas. Sem resposta (usage null) liga
 // tudo: é o app como sempre foi, e ninguém perde tela que já usava.
 // Cartões, contas a pagar e relatórios servem pra todo mundo; o resto só
-// aparece pra quem disse que precisa.
+// aparece pra quem disse que precisa. A Planilha (meses lado a lado,
+// subcategorias e marcações) é pra poucos: começa sempre desligada e a pessoa
+// liga na tela Conta.
 export function defaultModules(usage: Usage | null, goals: Goal[]): Modules {
   if (usage === null) {
-    return Object.fromEntries(MODULE_KEYS.map((key) => [key, true])) as Modules;
+    return { ...(Object.fromEntries(MODULE_KEYS.map((key) => [key, true])) as Modules), sheet: false };
   }
   const saving = goals.includes("saving");
   const debts = goals.includes("debts");
@@ -46,6 +48,7 @@ export function defaultModules(usage: Usage | null, goals: Goal[]): Modules {
     loans: debts,
     // Lista de compras é coisa de casa dividida.
     shopping: usage === "couple",
+    sheet: false,
   };
 }
 

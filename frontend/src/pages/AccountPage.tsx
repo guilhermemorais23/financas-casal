@@ -13,7 +13,7 @@ import { ImportRulesCard } from "../components/ImportRulesCard";
 import { PushSettingsCard } from "../components/PushSettingsCard";
 import { ImportStatementModal } from "../components/ImportStatementModal";
 import { initialOf } from "../utils/initial";
-import { categoryTypeOf, type CategoryType } from "../utils/categories";
+import { categoryTypeOf, withSubcategories, type CategoryType } from "../utils/categories";
 import { useTheme } from "../hooks/useTheme";
 import { parseMoney } from "../utils/money";
 import { isModuleOn, MODULE_INFO, MODULE_KEYS, reopenOnboarding, type ModuleKey, type Preferences } from "../utils/preferences";
@@ -58,6 +58,7 @@ interface CategoryRow {
   emoji: string | null;
   isDefault: boolean;
   type?: CategoryType;
+  parentId?: string | null;
 }
 
 export function AccountPage() {
@@ -77,6 +78,9 @@ export function AccountPage() {
   const [editCategoryName, setEditCategoryName] = useState("");
   const [editCategoryEmoji, setEditCategoryEmoji] = useState("");
   const [categoryActionId, setCategoryActionId] = useState<string | null>(null);
+  // Função Planilha: criar subcategoria dentro de uma categoria.
+  const [addingSubFor, setAddingSubFor] = useState<string | null>(null);
+  const [subName, setSubName] = useState("");
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -162,6 +166,22 @@ export function AccountPage() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar a categoria");
+    } finally {
+      setCategoryActionId(null);
+    }
+  }
+
+  async function handleAddSubcategory(parentId: string) {
+    if (!subName.trim()) return;
+    setCategoryActionId(parentId);
+    try {
+      await apiRequest("/categories", { method: "POST", token, body: { name: subName.trim(), parentId } });
+      showToast("Subcategoria criada");
+      setSubName("");
+      setAddingSubFor(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível criar a subcategoria");
     } finally {
       setCategoryActionId(null);
     }
@@ -693,9 +713,13 @@ export function AccountPage() {
 
         <div className="card">
           <p className="card-title">Categorias</p>
-          <p className="card-subtitle">As que vocês criaram dá pra mudar ou excluir.</p>
-          {categories?.map((category) => (
-            <div key={category.id} className="category-budget-row">
+          <p className="card-subtitle">
+            As que vocês criaram dá pra mudar ou excluir.
+            {modules.sheet && " Com a Planilha ligada, cada categoria pode ter subcategorias (Casa › Hipoteca, Água, Luz)."}
+          </p>
+          {categories && withSubcategories(categories).map((category) => (
+            <div key={category.id}>
+            <div className="category-budget-row" style={category.parentId ? { paddingLeft: "1.75rem" } : undefined}>
               {editingCategoryId === category.id ? (
                 <>
                   <input
@@ -728,7 +752,7 @@ export function AccountPage() {
                   <span className="category-budget-emoji">{initialOf(category.name)}</span>
                   <div className="category-budget-info">
                     <span className="category-budget-name">
-                      {category.name}
+                      {category.parentId ? `› ${category.name}` : category.name}
                       {categoryTypeOf(category) === "income" && (
                         <span className="badge" style={{ marginLeft: "0.4rem" }}>
                           receita
@@ -741,6 +765,18 @@ export function AccountPage() {
                       )}
                     </span>
                   </div>
+                  {modules.sheet && !category.parentId && (
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => {
+                        setAddingSubFor((current) => (current === category.id ? null : category.id));
+                        setSubName("");
+                      }}
+                    >
+                      {addingSubFor === category.id ? "Cancelar" : "+ Sub"}
+                    </button>
+                  )}
                   {!category.isDefault && (
                     <>
                       <button
@@ -764,6 +800,31 @@ export function AccountPage() {
                   )}
                 </>
               )}
+            </div>
+            {addingSubFor === category.id && (
+              <div className="inline-add-row" style={{ paddingLeft: "1.75rem" }}>
+                <input
+                  placeholder={`Nova em ${category.name}, ex.: Hipoteca`}
+                  aria-label={`Nova subcategoria em ${category.name}`}
+                  value={subName}
+                  onChange={(e) => setSubName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleAddSubcategory(category.id);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={categoryActionId === category.id || !subName.trim()}
+                  onClick={() => handleAddSubcategory(category.id)}
+                >
+                  Adicionar
+                </button>
+              </div>
+            )}
             </div>
           ))}
         </div>

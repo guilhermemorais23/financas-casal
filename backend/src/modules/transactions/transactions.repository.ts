@@ -72,6 +72,11 @@ export interface TransactionRow {
   // "paga" sem o dinheiro ter saído. Null nos lançamentos normais (e nos
   // antigos, de antes desse campo -- ver isLinkedTransaction no service).
   linkKind: LinkKind | null;
+  // Marcações livres (função Planilha): "remédio", "família". Atravessam as
+  // categorias. Vazio nos lançamentos de quem não usa.
+  tags: string[];
+  // Veio da importação de uma planilha (dá pra desfazer a importação inteira).
+  sheetImportId: string | null;
 }
 
 export type TransferKind = "goal" | "accounts";
@@ -120,12 +125,16 @@ function toTransactionRow(doc: FirebaseFirestore.DocumentSnapshot): TransactionR
     transferKind: data.transferKind ?? null,
     goalId: data.goalId ?? null,
     linkKind: data.linkKind ?? null,
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    sheetImportId: data.sheetImportId ?? null,
   };
 }
 
-async function loadCategoriesMap(groupId: string): Promise<Map<string, { name: string; emoji: string | null }>> {
+async function loadCategoriesMap(
+  groupId: string
+): Promise<Map<string, { name: string; emoji: string | null; parentId: string | null }>> {
   const categories = await findVisibleCategories(groupId);
-  return new Map(categories.map((c) => [c.id, { name: c.name, emoji: c.emoji }]));
+  return new Map(categories.map((c) => [c.id, { name: c.name, emoji: c.emoji, parentId: c.parentId }]));
 }
 
 // Lançamento que aponta pra uma categoria que o grupo não tem mais (apagada
@@ -162,6 +171,8 @@ export interface NewTransactionInput {
   transferKind?: TransferKind | null;
   goalId?: string | null;
   linkKind?: LinkKind | null;
+  tags?: string[];
+  sheetImportId?: string | null;
 }
 
 export interface SplitInput {
@@ -205,6 +216,8 @@ function transactionData(
     transferKind: base.transferKind ?? null,
     goalId: base.goalId ?? null,
     linkKind: base.linkKind ?? null,
+    tags: base.tags ?? [],
+    sheetImportId: base.sheetImportId ?? null,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -466,6 +479,7 @@ export async function updateTransaction(
     accountOwnerId?: string | null;
     // Só ao passar um lançamento pra conta pessoal de quem moveu.
     createdBy?: string;
+    tags?: string[];
   },
   // undefined: as divisões ficam como estão; uma lista (vazia inclusive):
   // troca todas, no mesmo lote da edição.
@@ -483,6 +497,7 @@ export async function updateTransaction(
   if (fields.accountType !== undefined) update.accountType = fields.accountType;
   if (fields.accountOwnerId !== undefined) update.accountOwnerId = fields.accountOwnerId;
   if (fields.createdBy !== undefined) update.createdBy = fields.createdBy;
+  if (fields.tags !== undefined) update.tags = fields.tags;
 
   const ref = transactionsCol.doc(transactionId);
   const batch = db.batch();
@@ -618,7 +633,10 @@ export async function getMonthlySummary(
     byPayerMap.set(data.payerId, (byPayerMap.get(data.payerId) ?? 0) + data.amountCents);
 
     if (data.isPrivate === false || data.createdBy === requestingUserId) {
-      const categoryId = resolveCategoryId(data.categoryId ?? null, data.transactionType, categoriesById);
+      const resolved = resolveCategoryId(data.categoryId ?? null, data.transactionType, categoriesById);
+      // Subcategoria (Casa › Hipoteca) soma na categoria de cima: Painel,
+      // Orçamento e alertas continuam vendo só "Casa". O detalhe fica na Planilha.
+      const categoryId = (resolved && categoriesById.get(resolved)?.parentId) || resolved;
       const key = categoryId ?? "none";
       const entry = byCategoryMap.get(key) ?? { categoryId, total: 0 };
       entry.total += data.amountCents;
@@ -931,4 +949,43 @@ async function loadBalanceRows(groupId: string): Promise<BalanceRow[]> {
     const [paidBy, owedBy] = key.split("__");
     return { paidBy, owedBy, totalOwed: fromCents(cents) };
   });
+}
+
+// ---- Planilha do ano (função Planilha) ------------------------------------
+// Tudo o que a pessoa vê (conta conjunta + a pessoal dela) numa faixa de
+// datas, receita e despesa. Transferências (cartão guardado, empréstimo,
+// meta, entre contas) não são gasto nem receita e ficam de fora; lançamento
+// privado de outra pessoa também.
+export interface SheetDoc {
+  id: string;
+  date: string;
+  description: string;
+  amountCents: number;
+  transactionType: TransactionType;
+  categoryId: string | null;
+  tags: string[];
+}
+
+export async function findSheetDocs(groupId: string, userId: string, from: string, to: string): Promise<SheetDoc[]> {
+  const [docs, categoriesById] = await Promise.all([
+    fetchDocsForDateRange(groupId, userId, from, to, "visible"),
+    loadCategoriesMap(groupId),
+  ]);
+  return docs
+    .map((doc) => ({ doc, data: doc.data() }))
+    .filter(({ data }) => !isTransferData(data) && (data.isPrivate === false || data.createdBy === userId))
+    .map(({ doc, data }) => ({
+      id: doc.id,
+      date: String(data.occurredAt).slice(0, 10),
+      description: data.description,
+      amountCents: data.amountCents,
+      transactionType: data.transactionType,
+      categoryId: resolveCategoryId(data.categoryId ?? null, data.transactionType, categoriesById),
+      tags: Array.isArray(data.tags) ? data.tags : [],
+    }));
+}
+
+export async function findSheetImportIds(groupId: string, sheetImportId: string): Promise<string[]> {
+  const snap = await transactionsCol.where("groupId", "==", groupId).where("sheetImportId", "==", sheetImportId).get();
+  return snap.docs.map((doc) => doc.id);
 }

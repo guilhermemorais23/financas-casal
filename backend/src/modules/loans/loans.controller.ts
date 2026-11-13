@@ -62,7 +62,11 @@ export async function listLoansHandler(req: Request, res: Response) {
 }
 
 export async function createLoanHandler(req: Request, res: Response) {
-  const { personName, amount, lentAt, dueDate, note, accountId, interestRateMonthly, direction } = req.body ?? {};
+  const { personName, amount, lentAt, dueDate, note, accountId, interestRateMonthly, direction, installmentAmount } = req.body ?? {};
+  if (installmentAmount !== undefined && installmentAmount !== null && !isValidAmount(installmentAmount)) {
+    res.status(400).json({ error: "Parcela inválida." });
+    return;
+  }
   const borrowed = direction === "borrowed";
   const interest = readInterest(interestRateMonthly);
   if (interest === "invalid") {
@@ -100,6 +104,7 @@ export async function createLoanHandler(req: Request, res: Response) {
       note: optionalText(note, 300),
       accountId: typeof accountId === "string" && accountId ? accountId : null,
       interestRateMonthly: interest,
+      installmentAmount: isValidAmount(installmentAmount) ? installmentAmount : null,
     });
     res.status(201).json(loan);
   } catch (err) {
@@ -138,7 +143,11 @@ export async function removeRepaymentHandler(req: Request, res: Response) {
 }
 
 export async function updateLoanHandler(req: Request, res: Response) {
-  const { personName, dueDate, note, status, interestRateMonthly } = req.body ?? {};
+  const { personName, dueDate, note, status, interestRateMonthly, installmentAmount } = req.body ?? {};
+  if (installmentAmount !== undefined && installmentAmount !== null && !isValidAmount(installmentAmount)) {
+    res.status(400).json({ error: "Parcela inválida." });
+    return;
+  }
   const interest = interestRateMonthly === undefined ? undefined : readInterest(interestRateMonthly);
   if (interest === "invalid") {
     res.status(400).json({ error: "Juros entre 0 e 20% ao mês." });
@@ -163,6 +172,7 @@ export async function updateLoanHandler(req: Request, res: Response) {
       ...(note !== undefined ? { note: optionalText(note, 300) } : {}),
       ...(status !== undefined ? { status } : {}),
       ...(interest !== undefined ? { interestRateMonthly: interest } : {}),
+      ...(installmentAmount !== undefined ? { installmentAmount } : {}),
     });
     res.json(loan);
   } catch (err) {

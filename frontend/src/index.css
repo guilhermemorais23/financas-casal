@@ -8783,3 +8783,62 @@ select {
 .split-chip-field .field-hint {
   margin-top: 0.35rem;
 }
+
+/* ---- Planilha (função opcional): o ano com os meses lado a lado ---- */
+.sheet-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.sheet-year { display: inline-flex; align-items: center; gap: 0.35rem; font-variant-numeric: tabular-nums; }
+.sheet-band { padding-block: 1.1rem; }
+.sheet-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sheet-trio > div { display: flex; flex-direction: column; gap: 0.15rem; padding-inline: 1rem; border-left: 1px solid var(--band-line); min-width: 0; }
+.sheet-trio > div:first-child { padding-left: 0; border-left: 0; }
+.sheet-trio-value { font-family: var(--font-display); font-size: clamp(1.25rem, 3vw, 2rem); font-weight: 700; font-variant-numeric: tabular-nums; }
+.sheet-trio-lent { color: #ffd2a1; }
+.sheet-band a { color: var(--band-ink); }
+@media (max-width: 640px) {
+  .sheet-trio { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+  .sheet-trio > div { padding-left: 0; border-left: 0; }
+}
+.sheet-card { display: grid; gap: 0.75rem; }
+.sheet-scroll { overflow-x: auto; border: 1px solid var(--color-border); border-radius: 12px; }
+.sheet-table { border-collapse: collapse; width: 100%; min-width: 1020px; font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+.sheet-table th, .sheet-table td { padding: 0.4rem 0.55rem; text-align: right; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+.sheet-table th:first-child { text-align: left; position: sticky; left: 0; z-index: 1; background: var(--color-card); min-width: 170px; font-weight: 500; }
+.sheet-table thead th { position: sticky; top: 0; background: var(--tan-input); color: var(--color-text-muted); font-weight: 600; }
+.sheet-table thead th:first-child { z-index: 2; background: var(--tan-input); }
+.sheet-table .is-now { background: color-mix(in srgb, var(--status-warning) 12%, var(--color-card)); }
+.sheet-group th, .sheet-group td { font-weight: 700; }
+.sheet-group th:first-child { font-weight: 700; }
+.sheet-child th:first-child { padding-left: 1.9rem; color: var(--color-text-muted); }
+.sheet-toggle { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem; }
+.sheet-toggle .icon { width: 14px; height: 14px; transition: transform 0.15s; }
+.sheet-toggle[aria-expanded="false"] .icon { transform: rotate(-90deg); }
+.sheet-toggle:focus-visible, .sheet-cell:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 4px; }
+.sheet-cell { all: unset; cursor: pointer; border-radius: 4px; padding: 0.1rem 0.2rem; }
+.sheet-cell:hover { background: var(--color-primary-soft); }
+.sheet-empty { color: var(--color-border); }
+.sheet-total { font-weight: 700; }
+.sheet-sum th, .sheet-sum td { font-weight: 700; border-top: 2px solid var(--color-text); }
+.sheet-section th { text-align: left; padding-top: 0.9rem; color: var(--color-text-muted); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.sheet-result th, .sheet-result td { font-weight: 700; }
+.sheet-table .is-pos { color: var(--success-text); }
+.sheet-table .is-neg { color: var(--color-danger-text); }
+.sheet-entries, .sheet-tag-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.sheet-entries li, .sheet-tag-list li { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid var(--color-border); }
+.sheet-entries li:first-child, .sheet-tag-list li:first-child { border-top: 0; }
+.sheet-entry-text { display: grid; gap: 0.15rem; min-width: 0; }
+.sheet-entry-text small { color: var(--color-text-muted); }
+.sheet-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.sheet-tag { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 999px; background: var(--color-primary-soft); color: var(--color-primary); }
+.sheet-tag.is-button { border: 0; cursor: pointer; font: inherit; font-size: 0.8rem; font-weight: 600; }
+.sheet-tag-list li { align-items: center; }
+.sheet-tag-list small { color: var(--color-text-muted); margin-right: auto; }
+.sheet-import-rows { list-style: none; margin: 0.5rem 0; padding: 0; max-height: 45vh; overflow-y: auto; display: grid; }
+.sheet-import-rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.5rem; align-items: center; padding: 0.4rem 0; border-top: 1px solid var(--color-border); font-size: 0.88rem; }
+.sheet-import-rows li.is-off { opacity: 0.5; }
+.sheet-import-rows small { color: var(--color-text-muted); }
+.sheet-import-rows select { padding: 0.25rem 0.4rem; }
+.sheet-import-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+/* Os cards da Planilha ocupam a largura toda (sem o limite de 380px do .card). */
+.sheet-page > .card { max-width: none; margin: 0; min-width: 0; }
+.sheet-page .page-title-row { flex-wrap: wrap; gap: 0.5rem; }
+.sheet-section th > span { position: sticky; left: 0.55rem; }
